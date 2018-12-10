@@ -413,6 +413,14 @@
 			};
 		};
 
+		lcdc: lcdc@4830e000 {
+			compatible = "ti,am33xx-tilcdc";
+			reg = <0x4830e000 0x1000>;
+			interrupts = <36>;
+			ti,hwmods = "lcdc";
+			status = "disabled";
+		};
+
 		emif: emif@4c000000 {
 			compatible = "ti,emif-am3352";
 			reg = <0x4c000000 0x1000000>;

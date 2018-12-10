@@ -2050,13 +2050,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			ranges = <0x0 0xe000 0x1000>;
-
-			lcdc: lcdc@0 {
-				compatible = "ti,am33xx-tilcdc";
-				reg = <0x0 0x1000>;
-				interrupts = <36>;
-				status = "disabled";
-			};
+			status = "disabled";
 		};
 
 		target-module@10000 {			/* 0x48310000, ap 76 4e.1 */
