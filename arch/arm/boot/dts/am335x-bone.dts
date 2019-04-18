@@ -13,6 +13,11 @@
 	model = "TI AM335x BeagleBone";
 	compatible = "ti,am335x-bone", "ti,am33xx";
 
+	dummy_codec0: dummy_codec@0 {
+		compatible = "linux,snd-soc-dummy";
+		#sound-dai-cells = <0>;
+	};
+
 	sound0: sound@0 {
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "BeagleBone-Cape";
@@ -93,6 +98,35 @@
 			clocks = <&clkout2_ck>;
 		};
 	};
+
+	sound3: sound@3 {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "BeagleBone-dummy";
+		simple-audio-card,widgets =
+			"Speaker", "Speaker Port";
+		simple-audio-card,routing =
+			"Speaker Port",	"OUT",
+			"Speaker Port",	"OUT";
+		simple-audio-card,format = "dsp_a";
+		simple-audio-card,bitclock-master = <&sound3_master>;
+		simple-audio-card,frame-master = <&sound3_master>;
+
+		status = "disabled";
+
+		sound3_master: simple-audio-card,cpu {
+			sound-dai = <&mcasp0>;
+			system-clock-frequency = <24000000>;
+			system-clock-id = <MCASP_CLK_HCLK_AUXCLK>;
+			dai-tdm-slot-num = <8>;
+			dai-tdm-slot-width = <32>;
+			dai-tdm-slot-tx-mask = <1 1 1 1 1 1 1 1>;
+			dai-tdm-slot-rx-mask = <1 1 1 1 1 1>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&dummy_codec0>;
+		};
+	};
 };
 
 &am33xx_pinmux {
@@ -102,6 +136,13 @@
 			0x190 (PIN_INPUT_PULLDOWN | MUX_MODE0) /* mcasp0_aclkx.mcasp0_aclkx */
 			0x1ac (PIN_OUTPUT_PULLDOWN | MUX_MODE2) /* mcasp0_ahclkx.mcasp0_axr3 */
 			0x19c (PIN_INPUT_PULLDOWN | MUX_MODE2) /* mcasp0_ahclkr.mcasp0_axr2 */
+
+// for slave
+//			0x194 (PIN_OUTPUT_PULLDOWN | MUX_MODE0) /* mcasp0_fsx.mcasp0_fsx */
+//			0x190 (PIN_OUTPUT_PULLDOWN | MUX_MODE0) /* mcasp0_aclkx.mcasp0_aclkx */
+//			0x1ac (PIN_OUTPUT_PULLDOWN | MUX_MODE2) /* mcasp0_ahclkx.mcasp0_axr3 */
+//			0x19c (PIN_INPUT_PULLDOWN | MUX_MODE2) /* mcasp0_ahclkr.mcasp0_axr2 */
+
 		>;
 	};
 
