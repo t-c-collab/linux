@@ -140,6 +140,276 @@
 		};
 	};
 
+	psilss@3400000 {
+		/* PSILSS16 USART */
+		compatible = "ti,j721e-psilss";
+		reg = <0x0 0x03400000 0x0 0x1000>;
+		reg-names = "config";
+
+		pdma_main_usart_g0: pdma_main_usart_g0 {
+			/* PDMA13 (PDMA_USART_G0) */
+			ti,psil-base = <0x4700>;
+
+			/* ti,psil-config0-1 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+
+		pdma_main_usart_g1: pdma_main_usart_g1 {
+			/* PDMA14 (PDMA_USART_G1) */
+			ti,psil-base = <0x4702>;
+
+			/* ti,psil-config0-1 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+
+		pdma_main_usart_g2: pdma_main_usart_g2 {
+			/* PDMA15 (PDMA_USART_G2) */
+			ti,psil-base = <0x4704>;
+
+			/* ti,psil-config0-5 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+	};
+
+	psilss@3404000 {
+		/* PSILSS12 MISC */
+		compatible = "ti,j721e-psilss";
+		reg = <0x0 0x03404000 0x0 0x1000>;
+		reg-names = "config";
+
+		pdma_main_misc_g0: pdma_main_misc_g0 {
+			/* PDMA8 (PDMA_MISC_G0) */
+			ti,psil-base = <0x4600>;
+
+			/* ti,psil-config0-7 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config6 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config7 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+
+		pdma_main_misc_g1: pdma_main_misc_g1 {
+			/* PDMA9 (PDMA_MISC_G1) */
+			ti,psil-base = <0x460c>;
+
+			/* ti,psil-config0-7 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config6 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config7 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+
+		pdma_main_misc_g2: pdma_main_misc_g2 {
+			/* PDMA10 (PDMA_MISC_G2) */
+			ti,psil-base = <0x4618>;
+
+			/* ti,psil-config0-7 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config6 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config7 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+
+		pdma_main_misc_g3: pdma_main_misc_g3 {
+			/* PDMA11 (PDMA_MISC_G3) */
+			ti,psil-base = <0x4624>;
+
+			/* ti,psil-config0-7 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config6 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+			psil-config7 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+			};
+		};
+	};
+
+	psilss@340c000 {
+		/* PSILSS1 AASRC */
+		compatible = "ti,j721e-psilss";
+		reg = <0x0 0x0340c000 0x0 0x1000>;
+		reg-names = "config";
+
+		pdma_main_mcasp_g0: pdma_main_mcasp_g0 {
+			/* PDMA6 (PDMA_MCASP_G0) */
+			ti,psil-base = <0x4400>;
+
+			/* ti,psil-config0-2 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+		};
+	};
+
+	pdma_main_mcasp_g1: pdma_main_mcasp_g1 {
+		/* PDMA7 (PDMA_MCASP_G1) */
+		ti,psil-base = <0x4500>;
+
+		/* ti,psil-config0-8 */
+			psil-config0 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config1 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config2 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config3 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config4 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config5 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config6 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config7 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+			psil-config8 {
+				ti,pdma-statictr-type = <PDMA_STATIC_TR_XY>;
+				ti,pdma-enable-acc32;
+				ti,pdma-enable-burst;
+			};
+	};
+
 	secure_proxy_main: mailbox@32c00000 {
 		compatible = "ti,am654-secure-proxy";
 		#mbox-cells = <1>;
