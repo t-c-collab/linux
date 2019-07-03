@@ -282,7 +282,7 @@ unlock:
  * function, with the exception of -EBUSY (which causes the transaction to
  * be retried), are propagated to the caller.
  */
-ssize_t drm_dp_dpcd_read(struct drm_dp_aux *aux, unsigned int offset,
+ssize_t drm_dp_dpcd_read_wrap(struct drm_dp_aux *aux, unsigned int offset,
 			 void *buffer, size_t size)
 {
 	int ret;
@@ -311,7 +311,7 @@ out:
 	drm_dp_dump_access(aux, DP_AUX_NATIVE_READ, offset, buffer, ret);
 	return ret;
 }
-EXPORT_SYMBOL(drm_dp_dpcd_read);
+EXPORT_SYMBOL(drm_dp_dpcd_read_wrap);
 
 /**
  * drm_dp_dpcd_write() - write a series of bytes to the DPCD
@@ -327,7 +327,7 @@ EXPORT_SYMBOL(drm_dp_dpcd_read);
  * function, with the exception of -EBUSY (which causes the transaction to
  * be retried), are propagated to the caller.
  */
-ssize_t drm_dp_dpcd_write(struct drm_dp_aux *aux, unsigned int offset,
+ssize_t drm_dp_dpcd_write_wrap(struct drm_dp_aux *aux, unsigned int offset,
 			  void *buffer, size_t size)
 {
 	int ret;
@@ -337,7 +337,7 @@ ssize_t drm_dp_dpcd_write(struct drm_dp_aux *aux, unsigned int offset,
 	drm_dp_dump_access(aux, DP_AUX_NATIVE_WRITE, offset, buffer, ret);
 	return ret;
 }
-EXPORT_SYMBOL(drm_dp_dpcd_write);
+EXPORT_SYMBOL(drm_dp_dpcd_write_wrap);
 
 /**
  * drm_dp_dpcd_read_link_status() - read DPCD link status (bytes 0x202-0x207)
