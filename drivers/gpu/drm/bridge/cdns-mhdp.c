@@ -1495,6 +1495,50 @@ u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
 	return bpp;
 }
 
+
+static int cdns_mhdp_calculate_bandwidth(struct cdns_mhdp_device *mhdp,
+					 int pxlclock, u32 bpp,
+					 u32 *tu_size_p, u32 *vs_p)
+{
+	u32 required_bandwidth, available_bandwidth, bandwidth_factor_x1000;
+	u32 vs, vs_f, tu_size;
+
+	tu_size = 30;
+	required_bandwidth = pxlclock * bpp / 8;
+	available_bandwidth = mhdp->link.num_lanes * mhdp->link.rate;
+
+	if (required_bandwidth > available_bandwidth)
+		return -EINVAL;
+
+	bandwidth_factor_x1000 = div_u64(1000llu * required_bandwidth,
+					 available_bandwidth);
+
+	/* find optimal tu_size */
+	do {
+		tu_size += 2;
+
+		vs_f = tu_size * bandwidth_factor_x1000;
+		vs = vs_f / 1000;
+		vs_f = vs_f % 1000;
+		/*
+		 * FIXME (CDNS): downspreading?
+		 * It's unused is what I've been told.
+		 */
+	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
+		  tu_size - vs < 2) && tu_size < 64);
+
+	if (vs > 64)
+		return -EINVAL;
+
+	if (tu_size_p)
+		*tu_size_p = tu_size;
+
+	if (vs_p)
+		*vs_p = vs;
+
+	return 0;
+}
+
 static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
@@ -1503,6 +1547,7 @@ static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 	struct drm_display_mode *mode;
 	int pxlclock;
 	u32 bpp, bpc, pxlfmt;
+	int ret;
 
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
@@ -1516,23 +1561,8 @@ static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 
 	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
 
-	/* find optimal tu_size */
-	required_bandwidth = pxlclock * bpp / 8;
-	available_bandwidth = mhdp->link.num_lanes * rate;
-	do {
-		tu_size += 2;
-
-		vs_f = tu_size * required_bandwidth / available_bandwidth;
-		vs = vs_f / 1000;
-		vs_f = vs_f % 1000;
-		/*
-		 * FIXME (CDNS): downspreading?
-		 * It's unused is what I've been told.
-		 */
-	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
-		  tu_size - vs < 2) && tu_size < 64);
-
-	if (vs > 64)
+	ret = cdns_mhdp_calculate_bandwidth(mhdp, pxlclock, bpp, &tu_size, &vs);
+	if (ret)
 		return -EINVAL;
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
