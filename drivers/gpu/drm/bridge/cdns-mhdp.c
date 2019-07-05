@@ -1542,7 +1542,7 @@ static int cdns_mhdp_calculate_bandwidth(struct cdns_mhdp_device *mhdp,
 static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
+	u32 rate, vs;
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	struct drm_display_mode *mode;
 	int pxlclock;
@@ -1794,11 +1794,54 @@ static void cdns_mhdp_detach(struct drm_bridge *bridge)
 	mutex_unlock(&mhdp->mutex);
 }
 
+static bool cdns_mhdp_mode_fixup(struct drm_bridge *bridge,
+				 const struct drm_display_mode *mode,
+				 struct drm_display_mode *adj)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	unsigned int pxlclock, bpp;
+	bool mode_ok;
+	int ret;
+
+	mutex_lock(&mhdp->mutex);
+
+	if (!mhdp->link_up) {
+		/* Do link training to find out the available badwidth */
+		if (0 != cdns_mhdp_link_up(mhdp)) {
+			mode_ok = false; /* No link, no mode */
+			goto out;
+		}
+	}
+
+	pxlclock = mode->clock;
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+
+	ret = cdns_mhdp_calculate_bandwidth(mhdp, pxlclock, bpp, NULL, NULL);
+	if (ret) {
+		dev_dbg(mhdp->dev,
+			"%s: Mode \"%s\" exceeds the link band width\n",
+			__func__, mode->name);
+
+		/* Power down the link since this mode can not be enabled */
+		drm_dp_link_power_down(&mhdp->aux, &mhdp->link);
+
+		mode_ok = false;
+		goto out;
+	}
+
+	mode_ok = true;
+out:
+	mutex_unlock(&mhdp->mutex);
+
+	return mode_ok;
+}
+
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.enable = cdns_mhdp_enable,
 	.disable = cdns_mhdp_disable,
 	.attach = cdns_mhdp_attach,
 	.detach = cdns_mhdp_detach,
+	.mode_fixup = cdns_mhdp_mode_fixup,
 };
 
 static int mhdp_probe(struct platform_device *pdev)
