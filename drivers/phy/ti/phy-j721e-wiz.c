@@ -20,6 +20,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
+#include <dt-bindings/phy/phy.h>
 
 #define WIZ_SERDES_CTRL		0x404
 #define WIZ_SERDES_TOP_CTRL	0x408
@@ -77,6 +78,8 @@ static const struct reg_field p_enable[WIZ_MAX_LANES] = {
 	REG_FIELD(WIZ_LANECTL(2), 30, 31),
 	REG_FIELD(WIZ_LANECTL(3), 30, 31),
 };
+
+enum p_enable { P_ENABLE = 2, P_ENABLE_FORCE = 1, P_ENABLE_DISABLE = 0 };
 
 static const struct reg_field p_align[WIZ_MAX_LANES] = {
 	REG_FIELD(WIZ_LANECTL(0), 29, 29),
@@ -213,6 +216,7 @@ struct wiz {
 	struct gpio_desc	*gpio_typec_dir;
 
 	enum wiz_type type;
+	u32 lane_use[WIZ_MAX_LANES];
 };
 
 static int wiz_reset(struct wiz *wiz)
@@ -235,12 +239,17 @@ static int wiz_reset(struct wiz *wiz)
 static int wiz_mode_select(struct wiz *wiz)
 {
 	u32 num_lanes = wiz->num_lanes;
+	enum wiz_lane_standard_mode mode;
 	int ret;
 	int i;
 
 	for (i = 0; i < num_lanes; i++) {
-		ret = regmap_field_write(wiz->p_standard_mode[i],
-					 LANE_MODE_GEN4);
+		if (wiz->lane_use[i] == PHY_TYPE_DP)
+			mode = LANE_MODE_GEN1;
+		else
+			mode = LANE_MODE_GEN4;
+
+		ret = regmap_field_write(wiz->p_standard_mode[i], mode);
 		if (ret)
 			return ret;
 	}
@@ -698,7 +707,7 @@ static int wiz_phy_reset_assert(struct reset_controller_dev *rcdev,
 		return ret;
 	}
 
-	ret = regmap_field_write(wiz->p_enable[id - 1], false);
+	ret = regmap_field_write(wiz->p_enable[id - 1], P_ENABLE_DISABLE);
 	return ret;
 }
 
@@ -726,7 +735,11 @@ static int wiz_phy_reset_deassert(struct reset_controller_dev *rcdev,
 		return ret;
 	}
 
-	ret = regmap_field_write(wiz->p_enable[id - 1], true);
+	if (wiz->lane_use[id - 1] == PHY_TYPE_DP)
+		ret = regmap_field_write(wiz->p_enable[id - 1], P_ENABLE);
+	else
+		ret = regmap_field_write(wiz->p_enable[id - 1], P_ENABLE_FORCE);
+
 	return ret;
 }
 
@@ -812,6 +825,17 @@ static int wiz_probe(struct platform_device *pdev)
 	if (IS_ERR(wiz->gpio_typec_dir)) {
 		ret = PTR_ERR(wiz->gpio_typec_dir);
 		dev_err(dev, "Failed to request typec-dir gpio: %d\n", ret);
+		return ret;
+	}
+
+	ret = of_property_read_variable_u32_array(node, "lane-use",
+						  wiz->lane_use, 2,
+						  WIZ_MAX_LANES);
+	if (ret > 0 && ret != num_lanes) {
+		dev_err(dev, "\"lane-use\" property has bad size: %d\n", ret);
+		return -EINVAL;
+	} else	if (ret < 0 && ret != -EINVAL) {
+		dev_err(dev, "Geting \"lane-use\" property failed: %d\n", ret);
 		return ret;
 	}
 
