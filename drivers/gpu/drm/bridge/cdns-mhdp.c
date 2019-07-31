@@ -6,6 +6,7 @@
  *
  * Author: Quentin Schulz <quentin.schulz@free-electrons.com>
  */
+#define DEBUG 1
 
 #include <linux/clk.h>
 #include <linux/delay.h>
