@@ -14,6 +14,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_dp_helper.h>
+#include <linux/mutex.h>
 
 #define CDNS_APB_CFG				0x00000
 #define CDNS_APB_CTRL				(CDNS_APB_CFG + 0x00)
@@ -233,6 +234,16 @@ struct cdns_mhdp_device {
 
 	u8 link_up : 1;
 	u8 plugged : 1;
+
+	/*
+	 * "start_lock" protects the access to hw_enabled and
+	 * bridge_attached data members that control the delayed
+	 * firmware loading and attaching the bridge. They are
+	 * accessed from both the DRM core and mhdp_fw_cb().
+	 */
+	spinlock_t start_lock;
+	u8 hw_enabled : 1;
+	u8 bridge_attached : 1;
 };
 
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
