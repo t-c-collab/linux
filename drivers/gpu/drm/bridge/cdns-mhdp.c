@@ -826,7 +826,7 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	sw_ev2 = readl(mhdp->regs + CDNS_SW_EVENT2);
 	sw_ev3 = readl(mhdp->regs + CDNS_SW_EVENT3);
 
-	//dev_dbg(mhdp->dev, "MHDP IRQ apb %x, mbox %x, sw_ev %x/%x/%x/%x\n", apb_stat, mbox_stat, sw_ev0, sw_ev1, sw_ev2, sw_ev3);
+	dev_dbg(mhdp->dev, "MHDP IRQ apb %x, mbox %x, sw_ev %x/%x/%x/%x\n", apb_stat, mbox_stat, sw_ev0, sw_ev1, sw_ev2, sw_ev3);
 
 	if (sw_ev0 & CDNS_DPTX_HPD) {
 		bool send_hotplug_event;
@@ -969,6 +969,7 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	}
 
 	ret = cdns_mhdp_get_hpd_status(mhdp);
+	printk("%s:%d %d\n", __func__, __LINE__, ret);
 	if (ret > 0) {
 		mhdp->plugged = cdns_mhdp_link_probe(mhdp);
 

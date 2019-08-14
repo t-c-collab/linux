@@ -680,6 +680,8 @@ int cdns_mhdp_set_video_status(struct cdns_mhdp_device *mhdp, int active)
 	u8 msg;
 	int ret;
 
+	dev_dbg(mhdp->dev, "%s(%d)\n", __func__, active);
+
 	msg = !!active;
 
 	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
