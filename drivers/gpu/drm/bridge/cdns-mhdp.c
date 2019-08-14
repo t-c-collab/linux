@@ -577,6 +577,106 @@ static u8 eq_training_pattern_supported(struct cdns_mhdp_host host,
 	return fls(host.pattern_supp & sink.pattern_supp);
 }
 
+static int mhdp_fw_activate(const struct firmware *fw,
+			    struct cdns_mhdp_device *mhdp)
+{
+	int ret;
+	unsigned int reg;
+	u32 resp;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	if (!fw || !fw->data) {
+		dev_err(mhdp->dev, "%s: No firmware.\n", __func__);
+		return -EINVAL;
+	}
+
+	/* Release uCPU reset and stall it. */
+	writel(CDNS_CPU_STALL, mhdp->regs + CDNS_APB_CTRL);
+
+	memcpy_toio(mhdp->regs + CDNS_MHDP_IMEM, fw->data, fw->size);
+
+	/* Leave debug mode, release stall */
+	writel(0, mhdp->regs + CDNS_APB_CTRL);
+
+	/*
+	 * Wait for the KEEP_ALIVE "message" on the first 8 bits.
+	 * Updated each sched "tick" (~2ms)
+	 */
+	ret = readl_poll_timeout(mhdp->regs + CDNS_KEEP_ALIVE, reg,
+				 reg & CDNS_KEEP_ALIVE_MASK, 500,
+				 CDNS_KEEP_ALIVE_TIMEOUT);
+	if (ret) {
+		dev_err(mhdp->dev,
+			"device didn't give any life sign: reg %d\n", reg);
+		return ret;
+	}
+
+	/* Init events to 0 as it's not cleared by FW at boot but on read */
+	readl(mhdp->regs + CDNS_SW_EVENT0);
+	readl(mhdp->regs + CDNS_SW_EVENT1);
+	readl(mhdp->regs + CDNS_SW_EVENT2);
+	readl(mhdp->regs + CDNS_SW_EVENT3);
+
+	/* Activate uCPU */
+	ret = cdns_mhdp_set_firmware_active(mhdp, true);
+	if (ret) {
+		dev_err(mhdp->dev, "Failed to activate DP\n");
+		return ret;
+	}
+
+	/* Enable VIF clock for stream 0 */
+	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
+
+	mhdp->hw_enabled = true;
+
+	if (mhdp->bridge_attached) {
+		/* enable interrupts */
+		writel(0, mhdp->regs + CDNS_APB_INT_MASK);
+		writel(0, mhdp->regs + CDNS_MB_INT_MASK);
+	}
+
+	dev_dbg(mhdp->dev, "DP FW activated\n");
+
+	return 0;
+}
+
+static void mhdp_fw_cb(const struct firmware *fw, void *context)
+{
+	struct cdns_mhdp_device *mhdp = context;
+	int ret;
+
+	dev_dbg(mhdp->dev, "firmware callback\n");
+
+	mutex_lock(&mhdp->mutex);
+
+	ret = mhdp_fw_activate(fw, mhdp);
+
+	mutex_unlock(&mhdp->mutex);
+
+	release_firmware(fw);
+
+	if (ret == 0)
+		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+}
+
+static int load_firmware(struct cdns_mhdp_device *mhdp)
+{
+	int ret;
+
+	ret = request_firmware_nowait(THIS_MODULE, 0, FW_NAME, mhdp->dev,
+	                              GFP_KERNEL, mhdp, mhdp_fw_cb);
+	if (ret) {
+		dev_err(mhdp->dev, "failed to load firmware (%s), ret: %d\n",
+			FW_NAME, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
 {
 	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
@@ -643,7 +743,6 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
 	if (!edid) {
 		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
-
 		return 0;
 	}
 
@@ -676,17 +775,27 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
 	int ret;
 
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	mutex_lock(&mhdp->mutex);
+
+	if (!mhdp->hw_enabled)
+		goto out;
+
 	ret = cdns_mhdp_get_hpd_status(mhdp);
 	if (ret > 0) {
 		mhdp->plugged = true;
-		return connector_status_connected;
+		goto out;
 	}
 	if (ret < 0)
 		dev_err(mhdp->dev, "Failed to obtain HPD state\n");
 
 	mhdp->plugged = false;
+out:
+	mutex_unlock(&mhdp->mutex);
 
-	return connector_status_disconnected;
+	return mhdp->plugged ? connector_status_connected :
+		connector_status_disconnected;
 }
 
 static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
@@ -708,6 +817,10 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
 	struct drm_connector *conn = &mhdp->connector;
 	int ret;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	mutex_lock(&mhdp->mutex);
 
 	if (&mhdp->bridge != bridge)
 		return -ENODEV;
@@ -743,10 +856,17 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 		return ret;
 	}
 
-	/* enable interrupts */
+	mhdp->bridge_attached = true;
+
+	if (mhdp->hw_enabled) {
+		/* enable interrupts */
+		writel(0, mhdp->regs + CDNS_APB_INT_MASK);
+		writel(0, mhdp->regs + CDNS_MB_INT_MASK);
+	}
+
 	//writel(~CDNS_APB_INT_MASK_SW_EVENT_INT, mhdp->regs + CDNS_APB_INT_MASK);
-	writel(0, mhdp->regs + CDNS_APB_INT_MASK);
-	writel(0, mhdp->regs + CDNS_MB_INT_MASK);
+
+	mutex_unlock(&mhdp->mutex);
 
 	return 0;
 }
@@ -1209,7 +1329,9 @@ static void cdns_mhdp_disable(struct drm_bridge *bridge)
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
 
-	dev_dbg(mhdp->dev, "bridge disable\n");
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	mutex_lock(&mhdp->mutex);
 
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
 	resp &= ~CDNS_DP_FRAMER_EN;
@@ -1227,6 +1349,8 @@ static void cdns_mhdp_disable(struct drm_bridge *bridge)
 			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
 
 	cdns_mhdp_j721e_disable(mhdp);
+
+	mutex_unlock(&mhdp->mutex);
 }
 
 static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
@@ -1571,6 +1695,8 @@ void cdns_mhdp_enable(struct drm_bridge *bridge)
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
+	mutex_lock(&mhdp->mutex);
+
 	cdns_mhdp_j721e_enable(mhdp);
 
 	/* Enable VIF clock for stream 0 */
@@ -1582,14 +1708,24 @@ void cdns_mhdp_enable(struct drm_bridge *bridge)
 		cdns_mhdp_link_up(mhdp);
 
 	cdns_mhdp_sst_enable(bridge);
+
+	mutex_unlock(&mhdp->mutex);
 }
 
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 
+	dev_dbg(mhdp->dev, "cdns_mhdp_detach\n");
+
+	mutex_lock(&mhdp->mutex);
+
+	mhdp->bridge_attached = false;
+
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
 	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
+
+	mutex_unlock(&mhdp->mutex);
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
@@ -1599,33 +1735,12 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.detach = cdns_mhdp_detach,
 };
 
-static int load_firmware(struct cdns_mhdp_device *mhdp, const char *name,
-			 unsigned int addr)
-{
-	const struct firmware *fw;
-	int ret;
-
-	ret = request_firmware(&fw, name, mhdp->dev);
-	if (ret) {
-		dev_err(mhdp->dev, "failed to load firmware (%s), ret: %d\n",
-			name, ret);
-		return ret;
-	}
-
-	memcpy_toio(mhdp->regs + addr, fw->data, fw->size);
-
-	release_firmware(fw);
-
-	return 0;
-}
-
 static int mhdp_probe(struct platform_device *pdev)
 {
 	struct resource *regs;
 	struct cdns_mhdp_device *mhdp;
 	struct clk *clk;
 	int ret;
-	unsigned int reg;
 	unsigned long rate;
 	int irq;
 	u32 lanes_prop;
@@ -1643,6 +1758,7 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	mhdp->clk = clk;
 	mhdp->dev = &pdev->dev;
+	mutex_init(&mhdp->mutex);
 	dev_set_drvdata(&pdev->dev, mhdp);
 
 	drm_dp_aux_init(&mhdp->aux);
@@ -1679,21 +1795,11 @@ static int mhdp_probe(struct platform_device *pdev)
 		goto runtime_put;
 	}
 
-	/* Release uCPU reset and stall it. */
-	writel(CDNS_CPU_STALL, mhdp->regs + CDNS_APB_CTRL);
-
-	ret = load_firmware(mhdp, FW_NAME, CDNS_MHDP_IMEM);
-	if (ret)
-		return ret;
-
 	rate = clk_get_rate(clk);
 	writel(rate % 1000000, mhdp->regs + CDNS_SW_CLK_L);
 	writel(rate / 1000000, mhdp->regs + CDNS_SW_CLK_H);
 
 	dev_dbg(&pdev->dev, "func clk rate %lu Hz\n", rate);
-
-	/* Leave debug mode, release stall */
-	writel(0, mhdp->regs + CDNS_APB_CTRL);
 
 	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
@@ -1706,19 +1812,6 @@ static int mhdp_probe(struct platform_device *pdev)
 			"cannot install IRQ %d\n", irq);
 		ret = -EIO;
 		goto runtime_put;
-	}
-
-	/*
-	 * Wait for the KEEP_ALIVE "message" on the first 8 bits.
-	 * Updated each sched "tick" (~2ms)
-	 */
-	ret = readl_poll_timeout(mhdp->regs + CDNS_KEEP_ALIVE, reg,
-				 reg & CDNS_KEEP_ALIVE_MASK, 500,
-				 CDNS_KEEP_ALIVE_TIMEOUT);
-	if (ret) {
-		dev_err(&pdev->dev,
-			"device didn't give any life sign: reg %d\n", reg);
-		return -EIO;
 	}
 
 	/* Read source capabilities, based on PHY's device tree properties. */
@@ -1756,19 +1849,6 @@ static int mhdp_probe(struct platform_device *pdev)
 	mhdp->bridge.of_node = pdev->dev.of_node;
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
 
-	/* Init events to 0 as it's not cleared by FW at boot but on read */
-	readl(mhdp->regs + CDNS_SW_EVENT0);
-	readl(mhdp->regs + CDNS_SW_EVENT1);
-	readl(mhdp->regs + CDNS_SW_EVENT2);
-	readl(mhdp->regs + CDNS_SW_EVENT3);
-
-	/* Activate uCPU */
-	ret = cdns_mhdp_set_firmware_active(mhdp, true);
-	if (ret) {
-		dev_err(mhdp->dev, "Failed to activate DP\n");
-		return ret;
-	}
-
 	ret = phy_init(mhdp->phy);
 	if (ret) {
 		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
@@ -1777,8 +1857,14 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	drm_bridge_add(&mhdp->bridge);
 
+	ret = load_firmware(mhdp);
+	if (ret)
+		goto phy_exit;
+
 	return 0;
 
+phy_exit:
+	phy_exit(mhdp->phy);
 runtime_put:
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
@@ -1795,11 +1881,15 @@ static int mhdp_remove(struct platform_device *pdev)
 
 	drm_bridge_remove(&mhdp->bridge);
 
-	ret = cdns_mhdp_set_firmware_active(mhdp, false);
-	if (ret) {
-		dev_err(mhdp->dev, "Failed to de-activate DP\n");
-		return ret;
+	if (mhdp->hw_enabled) {
+		ret = cdns_mhdp_set_firmware_active(mhdp, false);
+		if (ret) {
+			dev_err(mhdp->dev, "Failed to de-activate DP\n");
+			return ret;
+		}
 	}
+
+	phy_exit(mhdp->phy);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);

@@ -14,6 +14,7 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_dp_helper.h>
+#include <linux/mutex.h>
 
 #define CDNS_APB_CFG				0x00000
 #define CDNS_APB_CTRL				(CDNS_APB_CFG + 0x00)
@@ -226,6 +227,16 @@ struct cdns_mhdp_device {
 	struct drm_dp_link link;
 	struct drm_dp_aux aux;
 
+	/*
+	 * Big lock to protect HW access and device data structures.
+	 * With this lock all transactions are atomic and there is no
+	 * interleaving between them. Only IRQ registers are accessed
+	 * without the lock in the IRQ handler. That access is
+	 * exclusive to IRQ handler after the HW is enabled. Before
+	 * that the IRQs are disabled.
+	 */
+	struct mutex mutex;
+
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;
 	struct cdns_mhdp_display_fmt display_fmt;
@@ -233,6 +244,9 @@ struct cdns_mhdp_device {
 
 	bool link_up;
 	bool plugged;
+
+	bool hw_enabled;
+	bool bridge_attached;
 };
 
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
