@@ -601,4 +601,7 @@ int cdns_mhdp_reg_write_bit(struct cdns_mhdp_device *mhdp, u16 addr,
 int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp, u8 nlanes,
 			u16 udelay, u8 *lanes_data,
 			u8 *dpcd);
+
+int cdns_mhdp_read_event(struct cdns_mhdp_device *mhdp);
+
 #endif /* CDNS_MHDP_COMMON_H_ */

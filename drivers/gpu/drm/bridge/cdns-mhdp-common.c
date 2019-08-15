@@ -649,6 +649,32 @@ int cdns_mhdp_train_link(struct cdns_mhdp_device *mhdp)
 }
 EXPORT_SYMBOL(cdns_mhdp_train_link);
 
+int cdns_mhdp_read_event(struct cdns_mhdp_device *mhdp)
+{
+	u8 event = 0;
+	int ret;
+
+	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
+				     DPTX_READ_EVENT, 0, NULL);
+	if (ret)
+		return ret;
+
+	ret = cdns_mhdp_mailbox_validate_receive(mhdp,
+						 MB_MODULE_ID_DP_TX,
+						 DPTX_READ_EVENT,
+						 sizeof(event));
+	if (ret < 0)
+		return ret;
+
+	ret = cdns_mhdp_mailbox_read_receive(mhdp, &event,
+					     sizeof(event));
+	if (ret < 0)
+		return ret;
+
+	return event;
+}
+EXPORT_SYMBOL(cdns_mhdp_read_event);
+
 int cdns_mhdp_set_video_status(struct cdns_mhdp_device *mhdp, int active)
 {
 	u8 msg;

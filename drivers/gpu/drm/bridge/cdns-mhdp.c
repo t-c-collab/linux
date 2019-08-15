@@ -85,6 +85,11 @@
 #define FW_STANDBY				0
 #define FW_ACTIVE				1
 
+#define DPTX_READ_EVENT_HPD_TO_HIGH	        BIT(0)
+#define DPTX_READ_EVENT_HPD_TO_LOW	        BIT(1)
+#define DPTX_READ_EVENT_HPD_PULSE	        BIT(2)
+#define DPTX_READ_EVENT_HPD_STATE	        BIT(3)
+
 static inline u32 get_unaligned_be24(const void *p)
 {
 	const u8 *_p = p;
