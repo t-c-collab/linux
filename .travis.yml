@@ -1,0 +1,123 @@
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
+
+# build Linux Kernel on Travis CI - https://travis-ci.org/
+# Abstracted from uBoot travis.yml (Why reinvent the wheel?)
+
+language: c
+sudo: required
+dist: bionic
+cache: ccache
+
+addons:
+  apt:
+    packages:
+    - bison
+    - flex
+    - cppcheck
+    - bc
+    - swig
+    - device-tree-compiler
+    - lzop
+    - liblz4-tool
+    - lzma-alone
+    - libisl15
+    - libelf-dev
+    - python-ply
+    - python-git
+
+install:
+  - sudo apt-get update -qq
+
+env:
+  global:
+    - export BUILD_THREADS=$(grep "^processor" /proc/cpuinfo | wc -l)
+    - export CCACHE_SLOPPINESS=time_macros
+    - export BUILD_TARGETS="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-dp.ko"
+
+before_script:
+  - ccache -z
+  - mkdir -p toolchain
+  - pushd toolchain
+  - if [[ "${TOOLCHAIN}" == arm ]]; then
+     wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz &&
+     tar xf gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz;
+     export ARCH=arm;
+     export CROSS_COMPILE=$PWD/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-;
+     export DEFCONFIG="multi_v7_defconfig";
+   fi
+  - if [[ "${TOOLCHAIN}" == arm64 ]]; then
+      wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz &&
+      tar xf gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz;
+      export ARCH=arm64;
+      export CROSS_COMPILE=$PWD/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-;
+      export DEFCONFIG="defconfig";
+    fi
+  - if [[ "${TOOLCHAIN}" == x86_64 ]]; then
+      wget https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/8.1.0/x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz &&
+      tar xf x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz;
+      export CROSS_COMPILE=$PWD/gcc-8.1.0-nolibc/x86_64-linux/bin/x86_64-linux-;
+      export DEFCONFIG="x86_64_defconfig";
+    fi
+  - popd
+  - export CROSS_COMPILE="ccache $CROSS_COMPILE"
+  - if [[ -v CHECK_COCCI ]]; then
+      sudo add-apt-repository --yes ppa:npalix/coccinelle;
+      sudo apt-get update;
+      sudo apt-get install coccinelle;
+      sudo apt-get build-dep coccinelle;
+    fi
+  - if [[ -v CHECK_SPARSE ]]; then
+      git clone --depth=1 -b v0.6.0 git://git.kernel.org/pub/scm/devel/sparse/sparse.git sparse;
+      pushd sparse;
+      make -j${BUILD_THREADS};
+      popd;
+      export SPARSE=$PWD/sparse/sparse;
+    fi
+  - echo Building ${TOOLCHAIN} with ${CROSS_COMPILE}
+
+script:
+  - make -j${BUILD_THREADS} mrproper
+  - make -j${BUILD_THREADS} ${DEFCONFIG}
+  - ./scripts/config -e COMPILE_TEST -d GENERIC_COMPAT_VDSO
+  - ./scripts/config -m DRM_CDNS_MHDP -m PHY_CADENCE_DP -m PHY_J721E_WIZ
+  - make olddefconfig
+  - make -k -j${BUILD_THREADS} ${BUILD_TARGETS} 2> >(tee build.log)
+  - if [[ -v CHECK_SPARSE ]]; then make -k C=2 CHECK=$SPARSE -j${BUILD_THREADS} ${BUILD_TARGETS} 2> >(tee sparse.log); fi
+  - if [[ -v CHECK_COCCI ]]; then make -s -k C=2 CHECK="scripts/coccicheck" -j${BUILD_THREADS} ${BUILD_TARGETS} | tee cocci.log; fi
+  - test ! -s build.log
+  - test ! -s sparse.log
+  - test ! -s cocci.log
+  - ccache -s
+  - cat build.log
+  - if [[ -v CHECK_SPARSE ]]; then cat sparse.log; fi
+  - if [[ -v CHECK_COCCI ]]; then cat cocci.log; fi
+
+matrix:
+  include:
+    - name: "Checkpatch"
+      before_script: skip
+      if: branch = ti-4.19.y
+      script:
+        - if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
+            exit 0;
+          fi
+        - mkdir checkpatch_dir
+        - git format-patch ${TRAVIS_COMMIT_RANGE} -o checkpatch_dir
+        - ./scripts/checkpatch.pl --strict checkpatch_dir/*
+    - name: "Modules arm64"
+      env:
+        - TOOLCHAIN="arm64"
+          CHECK_SPARSE=1
+          CHECK_COCCI=1
+    - name: "Modules arm"
+      env:
+        - TOOLCHAIN="arm"
+          CHECK_SPARSE=1
+          CHECK_COCCI=1
+# need to sort out kconfigs
+#    - name: "Modules x86_64"
+#      env:
+#        - TOOLCHAIN="x86_64"
+#          CHECK_SPARSE=1
+#          CHECK_COCCI=1
