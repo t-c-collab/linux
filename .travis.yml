@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: GPL-2.0+
+# Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
+
+# build Linux Kernel on Travis CI - https://travis-ci.org/
+# Abstracted from uBoot travis.yml (Why reinvent the wheel?)
+
+language: c
+sudo: required
+dist: trusty
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    - llvm-toolchain-trusty-7
+    packages:
+    - bison
+    - flex
+    - cppcheck
+    - sparse
+    - bc
+    - swig
+    - device-tree-compiler
+    - lzop
+    - liblz4-tool
+    - lzma-alone
+    - libisl15
+    - libelf-dev
+
+install:
+  - sudo apt-get update -qq
+
+env:
+  global:
+    - export BUILD_THREADS=$(grep "^processor" /proc/cpuinfo | wc -l)
+    - export EXTRA_FLAGS="CONFIG_COMPLIE_TEST=y"
+
+before_script:
+  - if [[ "${TRAVIS_BRANCH}" != ${TARGET_BRANCH} ]]; then exit 0 ; fi
+  - mkdir -p toolchain
+  - cd toolchain
+  - echo ${EXTRA_FLAGS}
+  - if [[ "${TOOLCHAIN}" == arm ]]; then
+     wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz &&
+     tar xf gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz;
+   fi
+  - if [[ "${TOOLCHAIN}" == arm64 ]]; then
+      wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz &&
+      tar xf gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz;
+    fi
+  - if [[ "${TOOLCHAIN}" == x86_64 ]]; then
+      wget https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/8.1.0/x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz &&
+      tar xf x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz;
+    fi
+  - cd ..
+
+script:
+  - if [[ "${TOOLCHAIN}" == arm64 ]]; then
+     export ARCH=arm64;
+     export CROSS_COMPILE=$PWD/toolchain/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-;
+     make -j${BUILD_THREADS} defconfig;
+     make -j${BUILD_THREADS} ${EXTRA_FLAGS} ${TARGET_MODULE};
+    fi
+  - if [[ "${TOOLCHAIN}" == arm ]]; then
+     export ARCH=arm;
+     export CROSS_COMPILE=$PWD/toolchain/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-;
+     make -j${BUILD_THREADS} multi_v7_defconfig;
+     make -j${BUILD_THREADS} ${EXTRA_FLAGS};
+    fi
+  - if [[ "${TOOLCHAIN}" == x86_64 ]]; then
+     export CROSS_COMPILE=$PWD/toolchain/gcc-8.1.0-nolibc/x86_64-linux/bin/x86_64-linux-;
+     make -j${BUILD_THREADS} x86_64_defconfig;
+     make -j${BUILD_THREADS} ${EXTRA_FLAGS};
+    fi
+
+matrix:
+  include:
+  # we need to build by vendor due to 50min time limit for builds
+  # each env setting here is a dedicated build
+    - name: "arm full build"
+      env:
+        - TOOLCHAIN="arm"
+          TARGET_BRANCH="master"
+    - name: "arm64 full build"
+      env:
+        - TOOLCHAIN="arm64"
+          TARGET_BRANCH="master"
+    - name: "x86_64 full build"
+      env:
+        - TOOLCHAIN="x86_64"
+          TARGET_BRANCH="master"
+    - name: "drm bridge partial"
+      env:
+        - TOOLCHAIN="arm64"
+          TARGET_BRANCH="travis_baseline"
+          TARGET_MODULE="drivers/gpu/drm/bridge/"
+    - name: "phy ti partial"
+      env:
+        - TOOLCHAIN="arm64"
+          TARGET_BRANCH="travis_baseline"
+          TARGET_MODULE="drivers/phy/ti/"
+          EXTRA_FLAGS="C=2 "${EXTRA_FLAGS}
+    - name: "Cadence partial"
+      env:
+        - TOOLCHAIN="arm64"
+          TARGET_BRANCH="travis_baseline"
+          TARGET_MODULE="drivers/phy/cadence/"
+          EXTRA_FLAGS="C=2 "${EXTRA_FLAGS}
+    - name: "USB partial"
+      env:
+        - TOOLCHAIN="arm64"
+          TARGET_BRANCH="travis_baseline"
+          TARGET_MODULE="drivers/usb/"
+          EXTRA_FLAGS="C=2 "${EXTRA_FLAGS}
