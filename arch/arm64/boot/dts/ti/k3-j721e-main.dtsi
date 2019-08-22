@@ -628,7 +628,7 @@
 	};
 
 	serdes_wiz0: wiz@5000000 {
-		compatible = "ti,j721e-wiz";
+		compatible = "ti,j721e-wiz-16g";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		power-domains = <&k3_pds 292 TI_SCI_PD_EXCLUSIVE>;
@@ -690,7 +690,7 @@
 	};
 
 	serdes_wiz1: wiz@5010000 {
-		compatible = "ti,j721e-wiz";
+		compatible = "ti,j721e-wiz-16g";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		power-domains = <&k3_pds 293 TI_SCI_PD_EXCLUSIVE>;
@@ -752,7 +752,7 @@
 	};
 
 	serdes_wiz2: wiz@5020000 {
-		compatible = "ti,j721e-wiz";
+		compatible = "ti,j721e-wiz-16g";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		power-domains = <&k3_pds 294 TI_SCI_PD_EXCLUSIVE>;
@@ -814,7 +814,7 @@
 	};
 
 	serdes_wiz3: wiz@5030000 {
-		compatible = "ti,j721e-wiz";
+		compatible = "ti,j721e-wiz-16g";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		power-domains = <&k3_pds 295 TI_SCI_PD_EXCLUSIVE>;
@@ -876,7 +876,7 @@
 	};
 
 	serdes_wiz4: wiz@5050000 {
-		compatible = "ti,j721e-wiz";
+		compatible = "ti,j721e-wiz-10g";
 		#address-cells = <2>;
 		#size-cells = <2>;
 		power-domains = <&k3_pds 297 TI_SCI_PD_EXCLUSIVE>;
