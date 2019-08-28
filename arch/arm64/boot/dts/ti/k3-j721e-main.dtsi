@@ -885,6 +885,7 @@
 		num-lanes = <4>;
 		#reset-cells = <1>;
 		ranges;
+		lane-use = <PHY_TYPE_DP PHY_TYPE_DP PHY_TYPE_DP PHY_TYPE_DP>;
 
 		assigned-clocks = <&k3_clks 297 9>;
 		assigned-clock-parents = <&k3_clks 297 10>;
