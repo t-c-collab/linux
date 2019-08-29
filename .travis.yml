@@ -7,6 +7,7 @@
 language: c
 sudo: required
 dist: bionic
+cache: ccache
 
 addons:
   apt:
@@ -14,7 +15,6 @@ addons:
     - bison
     - flex
     - cppcheck
-    - sparse
     - bc
     - swig
     - device-tree-compiler
@@ -23,6 +23,8 @@ addons:
     - lzma-alone
     - libisl15
     - libelf-dev
+    - python-ply
+    - python-git
 
 install:
   - sudo apt-get update -qq
@@ -30,61 +32,60 @@ install:
 env:
   global:
     - export BUILD_THREADS=$(grep "^processor" /proc/cpuinfo | wc -l)
-    - export EXTRA_FLAGS="CONFIG_COMPLIE_TEST=y CONFIG_GENERIC_COMPAT_VDSO=n "
-    - export COCCI_BUILD="coccicheck MODE=report J=4"
+    - export EXTRA_FLAGS="CONFIG_COMPILE_TEST=y CONFIG_GENERIC_COMPAT_VDSO=n -Werror"
+    - export CCACHE_SLOPPINESS=time_macros
 
 before_script:
+  - ccache -z
   - if [[ "${TRAVIS_BRANCH}" != ${TARGET_BRANCH} ]]; then exit 0 ; fi
   - mkdir -p toolchain
-  - cd toolchain
+  - pushd toolchain
   - if [[ "${TOOLCHAIN}" == arm ]]; then
      wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz &&
      tar xf gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf.tar.xz;
+     export ARCH=arm;
+     export CROSS_COMPILE=$PWD/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-;
+     export DEFCONFIG="multi_v7_defconfig";
    fi
   - if [[ "${TOOLCHAIN}" == arm64 ]]; then
       wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz &&
       tar xf gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz;
+      export ARCH=arm64;
+      export CROSS_COMPILE=$PWD/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-;
+      export DEFCONFIG="defconfig";
     fi
   - if [[ "${TOOLCHAIN}" == x86_64 ]]; then
       wget https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/8.1.0/x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz &&
       tar xf x86_64-gcc-8.1.0-nolibc-x86_64-linux.tar.gz;
+      export CROSS_COMPILE=$PWD/gcc-8.1.0-nolibc/x86_64-linux/bin/x86_64-linux-;
+      export DEFCONFIG="x86_64_defconfig";
     fi
-  - cd ..;
-  - if [[ ! -z ${COCCI_MODULE} ]]; then
-     sudo add-apt-repository --yes ppa:npalix/coccinelle;
-     sudo apt-get update;
-     sudo apt-get install coccinelle;
-     sudo apt-get build-dep coccinelle;
+  - popd
+  - export CROSS_COMPILE="ccache $CROSS_COMPILE"
+  - if [[ -n $CHECK_COCCI ]]; then
+      sudo add-apt-repository --yes ppa:npalix/coccinelle;
+      sudo apt-get update;
+      sudo apt-get install coccinelle;
+      sudo apt-get build-dep coccinelle;
     fi
-
+  - if [[ -n $CHECK_SPARSE ]]; then
+      git clone --depth=1 -b v0.6.0 git://git.kernel.org/pub/scm/devel/sparse/sparse.git sparse;
+      pushd sparse;
+      make -j${BUILD_THREADS};
+      popd;
+      export SPARSE=$PWD/sparse/sparse;
+    fi
+  - echo Building ${TOOLCHAIN} with ${CROSS_COMPILE}
 
 script:
-  - if [[ "${TOOLCHAIN}" == arm64 ]]; then
-     export ARCH=arm64;
-     export CROSS_COMPILE=$PWD/toolchain/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu/bin/aarch64-linux-gnu-;
-     export DEFCONFIG="defconfig";
-    fi
-  - if [[ "${TOOLCHAIN}" == arm ]]; then
-     export ARCH=arm;
-     export CROSS_COMPILE=$PWD/toolchain/gcc-arm-8.3-2019.03-x86_64-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-;
-     export DEFCONFIG="multi_v7_defconfig";
-    fi
-  - if [[ "${TOOLCHAIN}" == x86_64 ]]; then
-     export CROSS_COMPILE=$PWD/toolchain/gcc-8.1.0-nolibc/x86_64-linux/bin/x86_64-linux-;
-     export DEFCONFIG="x86_64_defconfig";
-    fi
-  - make -j${BUILD_THREADS} mrproper;
-  - make -j${BUILD_THREADS} ${DEFCONFIG};
-  - make -j${BUILD_THREADS} ${EXTRA_FLAGS} ${TARGET_MODULE} 2>error_log;
-  - ERROR_OUT=$(wc -l error_log | awk '{print$1}');
-  - if [[ ${ERROR_OUT} -gt 0 ]]; then cat error_log; exit 1; fi
-  - if [[ ! -z ${COCCI_MODULE} ]]; then
-     make -j${BUILD_THREADS} mrproper;
-     make -j${BUILD_THREADS} ${DEFCONFIG};
-     make -j${BUILD_THREADS} ${EXTRA_FLAGS} ${COCCI_BUILD} ${COCCI_MODULE} >&1 | tee cocci_log;
-     ERROR_OUT=$(grep -wic 'WARNING:\|ERROR:' cocci_log);
-     if [[ ${ERROR_OUT} -gt 0 ]]; then echo "Found coccinelle warnings"; cat cocci_log; exit 1; fi
-    fi
+  - make -j${BUILD_THREADS} mrproper
+  - make -j${BUILD_THREADS} ${DEFCONFIG}
+  - make -j${BUILD_THREADS} ${EXTRA_FLAGS} ${TARGET_MODULE}
+  - if [[ -v CHECK_SPARSE ]]; then make C=2 CHECK=$SPARSE -j${BUILD_THREADS} ${EXTRA_FLAGS} ${TARGET_MODULE} 2> >(tee sparse.log); fi
+  - test ! -s sparse.log
+  - if [[ -v $CHECK_COCCI ]]; then make C=2 CHECK="scripts/coccicheck" -j${BUILD_THREADS} ${EXTRA_FLAGS} ${TARGET_MODULE} 2> >(tee cocci.log); fi
+  - test ! -s cocci.log
+  - ccache -s
 
 matrix:
   include:
@@ -92,44 +93,23 @@ matrix:
   # each env setting here is a dedicated build
     - name: "Checkpatch"
       env:
-        - TARGET_BRANCH="travis_baseline"
+        - TARGET_BRANCH="ti-4.19.y"
+      before_script: skip
       script:
+        - if [ "${TRAVIS_PULL_REQUEST}" = "false" ]; then
+            exit 0;
+          fi
         - mkdir checkpatch_dir
         - git format-patch ${TRAVIS_COMMIT_RANGE} -o checkpatch_dir
         - ./scripts/checkpatch.pl --strict checkpatch_dir/*
-    - name: "arm full build"
-      env:
-        - TOOLCHAIN="arm"
-          TARGET_BRANCH="master"
-    - name: "arm64 full build"
+    - name: "Modules arm64"
       env:
         - TOOLCHAIN="arm64"
-          TARGET_BRANCH="master"
-    - name: "x86_64 full build"
-      env:
-        - TOOLCHAIN="x86_64"
-          TARGET_BRANCH="master"
-    - name: "drm bridge partial"
-      env:
-        - TOOLCHAIN="arm64"
-          TARGET_BRANCH="travis_baseline"
-          TARGET_MODULE="drivers/gpu/drm/bridge/"
-          COCCI_MODULE="M=drivers/gpu/drm/bridge/"
-    - name: "phy ti partial"
+          TARGET_BRANCH="ti-4.19.y"
+          TARGET_MODULE="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-dp.ko"
+          CHECK_SPARSE=1
+          CHECK_COCCI=1
+    - name: "Full arm64"
       env:
         - TOOLCHAIN="arm64"
-          TARGET_BRANCH="travis_baseline"
-          TARGET_MODULE="drivers/phy/ti/"
-          COCCI_MODULE="M=drivers/phy/ti/"
-    - name: "Cadence partial"
-      env:
-        - TOOLCHAIN="arm64"
-          TARGET_BRANCH="travis_baseline"
-          TARGET_MODULE="drivers/phy/cadence/"
-          COCCI_MODULE="M=drivers/phy/cadence/"
-    - name: "USB partial"
-      env:
-        - TOOLCHAIN="arm64"
-          TARGET_BRANCH="travis_baseline"
-          TARGET_MODULE="drivers/usb/"
-          COCCI_MODULE="M=drivers/usb/"
+          TARGET_BRANCH="ti-4.19.y"
