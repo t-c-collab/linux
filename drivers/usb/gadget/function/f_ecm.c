@@ -541,7 +541,8 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		usb_ep_disable(ecm->notify);
 		if (!(ecm->notify->desc)) {
 			VDBG(cdev, "init ecm ctrl %d\n", intf);
-			if (config_ep_by_speed(cdev->gadget, f, ecm->notify))
+			if (config_ep_by_speed(cdev->gadget, f,
+					       ecm->notify, alt))
 				goto fail;
 		}
 		usb_ep_enable(ecm->notify);
@@ -560,9 +561,9 @@ static int ecm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		    !ecm->port.out_ep->desc) {
 			DBG(cdev, "init ecm\n");
 			if (config_ep_by_speed(cdev->gadget, f,
-					       ecm->port.in_ep) ||
+					       ecm->port.in_ep, alt) ||
 			    config_ep_by_speed(cdev->gadget, f,
-					       ecm->port.out_ep)) {
+					       ecm->port.out_ep, alt)) {
 				ecm->port.in_ep->desc = NULL;
 				ecm->port.out_ep->desc = NULL;
 				goto fail;

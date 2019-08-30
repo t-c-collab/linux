@@ -547,7 +547,8 @@ static int rndis_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 		if (!rndis->notify->desc) {
 			VDBG(cdev, "init rndis ctrl %d\n", intf);
-			if (config_ep_by_speed(cdev->gadget, f, rndis->notify))
+			if (config_ep_by_speed(cdev->gadget, f,
+					       rndis->notify, alt))
 				goto fail;
 		}
 		usb_ep_enable(rndis->notify);
@@ -563,9 +564,9 @@ static int rndis_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (!rndis->port.in_ep->desc || !rndis->port.out_ep->desc) {
 			DBG(cdev, "init rndis\n");
 			if (config_ep_by_speed(cdev->gadget, f,
-					       rndis->port.in_ep) ||
+					       rndis->port.in_ep, alt) ||
 			    config_ep_by_speed(cdev->gadget, f,
-					       rndis->port.out_ep)) {
+					       rndis->port.out_ep, alt)) {
 				rndis->port.in_ep->desc = NULL;
 				rndis->port.out_ep->desc = NULL;
 				goto fail;

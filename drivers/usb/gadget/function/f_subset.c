@@ -264,8 +264,8 @@ static int geth_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 	}
 
 	DBG(cdev, "init + activate cdc subset\n");
-	if (config_ep_by_speed(cdev->gadget, f, geth->port.in_ep) ||
-	    config_ep_by_speed(cdev->gadget, f, geth->port.out_ep)) {
+	if (config_ep_by_speed(cdev->gadget, f, geth->port.in_ep, alt) ||
+	    config_ep_by_speed(cdev->gadget, f, geth->port.out_ep, alt)) {
 		geth->port.in_ep->desc = NULL;
 		geth->port.out_ep->desc = NULL;
 		return -EINVAL;

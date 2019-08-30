@@ -872,7 +872,8 @@ static int ncm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 
 		if (!(ncm->notify->desc)) {
 			DBG(cdev, "init ncm ctrl %d\n", intf);
-			if (config_ep_by_speed(cdev->gadget, f, ncm->notify))
+			if (config_ep_by_speed(cdev->gadget, f,
+						ncm->notify, alt))
 				goto fail;
 		}
 		usb_ep_enable(ncm->notify);
@@ -901,9 +902,9 @@ static int ncm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			    !ncm->port.out_ep->desc) {
 				DBG(cdev, "init ncm\n");
 				if (config_ep_by_speed(cdev->gadget, f,
-						       ncm->port.in_ep) ||
+						       ncm->port.in_ep, alt) ||
 				    config_ep_by_speed(cdev->gadget, f,
-						       ncm->port.out_ep)) {
+						       ncm->port.out_ep, alt)) {
 					ncm->port.in_ep->desc = NULL;
 					ncm->port.out_ep->desc = NULL;
 					goto fail;

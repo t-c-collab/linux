@@ -343,7 +343,7 @@ static int f_midi_start_ep(struct f_midi *midi,
 
 	usb_ep_disable(ep);
 
-	err = config_ep_by_speed(midi->gadget, f, ep);
+	err = config_ep_by_speed(midi->gadget, f, ep, 0);
 	if (err) {
 		ERROR(cdev, "can't configure %s: %d\n", ep->name, err);
 		return err;

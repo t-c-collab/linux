@@ -375,7 +375,7 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 
 	ep = audio_dev->out_ep;
 	prm = &uac->c_prm;
-	config_ep_by_speed(gadget, &audio_dev->func, ep);
+	config_ep_by_speed(gadget, &audio_dev->func, ep, 0);
 	req_len = prm->max_psize;
 
 	prm->ep_enabled = true;
@@ -428,7 +428,7 @@ int u_audio_start_playback(struct g_audio *audio_dev)
 
 	ep = audio_dev->in_ep;
 	prm = &uac->p_prm;
-	config_ep_by_speed(gadget, &audio_dev->func, ep);
+	config_ep_by_speed(gadget, &audio_dev->func, ep, 0);
 
 	ep_desc = ep->desc;
 

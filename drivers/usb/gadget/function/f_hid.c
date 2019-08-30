@@ -647,7 +647,7 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		usb_ep_disable(hidg->in_ep);
 
 		status = config_ep_by_speed(f->config->cdev->gadget, f,
-					    hidg->in_ep);
+					    hidg->in_ep, alt);
 		if (status) {
 			ERROR(cdev, "config_ep_by_speed FAILED!\n");
 			goto fail;
@@ -672,7 +672,7 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		usb_ep_disable(hidg->out_ep);
 
 		status = config_ep_by_speed(f->config->cdev->gadget, f,
-					    hidg->out_ep);
+					    hidg->out_ep, alt);
 		if (status) {
 			ERROR(cdev, "config_ep_by_speed FAILED!\n");
 			goto free_req_in;

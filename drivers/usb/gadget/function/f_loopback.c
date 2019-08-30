@@ -362,7 +362,7 @@ static int enable_endpoint(struct usb_composite_dev *cdev,
 {
 	int					result;
 
-	result = config_ep_by_speed(cdev->gadget, &(loop->function), ep);
+	result = config_ep_by_speed(cdev->gadget, &(loop->function), ep, 0);
 	if (result)
 		goto out;
 

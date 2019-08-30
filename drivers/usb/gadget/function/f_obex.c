@@ -212,9 +212,9 @@ static int obex_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			dev_dbg(&cdev->gadget->dev,
 				"init obex ttyGS%d\n", obex->port_num);
 			if (config_ep_by_speed(cdev->gadget, f,
-					       obex->port.in) ||
+					       obex->port.in, alt) ||
 			    config_ep_by_speed(cdev->gadget, f,
-					       obex->port.out)) {
+					       obex->port.out, alt)) {
 				obex->port.out->desc = NULL;
 				obex->port.in->desc = NULL;
 				goto fail;

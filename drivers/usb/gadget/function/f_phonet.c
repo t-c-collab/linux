@@ -416,8 +416,8 @@ static int pn_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (alt == 1) {
 			int i;
 
-			if (config_ep_by_speed(gadget, f, fp->in_ep) ||
-			    config_ep_by_speed(gadget, f, fp->out_ep)) {
+			if (config_ep_by_speed(gadget, f, fp->in_ep, alt) ||
+			    config_ep_by_speed(gadget, f, fp->out_ep, alt)) {
 				fp->in_ep->desc = NULL;
 				fp->out_ep->desc = NULL;
 				spin_unlock(&port->lock);

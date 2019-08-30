@@ -430,7 +430,8 @@ static int acm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		usb_ep_disable(acm->notify);
 
 		if (!acm->notify->desc)
-			if (config_ep_by_speed(cdev->gadget, f, acm->notify))
+			if (config_ep_by_speed(cdev->gadget, f,
+					       acm->notify, alt))
 				return -EINVAL;
 
 		usb_ep_enable(acm->notify);
@@ -445,9 +446,9 @@ static int acm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 			dev_dbg(&cdev->gadget->dev,
 				"activate acm ttyGS%d\n", acm->port_num);
 			if (config_ep_by_speed(cdev->gadget, f,
-					       acm->port.in) ||
+					       acm->port.in, alt) ||
 			    config_ep_by_speed(cdev->gadget, f,
-					       acm->port.out)) {
+					       acm->port.out, alt)) {
 				acm->port.in->desc = NULL;
 				acm->port.out->desc = NULL;
 				return -EINVAL;

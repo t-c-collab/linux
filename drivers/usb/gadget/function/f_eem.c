@@ -196,9 +196,9 @@ static int eem_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		if (!eem->port.in_ep->desc || !eem->port.out_ep->desc) {
 			DBG(cdev, "init eem\n");
 			if (config_ep_by_speed(cdev->gadget, f,
-					       eem->port.in_ep) ||
+					       eem->port.in_ep, alt) ||
 			    config_ep_by_speed(cdev->gadget, f,
-					       eem->port.out_ep)) {
+					       eem->port.out_ep, alt)) {
 				eem->port.in_ep->desc = NULL;
 				eem->port.out_ep->desc = NULL;
 				goto fail;

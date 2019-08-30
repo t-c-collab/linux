@@ -2241,7 +2241,8 @@ reset:
 	fsg = common->fsg;
 
 	/* Enable the endpoints */
-	rc = config_ep_by_speed(common->gadget, &(fsg->function), fsg->bulk_in);
+	rc = config_ep_by_speed(common->gadget, &(fsg->function),
+					fsg->bulk_in, 0);
 	if (rc)
 		goto reset;
 	rc = usb_ep_enable(fsg->bulk_in);
@@ -2251,7 +2252,7 @@ reset:
 	fsg->bulk_in_enabled = 1;
 
 	rc = config_ep_by_speed(common->gadget, &(fsg->function),
-				fsg->bulk_out);
+				fsg->bulk_out, 0);
 	if (rc)
 		goto reset;
 	rc = usb_ep_enable(fsg->bulk_out);

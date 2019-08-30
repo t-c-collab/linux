@@ -650,7 +650,8 @@ enable_source_sink(struct usb_composite_dev *cdev, struct f_sourcesink *ss,
 
 	/* one bulk endpoint writes (sources) zeroes IN (to the host) */
 	ep = ss->in_ep;
-	result = config_ep_by_speed(cdev->gadget, &(ss->function), ep);
+	result = config_ep_by_speed(cdev->gadget, &(ss->function),
+				    ep, alt);
 	if (result)
 		return result;
 	result = usb_ep_enable(ep);
@@ -668,7 +669,7 @@ fail:
 
 	/* one bulk endpoint reads (sinks) anything OUT (from the host) */
 	ep = ss->out_ep;
-	result = config_ep_by_speed(cdev->gadget, &(ss->function), ep);
+	result = config_ep_by_speed(cdev->gadget, &(ss->function), ep, alt);
 	if (result)
 		goto fail;
 	result = usb_ep_enable(ep);
@@ -690,7 +691,8 @@ fail2:
 	/* one iso endpoint writes (sources) zeroes IN (to the host) */
 	ep = ss->iso_in_ep;
 	if (ep) {
-		result = config_ep_by_speed(cdev->gadget, &(ss->function), ep);
+		result = config_ep_by_speed(cdev->gadget, &(ss->function),
+					    ep, alt);
 		if (result)
 			goto fail2;
 		result = usb_ep_enable(ep);
@@ -711,7 +713,8 @@ fail3:
 	/* one iso endpoint reads (sinks) anything OUT (from the host) */
 	ep = ss->iso_out_ep;
 	if (ep) {
-		result = config_ep_by_speed(cdev->gadget, &(ss->function), ep);
+		result = config_ep_by_speed(cdev->gadget, &(ss->function),
+					    ep, alt);
 		if (result)
 			goto fail3;
 		result = usb_ep_enable(ep);

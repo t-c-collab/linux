@@ -1956,7 +1956,8 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 	while(count--) {
 		ep->ep->driver_data = ep;
 
-		ret = config_ep_by_speed(func->gadget, &func->function, ep->ep);
+		ret = config_ep_by_speed(func->gadget, &func->function,
+					 ep->ep, 0);
 		if (ret) {
 			pr_err("%s: config_ep_by_speed(%s) returned %d\n",
 					__func__, ep->ep->name, ret);

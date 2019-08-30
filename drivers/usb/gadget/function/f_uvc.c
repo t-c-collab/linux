@@ -290,7 +290,8 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 		usb_ep_disable(uvc->control_ep);
 
 		if (!uvc->control_ep->desc)
-			if (config_ep_by_speed(cdev->gadget, f, uvc->control_ep))
+			if (config_ep_by_speed(cdev->gadget, f,
+					       uvc->control_ep, alt))
 				return -EINVAL;
 
 		usb_ep_enable(uvc->control_ep);
@@ -341,7 +342,7 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 		usb_ep_disable(uvc->video.ep);
 
 		ret = config_ep_by_speed(f->config->cdev->gadget,
-				&(uvc->func), uvc->video.ep);
+					&(uvc->func), uvc->video.ep, alt);
 		if (ret)
 			return ret;
 		usb_ep_enable(uvc->video.ep);

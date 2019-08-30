@@ -601,7 +601,7 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		return 0;
 	} else if (intf == audio->as_intf) {
 		if (alt == 1) {
-			err = config_ep_by_speed(cdev->gadget, f, out_ep);
+			err = config_ep_by_speed(cdev->gadget, f, out_ep, alt);
 			if (err)
 				return err;
 
