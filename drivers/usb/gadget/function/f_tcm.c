@@ -213,7 +213,8 @@ static int bot_send_read_response(struct usbg_cmd *cmd)
 	}
 
 	if (!gadget->sg_supported) {
-		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC);
+		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC
+					| GFP_DMA32);
 		if (!cmd->data_buf)
 			return -ENOMEM;
 
@@ -257,7 +258,8 @@ static int bot_send_write_request(struct usbg_cmd *cmd)
 	}
 
 	if (!gadget->sg_supported) {
-		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_KERNEL);
+		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_KERNEL
+					| GFP_DMA32);
 		if (!cmd->data_buf)
 			return -ENOMEM;
 
@@ -327,7 +329,7 @@ static int bot_prepare_reqs(struct f_uas *fu)
 	fu->bot_status.req->complete = bot_status_complete;
 	fu->bot_status.csw.Signature = cpu_to_le32(US_BULK_CS_SIGN);
 
-	fu->cmd.buf = kmalloc(fu->ep_out->maxpacket, GFP_KERNEL);
+	fu->cmd.buf = kmalloc(fu->ep_out->maxpacket, GFP_KERNEL | GFP_DMA32);
 	if (!fu->cmd.buf)
 		goto err_buf;
 
@@ -515,7 +517,8 @@ static int uasp_prepare_r_request(struct usbg_cmd *cmd)
 	struct uas_stream *stream = cmd->stream;
 
 	if (!gadget->sg_supported) {
-		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC);
+		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC
+					| GFP_DMA32);
 		if (!cmd->data_buf)
 			return -ENOMEM;
 
@@ -767,7 +770,7 @@ static int uasp_alloc_cmd(struct f_uas *fu)
 	if (!fu->cmd.req)
 		goto err;
 
-	fu->cmd.buf = kmalloc(fu->ep_cmd->maxpacket, GFP_KERNEL);
+	fu->cmd.buf = kmalloc(fu->ep_cmd->maxpacket, GFP_KERNEL | GFP_DMA32);
 	if (!fu->cmd.buf)
 		goto err_buf;
 
@@ -846,7 +849,7 @@ static void uasp_set_alt(struct f_uas *fu)
 
 	fu->flags = USBG_IS_UAS;
 
-	if (gadget->speed == USB_SPEED_SUPER)
+	if (gadget->speed >= USB_SPEED_SUPER)
 		fu->flags |= USBG_USE_STREAMS;
 
 	config_ep_by_speed(gadget, f, fu->ep_in);
@@ -863,6 +866,7 @@ static void uasp_set_alt(struct f_uas *fu)
 	ret = usb_ep_enable(fu->ep_cmd);
 	if (ret)
 		goto err_cmd;
+
 	config_ep_by_speed(gadget, f, fu->ep_status);
 	ret = usb_ep_enable(fu->ep_status);
 	if (ret)
@@ -980,7 +984,8 @@ static int usbg_prepare_w_request(struct usbg_cmd *cmd, struct usb_request *req)
 	struct usb_gadget *gadget = fuas_to_gadget(fu);
 
 	if (!gadget->sg_supported) {
-		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC);
+		cmd->data_buf = kmalloc(se_cmd->data_length, GFP_ATOMIC
+					| GFP_DMA32);
 		if (!cmd->data_buf)
 			return -ENOMEM;
 
@@ -2093,6 +2098,17 @@ static void tcm_delayed_set_alt(struct work_struct *wq)
 	usb_composite_setup_continue(fu->function.config->cdev);
 }
 
+static int tcm_get_alt(struct usb_function *f, unsigned intf)
+{
+
+	if (intf == bot_intf_desc.bInterfaceNumber)
+		return USB_G_ALT_INT_BBB;
+	if (intf == uasp_intf_desc.bInterfaceNumber)
+		return USB_G_ALT_INT_UAS;
+
+	return -EOPNOTSUPP;
+}
+
 static int tcm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct f_uas *fu = to_f_uas(f);
@@ -2300,6 +2316,7 @@ static struct usb_function *tcm_alloc(struct usb_function_instance *fi)
 	fu->function.bind = tcm_bind;
 	fu->function.unbind = tcm_unbind;
 	fu->function.set_alt = tcm_set_alt;
+	fu->function.get_alt = tcm_get_alt;
 	fu->function.setup = tcm_setup;
 	fu->function.disable = tcm_disable;
 	fu->function.free_func = tcm_free;
