@@ -969,8 +969,16 @@ struct cdns3_usb_regs {
 
 #define ISO_MAX_INTERVAL	10
 
+#define MAX_TRB_LENGTH          BIT(16)
+
 #if TRBS_PER_SEGMENT < 2
 #error "Incorrect TRBS_PER_SEGMENT. Minimal Transfer Ring size is 2."
+#endif
+
+#define TRBS_PER_STREAM_SEGMENT 2
+
+#if TRBS_PER_STREAM_SEGMENT < 2
+#error "Incorrect TRBS_PER_STREAMS_SEGMENT. Minimal Transfer Ring size is 2."
 #endif
 
 /*
@@ -1000,6 +1008,7 @@ struct cdns3_trb {
 
 #define TRB_SIZE		(sizeof(struct cdns3_trb))
 #define TRB_RING_SIZE		(TRB_SIZE * TRBS_PER_SEGMENT)
+#define TRB_STREAM_RING_SIZE	(TRB_SIZE * TRBS_PER_STREAM_SEGMENT)
 #define TRB_ISO_RING_SIZE	(TRB_SIZE * TRBS_PER_ISOC_SEGMENT)
 #define TRB_CTRL_RING_SIZE	(TRB_SIZE * 2)
 
@@ -1078,7 +1087,7 @@ struct cdns3_trb {
 #define CDNS3_ENDPOINTS_MAX_COUNT	32
 #define CDNS3_EP_ZLP_BUF_SIZE		1024
 
-#define CDNS3_EP_BUF_SIZE		2	/* KB */
+#define CDNS3_EP_BUF_SIZE		4	/* KB */
 #define CDNS3_EP_ISO_HS_MULT		3
 #define CDNS3_EP_ISO_SS_BURST		3
 #define CDNS3_MAX_NUM_DESCMISS_BUF	32
@@ -1088,7 +1097,18 @@ struct cdns3_trb {
 /* Used structs */
 
 struct cdns3_device;
-
+struct cdns3_ring {
+	struct list_head	strm_pending_req_list;
+	struct list_head	strm_deferred_req_list;
+	struct cdns3_trb	*trb_pool;
+	dma_addr_t		trb_pool_dma;
+	int			free_trbs;
+	int			num_trbs;
+	u8			pcs;
+	u8			ccs;
+	int			enqueue;
+	int			dequeue;
+};
 /**
  * struct cdns3_endpoint - extended device side representation of USB endpoint.
  * @endpoint: usb endpoint
@@ -1142,6 +1162,7 @@ struct cdns3_endpoint {
 #define EP_QUIRK_END_TRANSFER	BIT(11)
 #define EP_QUIRK_EXTRA_BUF_DET	BIT(12)
 #define EP_QUIRK_EXTRA_BUF_EN	BIT(13)
+#define EP_SPLITED_TR           BIT(14)
 	u32			flags;
 
 	struct cdns3_request	*descmis_req;
@@ -1163,6 +1184,12 @@ struct cdns3_endpoint {
 	struct cdns3_trb	*wa1_trb;
 	unsigned int		wa1_trb_index;
 	unsigned int		wa1_cycle_bit:1;
+
+	/* Stream related */
+	unsigned int		use_streams:1;
+	unsigned int		prime_flag:1;
+	u16			last_stream_id;
+	struct cdns3_ring	*ring;
 };
 
 /**
