@@ -735,6 +735,7 @@ out:
 
 static bool mhdp_check_hpd_pulse(struct cdns_mhdp_device *mhdp)
 {
+	struct drm_connector *conn = &mhdp->connector.base;
 	u8 dpcd[DP_RECEIVER_CAP_SIZE];
 	u8 status[DP_LINK_STATUS_SIZE];
 	int hpd_event;
@@ -805,9 +806,12 @@ static bool mhdp_check_hpd_pulse(struct cdns_mhdp_device *mhdp)
 		/* Link is still up, no need to retreain */
 		return false;
 
-	mhdp_rertain_link(mhdp);
+	drm_connector_set_link_status_property(conn,
+					       DRM_MODE_LINK_STATUS_BAD);
+//	mhdp_rertain_link(mhdp);
+//	return false;
 
-	return false;
+	return true;
 }
 
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
