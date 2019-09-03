@@ -87,7 +87,6 @@ script:
   - if [[ -v CHECK_COCCI ]]; then make -s -k C=2 CHECK="scripts/coccicheck" -j${BUILD_THREADS} ${BUILD_TARGETS} | tee cocci.log; fi
   - test ! -s build.log
   - test ! -s sparse.log
-  - test ! -s cocci.log
   - ccache -s
   - cat build.log
   - if [[ -v CHECK_SPARSE ]]; then cat sparse.log; fi
