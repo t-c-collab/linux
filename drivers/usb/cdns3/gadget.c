@@ -205,7 +205,7 @@ static void cdns3_free_trb_pool(struct cdns3_endpoint *priv_ep)
 
 	if (priv_ep->trb_pool) {
 		dma_free_coherent(priv_dev->sysdev,
-				  priv_ep->num_trbs * TRB_SIZE,
+				  cdns3_ring_size(priv_ep),
 				  priv_ep->trb_pool, priv_ep->trb_pool_dma);
 		priv_ep->trb_pool = NULL;
 		priv_ep->num_trbs = 0;
@@ -240,10 +240,10 @@ int cdns3_allocate_trb_pool(struct cdns3_endpoint *priv_ep)
 		memset(priv_ep->trb_pool, 0, ring_size);
 	}
 
+	priv_ep->num_trbs = ring_size / TRB_SIZE;
 	if (!priv_ep->num)
 		return 0;
 
-	priv_ep->num_trbs = ring_size / TRB_SIZE;
 	if (priv_ep->use_streams) {
 		/*
 		 * For stream capable endpoints driver use single correct TRB.
