@@ -1162,24 +1162,10 @@ struct drm_dp_aux {
 	struct drm_dp_aux_cec cec;
 };
 
-ssize_t drm_dp_dpcd_read_wrap(struct drm_dp_aux *aux, unsigned int offset,
+ssize_t drm_dp_dpcd_read(struct drm_dp_aux *aux, unsigned int offset,
 			 void *buffer, size_t size);
-ssize_t drm_dp_dpcd_write_wrap(struct drm_dp_aux *aux, unsigned int offset,
+ssize_t drm_dp_dpcd_write(struct drm_dp_aux *aux, unsigned int offset,
 			  void *buffer, size_t size);
-
-#define drm_dp_dpcd_read(a, b, c, d)			\
-	({						\
-	printk("%s:%d dpcd_read(%s, %s, %s, %s)\n",	\
-	       __func__, __LINE__, #a, #b, #c, #d);	\
-	drm_dp_dpcd_read_wrap((a), (b), (c), (d));	\
-	})
-
-#define drm_dp_dpcd_write(a, b, c, d)			\
-	({						\
-	printk("%s:%d dpcd_write(%s, %s, %s, %s)\n",	\
-	       __func__, __LINE__, #a, #b, #c, #d);	\
-	drm_dp_dpcd_write_wrap((a), (b), (c), (d));	\
-	})
 
 /**
  * drm_dp_dpcd_readb() - read a single byte from the DPCD
@@ -1190,20 +1176,11 @@ ssize_t drm_dp_dpcd_write_wrap(struct drm_dp_aux *aux, unsigned int offset,
  * Returns the number of bytes transferred (1) on success, or a negative
  * error code on failure.
  */
-static inline ssize_t drm_dp_dpcd_readb_wrap(struct drm_dp_aux *aux,
+static inline ssize_t drm_dp_dpcd_readb(struct drm_dp_aux *aux,
 					unsigned int offset, u8 *valuep)
 {
-	return drm_dp_dpcd_read_wrap(aux, offset, valuep, 1);
+	return drm_dp_dpcd_read(aux, offset, valuep, 1);
 }
-
-
-#define drm_dp_dpcd_readb(a, b, c)			\
-	({						\
-	printk("%s:%d dpcd_readb(%s, %s, %s)\n",	\
-	       __func__, __LINE__, #a, #b, #c);		\
-	drm_dp_dpcd_readb_wrap((a), (b), (c));		\
-	})
-
 
 /**
  * drm_dp_dpcd_writeb() - write a single byte to the DPCD
@@ -1214,18 +1191,11 @@ static inline ssize_t drm_dp_dpcd_readb_wrap(struct drm_dp_aux *aux,
  * Returns the number of bytes transferred (1) on success, or a negative
  * error code on failure.
  */
-static inline ssize_t drm_dp_dpcd_writeb_wrap(struct drm_dp_aux *aux,
+static inline ssize_t drm_dp_dpcd_writeb(struct drm_dp_aux *aux,
 					 unsigned int offset, u8 value)
 {
-	return drm_dp_dpcd_write_wrap(aux, offset, &value, 1);
+	return drm_dp_dpcd_write(aux, offset, &value, 1);
 }
-
-#define drm_dp_dpcd_writeb(a, b, c)			\
-	({						\
-	printk("%s:%d dpcd_writeb(%s, %s, %s)\n",	\
-	       __func__, __LINE__, #a, #b, #c);		\
-	drm_dp_dpcd_writeb_wrap((a), (b), (c));		\
-	})
 
 int drm_dp_dpcd_read_link_status(struct drm_dp_aux *aux,
 				 u8 status[DP_LINK_STATUS_SIZE]);
