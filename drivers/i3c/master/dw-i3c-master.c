@@ -593,7 +593,6 @@ static int dw_i3c_master_bus_init(struct i3c_master_controller *m)
 {
 	struct dw_i3c_master *master = to_dw_i3c_master(m);
 	struct i3c_bus *bus = i3c_master_get_bus(m);
-	struct i3c_device_info info = { };
 	u32 thld_ctrl;
 	int ret;
 
@@ -624,20 +623,6 @@ static int dw_i3c_master_bus_init(struct i3c_master_controller *m)
 	writel(INTR_ALL, master->regs + INTR_STATUS);
 	writel(INTR_MASTER_MASK, master->regs + INTR_STATUS_EN);
 	writel(INTR_MASTER_MASK, master->regs + INTR_SIGNAL_EN);
-
-	ret = i3c_master_get_free_addr(m, 0);
-	if (ret < 0)
-		return ret;
-
-	writel(DEV_ADDR_DYNAMIC_ADDR_VALID | DEV_ADDR_DYNAMIC(ret),
-	       master->regs + DEVICE_ADDR);
-
-	memset(&info, 0, sizeof(info));
-	info.dyn_addr = ret;
-
-	ret = i3c_master_set_info(&master->base, &info);
-	if (ret)
-		return ret;
 
 	writel(IBI_REQ_REJECT_ALL, master->regs + IBI_SIR_REQ_REJECT);
 	writel(IBI_REQ_REJECT_ALL, master->regs + IBI_MR_REQ_REJECT);
@@ -1101,6 +1086,7 @@ static int dw_i3c_probe(struct platform_device *pdev)
 {
 	struct dw_i3c_master *master;
 	struct resource *res;
+	struct i3c_device_info info = { };
 	int ret, irq;
 
 	master = devm_kzalloc(&pdev->dev, sizeof(*master), GFP_KERNEL);
@@ -1152,8 +1138,22 @@ static int dw_i3c_probe(struct platform_device *pdev)
 	master->maxdevs = ret >> 16;
 	master->free_pos = GENMASK(master->maxdevs - 1, 0);
 
-	ret = i3c_master_register(&master->base, &pdev->dev,
-				  &dw_mipi_i3c_ops, false);
+	ret = i3c_master_init(&master->base, &pdev->dev,
+			      &dw_mipi_i3c_ops, false);
+	if (ret)
+		goto err_assert_rst;
+
+	ret = i3c_master_get_free_addr(&master->base, 0);
+	if (ret < 0)
+		goto err_assert_rst;
+
+	writel(DEV_ADDR_DYNAMIC_ADDR_VALID | DEV_ADDR_DYNAMIC(ret),
+	       master->regs + DEVICE_ADDR);
+
+	memset(&info, 0, sizeof(info));
+	info.dyn_addr = ret;
+
+	ret = i3c_master_register(&master->base, &info);
 	if (ret)
 		goto err_assert_rst;
 

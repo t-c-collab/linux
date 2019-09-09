@@ -1193,8 +1193,7 @@ static int cdns_i3c_master_bus_init(struct i3c_master_controller *m)
 	unsigned long pres_step, sysclk_rate, max_i2cfreq;
 	struct i3c_bus *bus = i3c_master_get_bus(m);
 	u32 ctrl, prescl0, prescl1, pres, low;
-	struct i3c_device_info info = { };
-	int ret, ncycles;
+	int ncycles;
 
 	switch (bus->mode) {
 	case I3C_BUS_MODE_PURE:
@@ -1246,22 +1245,6 @@ static int cdns_i3c_master_bus_init(struct i3c_master_controller *m)
 		ncycles = 0;
 	prescl1 = PRESCL_CTRL1_OD_LOW(ncycles);
 	writel(prescl1, master->regs + PRESCL_CTRL1);
-
-	/* Get an address for the master. */
-	ret = i3c_master_get_free_addr(m, 0);
-	if (ret < 0)
-		return ret;
-
-	writel(prepare_rr0_dev_address(ret) | DEV_ID_RR0_IS_I3C,
-	       master->regs + DEV_ID_RR0(0));
-
-	cdns_i3c_master_dev_rr_to_info(master, 0, &info);
-	if (info.bcr & I3C_BCR_HDR_CAP)
-		info.hdr_cap = I3C_CCC_HDR_MODE(I3C_HDR_DDR);
-
-	ret = i3c_master_set_info(&master->base, &info);
-	if (ret)
-		return ret;
 
 	/*
 	 * Enable Hot-Join, and, when a Hot-Join request happens, disable all
@@ -1531,6 +1514,7 @@ static int cdns_i3c_master_probe(struct platform_device *pdev)
 {
 	struct cdns_i3c_master *master;
 	struct resource *res;
+	struct i3c_device_info info = { };
 	int ret, irq;
 	u32 val;
 
@@ -1606,12 +1590,31 @@ static int cdns_i3c_master_probe(struct platform_device *pdev)
 	writel(MST_INT_IBIR_THR, master->regs + MST_IER);
 	writel(DEVS_CTRL_DEV_CLR_ALL, master->regs + DEVS_CTRL);
 
-	ret = i3c_master_register(&master->base, &pdev->dev,
-				  &cdns_i3c_master_ops, false);
+	ret = i3c_master_init(&master->base, &pdev->dev, &cdns_i3c_master_ops, false);
 	if (ret)
-		goto err_disable_sysclk;
+	goto err_disable_sysclk;
+
+	/* Get an address for the master. */
+	ret = i3c_master_get_free_addr(&master->base, 0);
+	if (ret < 0)
+		return ret;
+
+	writel(prepare_rr0_dev_address(ret) | DEV_ID_RR0_IS_I3C,
+	       master->regs + DEV_ID_RR0(0));
+
+	cdns_i3c_master_dev_rr_to_info(master, 0, &info);
+	if (info.bcr & I3C_BCR_HDR_CAP)
+		info.hdr_cap = I3C_CCC_HDR_MODE(I3C_HDR_DDR);
+
+	ret = i3c_master_register(&master->base, &info);
+
+	if (ret)
+		goto err_cleanup;
 
 	return 0;
+
+err_cleanup:
+	i3c_master_cleanup(&master->base);
 
 err_disable_sysclk:
 	clk_disable_unprepare(master->sysclk);

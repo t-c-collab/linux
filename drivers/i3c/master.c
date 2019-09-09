@@ -1552,32 +1552,9 @@ int i3c_master_do_daa(struct i3c_master_controller *master)
 }
 EXPORT_SYMBOL_GPL(i3c_master_do_daa);
 
-/**
- * i3c_master_set_info() - set master device information
- * @master: master used to send frames on the bus
- * @info: I3C device information
- *
- * Set master device info. This should be called from
- * &i3c_master_controller_ops->bus_init().
- *
- * Not all &i3c_device_info fields are meaningful for a master device.
- * Here is a list of fields that should be properly filled:
- *
- * - &i3c_device_info->dyn_addr
- * - &i3c_device_info->bcr
- * - &i3c_device_info->dcr
- * - &i3c_device_info->pid
- * - &i3c_device_info->hdr_cap if %I3C_BCR_HDR_CAP bit is set in
- *   &i3c_device_info->bcr
- *
- * This function must be called with the bus lock held in maintenance mode.
- *
- * Return: 0 if @info contains valid information (not every piece of
- * information can be checked, but we can at least make sure @info->dyn_addr
- * and @info->bcr are correct), -EINVAL otherwise.
- */
-int i3c_master_set_info(struct i3c_master_controller *master,
-			const struct i3c_device_info *info)
+static int i3c_master_set_info(struct i3c_master_controller *master,
+			       const struct i3c_device_info *info,
+			       bool secondary)
 {
 	struct i3c_dev_desc *i3cdev;
 	int ret;
@@ -1610,7 +1587,6 @@ err_free_dev:
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(i3c_master_set_info);
 
 static void i3c_master_detach_free_devs(struct i3c_master_controller *master)
 {
@@ -2423,7 +2399,7 @@ static int i3c_master_check_ops(const struct i3c_master_controller_ops *ops)
 }
 
 /**
- * i3c_master_register() - register an I3C master
+ * i3c_master_init() - initializes all the structures required by I3C master
  * @master: master used to send frames on the bus
  * @parent: the parent device (the one that provides this I3C master
  *	    controller)
@@ -2437,16 +2413,14 @@ static int i3c_master_check_ops(const struct i3c_master_controller_ops *ops)
  * - creates and initializes the I3C bus
  * - populates the bus with static I2C devs if @parent->of_node is not
  *   NULL
- * - registers all I3C devices added by the controller during bus
- *   initialization
- * - registers the I2C adapter and all I2C devices
+ * - set bus mode when registering I2C devices.
  *
  * Return: 0 in case of success, a negative error code otherwise.
  */
-int i3c_master_register(struct i3c_master_controller *master,
-			struct device *parent,
-			const struct i3c_master_controller_ops *ops,
-			bool secondary)
+int i3c_master_init(struct i3c_master_controller *master,
+		    struct device *parent,
+		    const struct i3c_master_controller_ops *ops,
+		    bool secondary)
 {
 	unsigned long i2c_scl_rate = I3C_BUS_I2C_FM_PLUS_SCL_RATE;
 	struct i3c_bus *i3cbus = i3c_master_get_bus(master);
@@ -2515,10 +2489,47 @@ int i3c_master_register(struct i3c_master_controller *master,
 		ret = -ENOMEM;
 		goto err_put_dev;
 	}
+	return 0;
+
+err_put_dev:
+	put_device(&master->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i3c_master_init);
+
+void i3c_master_cleanup(struct i3c_master_controller *master)
+{
+	put_device(&master->dev);
+}
+EXPORT_SYMBOL_GPL(i3c_master_cleanup);
+
+/**
+ * i3c_master_register() - register an primary I3C master
+ * @master: master used to send frames on the bus
+ * @info: master info, describes this device
+ *
+ * This function takes care of everything for you:
+ *
+ * - updates this master info
+ * - registers all I3C devices added by the controller during bus
+ *   initialization
+ * - registers the I2C adapter and all I2C devices
+ *
+ * Return: 0 in case of success, a negative error code otherwise.
+ */
+int i3c_master_register(struct i3c_master_controller *master,
+			struct i3c_device_info *info)
+{
+	int ret;
+
+	ret = i3c_master_set_info(master, info, master->secondary);
+	if (ret)
+		return ret;
 
 	ret = i3c_master_bus_init(master);
 	if (ret)
-		goto err_put_dev;
+		return ret;
 
 	ret = device_add(&master->dev);
 	if (ret)
@@ -2548,9 +2559,6 @@ err_del_dev:
 
 err_cleanup_bus:
 	i3c_master_bus_cleanup(master);
-
-err_put_dev:
-	put_device(&master->dev);
 
 	return ret;
 }
