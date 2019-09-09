@@ -615,6 +615,7 @@ int i3c_bus_set_mode(struct i3c_bus *i3cbus, enum i3c_bus_mode mode,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(i3c_bus_set_mode);
 
 static struct i3c_master_controller *
 i2c_adapter_to_i3c_master(struct i2c_adapter *adap)

@@ -543,6 +543,7 @@ void i3c_master_cleanup(struct i3c_master_controller *master);
 int i3c_master_register(struct i3c_master_controller *master,
 			struct i3c_device_info *info);
 int i3c_master_unregister(struct i3c_master_controller *master);
+int i3c_bus_set_mode(struct i3c_bus *i3cbus, enum i3c_bus_mode mode);
 
 /**
  * i3c_dev_get_master_data() - get master private data attached to an I3C
