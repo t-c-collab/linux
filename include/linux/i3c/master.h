@@ -426,6 +426,26 @@ struct i3c_bus {
  *		      for a future IBI
  *		      This method is mandatory only if ->request_ibi is not
  *		      NULL.
+ * @request_mastership: requests bus mastership. Mastership is requested
+ *                      automatically when device driver wants to transfer
+ *                      data using a master that does not currently
+ *                      owns the bus.
+ * @enable_mr_events: enable the Mastership event. Master driver can prepare
+ *                    its internal state to be ready for incoming mastership
+ *                    requests and then should send ENEC(MR) command to let
+ *                    other masters take control over the bus.
+ * @disable_mr_events: disable the Mastership event. Master driver should
+ *                     immediately send DISEC(MR) command and can perform other
+ *                     operations. For example, recycle IBI slot if used before
+ *                     for MR event.
+ * @populate_pus: populates the bus. Called after bus takeover. Secondary
+ *                master can't perform DAA procedure. This function allows to
+ *                update devices received from previous bus owner in DEFSLVS
+ *                command. Useful also when new device joins the bus controlled
+ *                by secondary master, main master will be able to add
+ *                this device after mastership takeover. Driver should also
+ *		  update bus mode when I2C device is on the bus.
+ *
  */
 struct i3c_master_controller_ops {
 	int (*bus_init)(struct i3c_master_controller *master);
@@ -452,6 +472,10 @@ struct i3c_master_controller_ops {
 	int (*disable_ibi)(struct i3c_dev_desc *dev);
 	void (*recycle_ibi_slot)(struct i3c_dev_desc *dev,
 				 struct i3c_ibi_slot *slot);
+	int (*request_mastership)(struct i3c_master_controller *master);
+	int (*enable_mr_events)(struct i3c_master_controller *master);
+	int (*disable_mr_events)(struct i3c_master_controller *master);
+	int (*populate_bus)(struct i3c_master_controller *master);
 };
 
 /**
@@ -493,6 +517,7 @@ struct i3c_master_controller {
 	} boardinfo;
 	struct i3c_bus bus;
 	struct workqueue_struct *wq;
+	bool want_to_acquire_bus;
 };
 
 /**
@@ -531,6 +556,8 @@ int i3c_master_defslvs_locked(struct i3c_master_controller *master);
 int i3c_master_get_free_addr(struct i3c_master_controller *master,
 			     u8 start_addr);
 
+int i3c_master_add_i2c_dev_locked(struct i3c_master_controller *master,
+				  u16 addr, u8 lvr);
 int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
 				  u8 addr);
 int i3c_master_do_daa(struct i3c_master_controller *master);
@@ -540,9 +567,14 @@ int i3c_master_init(struct i3c_master_controller *master,
 		    const struct i3c_master_controller_ops *ops,
 		    bool secondary);
 void i3c_master_cleanup(struct i3c_master_controller *master);
+int i3c_secondary_master_register(struct i3c_master_controller *master,
+				  struct i3c_device_info *info);
 int i3c_master_register(struct i3c_master_controller *master,
 			struct i3c_device_info *info);
 int i3c_master_unregister(struct i3c_master_controller *master);
+int i3c_master_mastership_ack(struct i3c_master_controller *master,
+			      u8 addr);
+void i3c_master_bus_takeover(struct i3c_master_controller *master);
 int i3c_bus_set_mode(struct i3c_bus *i3cbus, enum i3c_bus_mode mode);
 
 /**

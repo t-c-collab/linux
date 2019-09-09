@@ -97,6 +97,18 @@ i3c_bus_to_i3c_master(struct i3c_bus *i3cbus)
 	return container_of(i3cbus, struct i3c_master_controller, bus);
 }
 
+/*
+ * i3c_bus_downgrade_maintenance_lock - Downgrade the bus lock to normal
+ * operation
+ *
+ * Should be called when a maintenance operation is done and normal
+ * operation is planned. See i3c_bus_maintenance_lock() and
+ * i3c_bus_normaluse_lock() for more details.
+ */
+static void i3c_bus_downgrade_maintenance_lock(struct i3c_bus *bus)
+{
+	downgrade_write(&bus->lock);
+}
 static struct i3c_master_controller *dev_to_i3cmaster(struct device *dev)
 {
 	return container_of(dev, struct i3c_master_controller, dev);
@@ -345,6 +357,22 @@ static int i3c_device_probe(struct device *dev)
 	return driver->probe(i3cdev);
 }
 
+static int
+i3c_master_enable_mr_events_locked(struct i3c_master_controller *master)
+{
+	if (!master->ops->enable_mr_events)
+		return -ENOTSUPP;
+
+	return master->ops->enable_mr_events(master);
+}
+
+static void i3c_master_disable_mr_events(struct i3c_master_controller *master)
+{
+	if (!master->ops->disable_mr_events)
+		return;
+
+	master->ops->disable_mr_events(master);
+}
 static int i3c_device_remove(struct device *dev)
 {
 	struct i3c_device *i3cdev = dev_to_i3cdev(dev);
@@ -467,6 +495,42 @@ static int i3c_bus_init(struct i3c_bus *i3cbus)
 	return 0;
 }
 
+static int
+i3c_master_request_mastership_locked(struct i3c_master_controller *master)
+{
+	if (WARN_ON(master->init_done &&
+	    !rwsem_is_locked(&master->bus.lock)))
+		return -EINVAL;
+
+	if (!master->ops->request_mastership)
+		return -ENOTSUPP;
+
+	return master->ops->request_mastership(master);
+}
+
+static int i3c_master_owns_bus(struct i3c_master_controller *master)
+{
+	return (master->bus.cur_master == master->this);
+}
+
+int i3c_master_acquire_bus_ownership(struct i3c_master_controller *master)
+{
+	int ret;
+
+	if (!i3c_master_owns_bus(master)) {
+		i3c_bus_normaluse_unlock(&master->bus);
+		i3c_bus_maintenance_lock(&master->bus);
+
+		ret = i3c_master_request_mastership_locked(master);
+		if (ret) {
+			i3c_bus_maintenance_unlock(&master->bus);
+			return ret;
+		}
+		i3c_bus_downgrade_maintenance_lock(&master->bus);
+	}
+
+	return 0;
+}
 static const char * const i3c_bus_mode_strings[] = {
 	[I3C_BUS_MODE_PURE] = "pure",
 	[I3C_BUS_MODE_MIXED_FAST] = "mixed-fast",
@@ -652,6 +716,22 @@ i3c_master_alloc_i2c_dev(struct i3c_master_controller *master,
 	return dev;
 }
 
+static struct i2c_dev_desc *
+i3c_master_alloc_i2c_dev_no_boardinfo(struct i3c_master_controller *master,
+				      u16 addr, u8 lvr)
+{
+	struct i2c_dev_desc *dev;
+
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return ERR_PTR(-ENOMEM);
+
+	dev->common.master = master;
+	dev->addr = addr;
+	dev->lvr = lvr;
+
+	return dev;
+}
 static void *i3c_ccc_cmd_dest_init(struct i3c_ccc_cmd_dest *dest, u8 addr,
 				   u16 payloadlen)
 {
@@ -721,6 +801,8 @@ i3c_master_find_i2c_dev_by_addr(const struct i3c_master_controller *master,
 	struct i2c_dev_desc *dev;
 
 	i3c_bus_for_each_i2cdev(&master->bus, dev) {
+		if (!dev->boardinfo)
+			continue;
 		if (dev->boardinfo->base.addr == addr)
 			return dev;
 	}
@@ -1493,7 +1575,8 @@ i3c_master_register_new_i3c_devs(struct i3c_master_controller *master)
 		return;
 
 	i3c_bus_for_each_i3cdev(&master->bus, desc) {
-		if (desc->dev || !desc->info.dyn_addr || desc == master->this)
+		if (desc->dev || !desc->info.dyn_addr ||
+		    desc == master->this || !desc->info.pid)
 			continue;
 
 		desc->dev = kzalloc(sizeof(*desc->dev), GFP_KERNEL);
@@ -1519,6 +1602,69 @@ i3c_master_register_new_i3c_devs(struct i3c_master_controller *master)
 	}
 }
 
+static struct i2c_dev_boardinfo *
+i3c_master_find_i2c_boardinfo(const struct i3c_master_controller *master,
+			      u16 addr, u8 lvr)
+{
+	struct i2c_dev_boardinfo *i2cboardinfo;
+
+	list_for_each_entry(i2cboardinfo, &master->boardinfo.i2c, node) {
+		if (i2cboardinfo->base.addr == addr &&
+		    i2cboardinfo->lvr == lvr)
+			return i2cboardinfo;
+	}
+
+	return NULL;
+}
+
+static void
+i3c_master_register_new_i2c_devs(struct i3c_master_controller *master)
+{
+	struct i2c_adapter *adap = i3c_master_to_i2c_adapter(master);
+	struct i2c_dev_desc *i2cdev;
+
+	if (!master->init_done)
+		return;
+
+	i3c_bus_for_each_i2cdev(&master->bus, i2cdev) {
+
+		if (i2cdev->dev)
+			continue;
+
+		if (!i2cdev->boardinfo)
+			continue;
+
+		i2cdev->dev = i2c_new_device(adap, &i2cdev->boardinfo->base);
+	}
+}
+
+static int i3c_master_get_accmst_locked(struct i3c_master_controller *master,
+					u8 addr)
+{
+	struct i3c_ccc_getaccmst *accmst;
+	struct i3c_ccc_cmd_dest dest;
+	struct i3c_ccc_cmd cmd;
+	int ret;
+
+	accmst = i3c_ccc_cmd_dest_init(&dest, addr, sizeof(*accmst));
+	if (!accmst)
+		return -ENOMEM;
+
+	i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETACCMST, &dest, 1);
+
+	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
+	if (ret)
+		goto out;
+
+	if (dest.payload.len != sizeof(*accmst))
+		ret = -EIO;
+
+out:
+	i3c_ccc_cmd_dest_cleanup(&dest);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i3c_master_get_accmst_locked);
 /**
  * i3c_master_do_daa() - do a DAA (Dynamic Address Assignment)
  * @master: master doing the DAA
@@ -1563,10 +1709,6 @@ static int i3c_master_set_info(struct i3c_master_controller *master,
 	if (!i3c_bus_dev_addr_is_avail(&master->bus, info->dyn_addr))
 		return -EINVAL;
 
-	if (I3C_BCR_DEVICE_ROLE(info->bcr) == I3C_BCR_I3C_MASTER &&
-	    master->secondary)
-		return -EINVAL;
-
 	if (master->this)
 		return -EINVAL;
 
@@ -1575,7 +1717,8 @@ static int i3c_master_set_info(struct i3c_master_controller *master,
 		return PTR_ERR(i3cdev);
 
 	master->this = i3cdev;
-	master->bus.cur_master = master->this;
+	if (!secondary)
+		master->bus.cur_master = master->this;
 
 	ret = i3c_master_attach_i3c_dev(master, i3cdev);
 	if (ret)
@@ -1616,6 +1759,63 @@ static void i3c_master_detach_free_devs(struct i3c_master_controller *master)
 	}
 }
 
+static int i3c_master_attach_static_devs(struct i3c_master_controller *master)
+{
+	enum i3c_addr_slot_status status;
+	struct i2c_dev_boardinfo *i2cboardinfo;
+	struct i3c_dev_boardinfo *i3cboardinfo;
+	struct i3c_dev_desc *i3cdev;
+	struct i2c_dev_desc *i2cdev;
+	int ret;
+
+	list_for_each_entry(i2cboardinfo, &master->boardinfo.i2c, node) {
+		status = i3c_bus_get_addr_slot_status(&master->bus,
+						      i2cboardinfo->base.addr);
+		if (status != I3C_ADDR_SLOT_FREE)
+			return -EBUSY;
+
+		i3c_bus_set_addr_slot_status(&master->bus,
+					     i2cboardinfo->base.addr,
+					     I3C_ADDR_SLOT_I2C_DEV);
+
+		i2cdev = i3c_master_alloc_i2c_dev(master, i2cboardinfo);
+		if (IS_ERR(i2cdev))
+			return PTR_ERR(i2cdev);
+
+		ret = i3c_master_attach_i2c_dev(master, i2cdev);
+		if (ret) {
+			i3c_master_free_i2c_dev(i2cdev);
+			return ret;
+		}
+	}
+	list_for_each_entry(i3cboardinfo, &master->boardinfo.i3c, node) {
+		struct i3c_device_info info = {
+			.static_addr = i3cboardinfo->static_addr,
+		};
+
+		if (i3cboardinfo->init_dyn_addr) {
+			status = i3c_bus_get_addr_slot_status(&master->bus,
+						i3cboardinfo->init_dyn_addr);
+			if (status != I3C_ADDR_SLOT_FREE)
+				return -EBUSY;
+		}
+
+		i3cdev = i3c_master_alloc_i3c_dev(master, &info);
+		if (IS_ERR(i3cdev))
+			return PTR_ERR(i3cdev);
+
+		i3cdev->boardinfo = i3cboardinfo;
+
+		ret = i3c_master_attach_i3c_dev(master, i3cdev);
+		if (ret) {
+			i3c_master_free_i3c_dev(i3cdev);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 /**
  * i3c_master_bus_init() - initialize an I3C bus
  * @master: main master initializing the bus
@@ -1648,70 +1848,16 @@ static void i3c_master_detach_free_devs(struct i3c_master_controller *master)
  */
 static int i3c_master_bus_init(struct i3c_master_controller *master)
 {
-	enum i3c_addr_slot_status status;
-	struct i2c_dev_boardinfo *i2cboardinfo;
-	struct i3c_dev_boardinfo *i3cboardinfo;
 	struct i3c_dev_desc *i3cdev;
-	struct i2c_dev_desc *i2cdev;
 	int ret;
 
 	/*
 	 * First attach all devices with static definitions provided by the
 	 * FW.
 	 */
-	list_for_each_entry(i2cboardinfo, &master->boardinfo.i2c, node) {
-		status = i3c_bus_get_addr_slot_status(&master->bus,
-						      i2cboardinfo->base.addr);
-		if (status != I3C_ADDR_SLOT_FREE) {
-			ret = -EBUSY;
-			goto err_detach_devs;
-		}
-
-		i3c_bus_set_addr_slot_status(&master->bus,
-					     i2cboardinfo->base.addr,
-					     I3C_ADDR_SLOT_I2C_DEV);
-
-		i2cdev = i3c_master_alloc_i2c_dev(master, i2cboardinfo);
-		if (IS_ERR(i2cdev)) {
-			ret = PTR_ERR(i2cdev);
-			goto err_detach_devs;
-		}
-
-		ret = i3c_master_attach_i2c_dev(master, i2cdev);
-		if (ret) {
-			i3c_master_free_i2c_dev(i2cdev);
-			goto err_detach_devs;
-		}
-	}
-	list_for_each_entry(i3cboardinfo, &master->boardinfo.i3c, node) {
-		struct i3c_device_info info = {
-			.static_addr = i3cboardinfo->static_addr,
-		};
-
-		if (i3cboardinfo->init_dyn_addr) {
-			status = i3c_bus_get_addr_slot_status(&master->bus,
-						i3cboardinfo->init_dyn_addr);
-			if (status != I3C_ADDR_SLOT_FREE) {
-				ret = -EBUSY;
-				goto err_detach_devs;
-			}
-		}
-
-		i3cdev = i3c_master_alloc_i3c_dev(master, &info);
-		if (IS_ERR(i3cdev)) {
-			ret = PTR_ERR(i3cdev);
-			goto err_detach_devs;
-		}
-
-		i3cdev->boardinfo = i3cboardinfo;
-
-		ret = i3c_master_attach_i3c_dev(master, i3cdev);
-		if (ret) {
-			i3c_master_free_i3c_dev(i3cdev);
-			goto err_detach_devs;
-		}
-	}
-
+	ret = i3c_master_attach_static_devs(master);
+	if (ret)
+		goto err_detach_devs;
 	/*
 	 * Now execute the controller specific ->bus_init() routine, which
 	 * might configure its internal logic to match the bus limitations.
@@ -1795,45 +1941,76 @@ i3c_master_search_i3c_dev_duplicate(struct i3c_dev_desc *refdev)
 }
 
 /**
- * i3c_master_add_i3c_dev_locked() - add an I3C slave to the bus
- * @master: master used to send frames on the bus
- * @addr: I3C slave dynamic address assigned to the device
+ * i3c_master_add_i2c_dev_locked() - add an I2C slave to the bus
+ * @master: master used to register I2C device
+ * @addr: I2C device address
+ * @lvr: legacy virtual register value
  *
- * This function is instantiating an I3C device object and adding it to the
- * I3C device list. All device information are automatically retrieved using
- * standard CCC commands.
- *
- * The I3C device object is returned in case the master wants to attach
- * private data to it using i3c_dev_set_master_data().
+ * This function is instantiating an I2C device object and adding it to the
+ * I2C device list.
  *
  * This function must be called with the bus lock held in write mode.
  *
  * Return: a 0 in case of success, an negative error code otherwise.
  */
-int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
-				  u8 addr)
+int i3c_master_add_i2c_dev_locked(struct i3c_master_controller *master,
+				  u16 addr, u8 lvr)
 {
-	struct i3c_device_info info = { .dyn_addr = addr };
-	struct i3c_dev_desc *newdev, *olddev;
-	u8 old_dyn_addr = addr, expected_dyn_addr;
-	struct i3c_ibi_setup ibireq = { };
-	bool enable_ibi = false;
+	enum i3c_addr_slot_status status;
+	struct i2c_dev_desc *i2cdev;
 	int ret;
 
 	if (!master)
 		return -EINVAL;
 
-	newdev = i3c_master_alloc_i3c_dev(master, &info);
-	if (IS_ERR(newdev))
-		return PTR_ERR(newdev);
+	status = i3c_bus_get_addr_slot_status(&master->bus,
+					      addr);
+	if (status != I3C_ADDR_SLOT_FREE)
+		return -EBUSY;
 
-	ret = i3c_master_attach_i3c_dev(master, newdev);
-	if (ret)
+	i3c_bus_set_addr_slot_status(&master->bus, addr,
+				     I3C_ADDR_SLOT_I2C_DEV);
+
+	i2cdev = i3c_master_alloc_i2c_dev_no_boardinfo(master, addr, lvr);
+
+	if (IS_ERR(i2cdev)) {
+		ret = PTR_ERR(i2cdev);
 		goto err_free_dev;
+	}
+
+	i2cdev->boardinfo = i3c_master_find_i2c_boardinfo(master, addr, lvr);
+
+	ret = i3c_master_attach_i2c_dev(master, i2cdev);
+
+	if (ret) {
+		ret = PTR_ERR(i2cdev);
+		goto err_free_dev;
+	}
+
+	return 0;
+
+err_free_dev:
+	i3c_bus_set_addr_slot_status(&master->bus, addr,
+				     I3C_ADDR_SLOT_FREE);
+	i3c_master_free_i2c_dev(i2cdev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i3c_master_add_i2c_dev_locked);
+
+static int
+i3c_master_retrieve_info_and_reuse(struct i3c_master_controller *master,
+				   struct i3c_dev_desc *newdev)
+{
+	struct i3c_dev_desc *olddev;
+	u8 old_dyn_addr = newdev->info.dyn_addr, expected_dyn_addr;
+	struct i3c_ibi_setup ibireq = { };
+	bool enable_ibi = false;
+	int ret;
 
 	ret = i3c_master_retrieve_dev_info(newdev);
 	if (ret)
-		goto err_detach_dev;
+		return ret;
 
 	olddev = i3c_master_search_i3c_dev_duplicate(newdev);
 	if (olddev) {
@@ -1872,7 +2049,7 @@ int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
 
 	ret = i3c_master_reattach_i3c_dev(newdev, old_dyn_addr);
 	if (ret)
-		goto err_detach_dev;
+		return ret;
 
 	/*
 	 * Depending on our previous state, the expected dynamic address might
@@ -1933,6 +2110,50 @@ int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
 		}
 		mutex_unlock(&newdev->ibi_lock);
 	}
+
+	return 0;
+}
+
+/**
+ * i3c_master_add_i3c_dev_locked() - add an I3C slave to the bus
+ * @master: master used to send frames on the bus
+ * @addr: I3C slave dynamic address assigned to the device
+ *
+ * This function is instantiating an I3C device object and adding it to the
+ * I3C device list. All device information are automatically retrieved using
+ * standard CCC commands.
+ *
+ * The I3C device object is returned in case the master wants to attach
+ * private data to it using i3c_dev_set_master_data().
+ *
+ * This function must be called with the bus lock held in write mode.
+ *
+ * Return: a 0 in case of success, an negative error code otherwise.
+ */
+int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
+				  u8 addr)
+{
+	struct i3c_device_info info = { .dyn_addr = addr };
+	struct i3c_dev_desc *newdev;
+	int ret;
+
+	if (!master)
+		return -EINVAL;
+
+	newdev = i3c_master_alloc_i3c_dev(master, &info);
+	if (IS_ERR(newdev))
+		return PTR_ERR(newdev);
+
+	ret = i3c_master_attach_i3c_dev(master, newdev);
+	if (ret)
+		goto err_free_dev;
+
+	if (i3c_master_owns_bus(master)) {
+		ret = i3c_master_retrieve_info_and_reuse(master, newdev);
+		if (ret)
+			goto err_detach_dev;
+	} else
+		master->want_to_acquire_bus = true;
 
 	return 0;
 
@@ -2112,11 +2333,15 @@ static int i3c_master_i2c_adapter_xfer(struct i2c_adapter *adap,
 	}
 
 	i3c_bus_normaluse_lock(&master->bus);
+	ret = i3c_master_acquire_bus_ownership(master);
+	if (ret)
+		goto err_unlock_bus;
 	dev = i3c_master_find_i2c_dev_by_addr(master, addr);
 	if (!dev)
 		ret = -ENOENT;
 	else
 		ret = master->ops->i2c_xfers(dev, xfers, nxfers);
+err_unlock_bus:
 	i3c_bus_normaluse_unlock(&master->bus);
 
 	return ret ? ret : nxfers;
@@ -2155,9 +2380,12 @@ static int i3c_master_i2c_adapter_init(struct i3c_master_controller *master)
 	 * We silently ignore failures here. The bus should keep working
 	 * correctly even if one or more i2c devices are not registered.
 	 */
-	i3c_bus_for_each_i2cdev(&master->bus, i2cdev)
+	i3c_bus_for_each_i2cdev(&master->bus, i2cdev) {
+		if (!i2cdev->boardinfo)
+			continue;
 		i2cdev->dev = i2c_new_device(adap, &i2cdev->boardinfo->base);
 
+	}
 	return 0;
 }
 
@@ -2396,8 +2624,75 @@ static int i3c_master_check_ops(const struct i3c_master_controller_ops *ops)
 	     !ops->recycle_ibi_slot))
 		return -EINVAL;
 
+	/*
+	 * If mastership request is supported, we also need hooks to control
+	 * when mastership request can occur by enabling/disabling the event.
+	 */
+	if (ops->request_mastership &&
+	    (!ops->enable_mr_events || !ops->disable_mr_events))
+		return -EINVAL;
 	return 0;
 }
+
+static void i3c_master_register_new_devs(struct i3c_master_controller *master)
+{
+	/*
+	 * We can register devices received from master by DEFSLVS.
+	 */
+	i3c_bus_normaluse_lock(&master->bus);
+	i3c_master_register_new_i3c_devs(master);
+	i3c_master_register_new_i2c_devs(master);
+	i3c_bus_normaluse_unlock(&master->bus);
+}
+
+/**
+ * i3c_master_bus_takeover() - register new I3C devices on bus takeover
+ * @master: master used to send frames on the bus
+ *
+ * This function is useful when devices were not added
+ * during initialization or when new device joined the bus
+ * which wasn't under our control.
+ */
+void i3c_master_bus_takeover(struct i3c_master_controller *master)
+{
+	struct i3c_dev_desc *i3cdev, *i3ctmp;
+	int ret;
+
+	master->want_to_acquire_bus = false;
+
+	if (!master->init_done)
+		return;
+
+	i3c_bus_maintenance_lock(&master->bus);
+	master->ops->populate_bus(master);
+
+	list_for_each_entry_safe(i3cdev, i3ctmp, &master->bus.devs.i3c,
+				 common.node) {
+		if (i3cdev->info.pid)
+			continue;
+
+		ret = i3c_master_retrieve_info_and_reuse(master, i3cdev);
+		if (ret) {
+			if (i3cdev->dev && i3cdev->dev->desc)
+				i3cdev->dev->desc = NULL;
+
+			i3c_master_detach_i3c_dev(i3cdev);
+		}
+	}
+
+	/*
+	 * If current master finished bus initialization properly, we can
+	 * enable Mastership event.
+	 */
+	ret = i3c_master_enable_mr_events_locked(master);
+	if (ret)
+		dev_warn(&master->dev, "ENEC(MR) failed (ret = %i)", ret);
+
+	i3c_bus_maintenance_unlock(&master->bus);
+
+	i3c_master_register_new_devs(master);
+}
+EXPORT_SYMBOL_GPL(i3c_master_bus_takeover);
 
 /**
  * i3c_master_init() - initializes all the structures required by I3C master
@@ -2429,9 +2724,6 @@ int i3c_master_init(struct i3c_master_controller *master,
 	struct i2c_dev_boardinfo *i2cbi;
 	int ret;
 
-	/* We do not support secondary masters yet. */
-	if (secondary)
-		return -ENOTSUPP;
 
 	ret = i3c_master_check_ops(ops);
 	if (ret)
@@ -2444,6 +2736,7 @@ int i3c_master_init(struct i3c_master_controller *master,
 	master->dev.release = i3c_masterdev_release;
 	master->ops = ops;
 	master->secondary = secondary;
+	master->want_to_acquire_bus = secondary;
 	INIT_LIST_HEAD(&master->boardinfo.i2c);
 	INIT_LIST_HEAD(&master->boardinfo.i3c);
 
@@ -2506,6 +2799,92 @@ void i3c_master_cleanup(struct i3c_master_controller *master)
 EXPORT_SYMBOL_GPL(i3c_master_cleanup);
 
 /**
+ * i3c_secondary_master_register() - register an secondary I3C master
+ * @master: master used to send frames on the bus
+ * @info: master info, describes this device
+ *
+ * This function takes care of everything for you:
+ *
+ * - updates this master info
+ * - registers the I2C adapter
+ * - if possible, populates the bus with devices received by DEFSLVS
+ *   command
+ *
+ * Return: 0 in case of success, a negative error code otherwise.
+ */
+int i3c_secondary_master_register(struct i3c_master_controller *master,
+				  struct i3c_device_info *info)
+{
+	int ret;
+
+	ret = i3c_master_set_info(master, info, master->secondary);
+	if (ret)
+		return ret;
+
+	ret = master->ops->bus_init(master);
+	if (ret)
+		return ret;
+
+	ret = device_add(&master->dev);
+	if (ret)
+		return -1;
+
+	/*
+	 * Expose our I3C bus as an I2C adapter so that I2C devices are exposed
+	 * through the I2C subsystem.
+	 */
+	ret = i3c_master_i2c_adapter_init(master);
+	if (ret)
+		goto err_del_dev;
+
+	i3c_bus_maintenance_lock(&master->bus);
+	/*
+	 * If possible, request mastership and try to populate the bus.
+	 */
+	ret = i3c_master_request_mastership_locked(master);
+	if (ret)
+		dev_warn(&master->dev,
+			 "Mastership failed at init time (ret = %i)", ret);
+
+	/*
+	 * No matter if mastership takeover passed or not, add partialy
+	 * discovered devices. We can register them when ENEC(MR) is enabled.
+	 */
+	master->ops->populate_bus(master);
+
+	i3c_bus_maintenance_unlock(&master->bus);
+
+	/*
+	 * We're done initializing the bus and the controller, we can now
+	 * register I3C devices obtained by DEFSLVS.
+	 */
+	master->init_done = true;
+	i3c_master_register_new_devs(master);
+
+	/*
+	 * If we are owning the bus, enable ENEC(MR) to let other masters
+	 * initialize their bus.
+	 */
+	if (i3c_master_owns_bus(master)) {
+		i3c_bus_maintenance_lock(&master->bus);
+		ret = i3c_master_enable_mr_events_locked(master);
+		i3c_bus_maintenance_unlock(&master->bus);
+		if (ret)
+			dev_warn(&master->dev,
+				 "ENEC(MR) failed (ret = %i)", ret);
+	}
+
+
+	return 0;
+
+err_del_dev:
+	device_del(&master->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i3c_secondary_master_register);
+
+/**
  * i3c_master_register() - register an primary I3C master
  * @master: master used to send frames on the bus
  * @info: master info, describes this device
@@ -2527,7 +2906,6 @@ int i3c_master_register(struct i3c_master_controller *master,
 	ret = i3c_master_set_info(master, info, master->secondary);
 	if (ret)
 		return ret;
-
 	ret = i3c_master_bus_init(master);
 	if (ret)
 		return ret;
@@ -2553,6 +2931,16 @@ int i3c_master_register(struct i3c_master_controller *master,
 	i3c_master_register_new_i3c_devs(master);
 	i3c_bus_normaluse_unlock(&master->bus);
 
+	/*
+	 * Enable ENEC(MR) and let other masters request mastership
+	 * and initialize their bus.
+	 */
+	i3c_bus_maintenance_lock(&master->bus);
+	ret = i3c_master_enable_mr_events_locked(master);
+	i3c_bus_maintenance_unlock(&master->bus);
+	if (ret)
+		dev_warn(&master->dev, "ENEC(MR) failed (ret = %i)", ret);
+
 	return 0;
 
 err_del_dev:
@@ -2566,6 +2954,29 @@ err_cleanup_bus:
 EXPORT_SYMBOL_GPL(i3c_master_register);
 
 /**
+ * i3c_master_mastership_ack() - acknowledges bus takeover.
+ * @master: master used to send frames on the bus
+ * @addr: I3C device address
+ *
+ * This function acknowledges bus takeover.
+ *
+ * Return: 0 in case of success, a negative error code otherwise.
+ */
+int i3c_master_mastership_ack(struct i3c_master_controller *master,
+			      u8 addr)
+{
+	int ret;
+
+	i3c_bus_maintenance_lock(&master->bus);
+	ret = i3c_master_get_accmst_locked(master, addr);
+	i3c_bus_maintenance_unlock(&master->bus);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(i3c_master_mastership_ack);
+
+
+/**
  * i3c_master_unregister() - unregister an I3C master
  * @master: master used to send frames on the bus
  *
@@ -2575,6 +2986,9 @@ EXPORT_SYMBOL_GPL(i3c_master_register);
  */
 int i3c_master_unregister(struct i3c_master_controller *master)
 {
+	i3c_bus_maintenance_lock(&master->bus);
+	i3c_master_disable_mr_events(master);
+	i3c_bus_maintenance_unlock(&master->bus);
 	i3c_master_i2c_adapter_cleanup(master);
 	i3c_master_unregister_i3c_devs(master);
 	i3c_master_bus_cleanup(master);

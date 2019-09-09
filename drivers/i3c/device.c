@@ -43,7 +43,13 @@ int i3c_device_do_priv_xfers(struct i3c_device *dev,
 	}
 
 	i3c_bus_normaluse_lock(dev->bus);
+	ret = i3c_master_acquire_bus_ownership(dev->desc->common.master);
+	if (ret)
+		goto err_unlock_bus;
+
 	ret = i3c_dev_do_priv_xfers_locked(dev->desc, xfers, nxfers);
+
+err_unlock_bus:
 	i3c_bus_normaluse_unlock(dev->bus);
 
 	return ret;
@@ -114,11 +120,17 @@ int i3c_device_enable_ibi(struct i3c_device *dev)
 	int ret = -ENOENT;
 
 	i3c_bus_normaluse_lock(dev->bus);
+	ret = i3c_master_acquire_bus_ownership(dev->desc->common.master);
+	if (ret)
+		goto err_unlock_bus;
+
 	if (dev->desc) {
 		mutex_lock(&dev->desc->ibi_lock);
 		ret = i3c_dev_enable_ibi_locked(dev->desc);
 		mutex_unlock(&dev->desc->ibi_lock);
 	}
+
+err_unlock_bus:
 	i3c_bus_normaluse_unlock(dev->bus);
 
 	return ret;
@@ -145,11 +157,17 @@ int i3c_device_request_ibi(struct i3c_device *dev,
 		return -EINVAL;
 
 	i3c_bus_normaluse_lock(dev->bus);
+	ret = i3c_master_acquire_bus_ownership(dev->desc->common.master);
+	if (ret)
+		goto err_unlock_bus;
+
 	if (dev->desc) {
 		mutex_lock(&dev->desc->ibi_lock);
 		ret = i3c_dev_request_ibi_locked(dev->desc, req);
 		mutex_unlock(&dev->desc->ibi_lock);
 	}
+
+err_unlock_bus:
 	i3c_bus_normaluse_unlock(dev->bus);
 
 	return ret;
@@ -166,12 +184,20 @@ EXPORT_SYMBOL_GPL(i3c_device_request_ibi);
  */
 void i3c_device_free_ibi(struct i3c_device *dev)
 {
+	int ret;
+
 	i3c_bus_normaluse_lock(dev->bus);
+	ret = i3c_master_acquire_bus_ownership(dev->desc->common.master);
+	if (ret)
+		goto err_unlock_bus;
+
 	if (dev->desc) {
 		mutex_lock(&dev->desc->ibi_lock);
 		i3c_dev_free_ibi_locked(dev->desc);
 		mutex_unlock(&dev->desc->ibi_lock);
 	}
+
+err_unlock_bus:
 	i3c_bus_normaluse_unlock(dev->bus);
 }
 EXPORT_SYMBOL_GPL(i3c_device_free_ibi);
