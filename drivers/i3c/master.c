@@ -645,6 +645,8 @@ i3c_master_alloc_i2c_dev(struct i3c_master_controller *master,
 
 	dev->common.master = master;
 	dev->boardinfo = boardinfo;
+	dev->addr = boardinfo->base.addr;
+	dev->lvr = boardinfo->lvr;
 
 	return dev;
 }
@@ -963,8 +965,8 @@ int i3c_master_defslvs_locked(struct i3c_master_controller *master)
 
 	desc = defslvs->slaves;
 	i3c_bus_for_each_i2cdev(bus, i2cdev) {
-		desc->lvr = i2cdev->boardinfo->lvr;
-		desc->static_addr = i2cdev->boardinfo->base.addr << 1;
+		desc->lvr = i2cdev->lvr;
+		desc->static_addr = i2cdev->addr << 1;
 		desc++;
 	}
 
@@ -1631,8 +1633,8 @@ static void i3c_master_detach_free_devs(struct i3c_master_controller *master)
 				 common.node) {
 		i3c_master_detach_i2c_dev(i2cdev);
 		i3c_bus_set_addr_slot_status(&master->bus,
-					i2cdev->boardinfo->base.addr,
-					I3C_ADDR_SLOT_FREE);
+					     i2cdev->addr,
+					     I3C_ADDR_SLOT_FREE);
 		i3c_master_free_i2c_dev(i2cdev);
 	}
 }
