@@ -682,6 +682,133 @@ static int load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
+static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
+static int cdns_mhdp_sst_enable(struct drm_bridge *bridge);
+
+static void mhdp_rertain_link(struct cdns_mhdp_device *mhdp)
+{
+	struct drm_connector *conn = &mhdp->connector;
+	struct drm_crtc *crtc;
+	struct drm_modeset_acquire_ctx ctx;
+	int ret;
+
+	dev_dbg(mhdp->dev, "%s()\n", __func__);
+
+	if (WARN_ON(!conn->state || !conn->state->crtc))
+		return;
+
+	crtc = conn->state->crtc;
+
+	drm_modeset_acquire_init(&ctx, 0);
+
+	for (;;) {
+		ret = drm_modeset_lock(&conn->dev->mode_config.connection_mutex,
+				       &ctx);
+		if (ret == -EDEADLK)
+			goto retry;
+
+		ret = drm_modeset_lock(&crtc->mutex, &ctx);
+
+		if (ret == -EDEADLK)
+			goto retry;
+
+		break;
+	retry:
+		drm_modeset_backoff(&ctx);
+	}
+
+	if (ret) {
+		dev_err(mhdp->dev, "Acquiring modeset locks failed with %i\n",
+			ret);
+		goto out;
+	}
+
+	cdns_mhdp_link_up(mhdp);
+	// TODO: Check why we need this to restore the video mode
+	cdns_mhdp_sst_enable(&mhdp->bridge);
+
+out:
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+}
+
+static bool mhdp_check_hpd_pulse(struct cdns_mhdp_device *mhdp)
+{
+	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+	u8 status[DP_LINK_STATUS_SIZE];
+	int hpd_event;
+	int ret;
+
+	hpd_event = cdns_mhdp_read_event(mhdp);
+
+	/* Geting event bits faild, send HPD event */
+	if (hpd_event < 0) {
+		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
+			 __func__, hpd_event);
+		return true;
+	}
+
+	/* HPD low, but driver thinks the cable is plugged, send HPD event */
+	if (!(hpd_event & DPTX_READ_EVENT_HPD_STATE) && mhdp->plugged)
+		return true;
+
+	/* HPD up, but driver thinks the cable is unplugged, send HPD event */
+	if ((hpd_event & DPTX_READ_EVENT_HPD_STATE) && !mhdp->plugged)
+		return true;
+
+	/* If HPD is low, we do not care about the pulse. No HPD event */
+	if (!(hpd_event & DPTX_READ_EVENT_HPD_STATE))
+		return false;
+
+	/* No HPD pulse and plugged state is what it should be, no HPD event */
+	if (!(hpd_event & DPTX_READ_EVENT_HPD_PULSE))
+		return false;
+
+	/* So, there is a HPD pulse we should handle */
+
+	/* Read DPCD to get revision */
+	ret = drm_dp_dpcd_read(&mhdp->aux, 0, dpcd, sizeof(dpcd));
+
+	/* DPCD read failed, send HPD event */
+	if (ret < 0)
+		return true;
+
+	if (dpcd[DP_DPCD_REV] >= 0x11) {
+		u8 sink_irq_vector = 0;
+
+		ret = drm_dp_dpcd_readb(&mhdp->aux,
+					DP_DEVICE_SERVICE_IRQ_VECTOR,
+					&sink_irq_vector);
+		if (ret == 1 && sink_irq_vector != 0) {
+			/* Clear interrupt source */
+			drm_dp_dpcd_writeb(&mhdp->aux,
+					   DP_DEVICE_SERVICE_IRQ_VECTOR,
+					   sink_irq_vector);
+			// TODO: Handle DP_DEVICE_SERVICE_IRQ_VECTOR bits
+		}
+	}
+
+	/* The link was not up we do not need to retrain */
+	if (!mhdp->link_up)
+		return false;
+
+	/* Check if the link is still up */
+	ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+
+	/* DPCD read failed, send HPD event */
+	if (ret < 0)
+		return true;
+
+	if (drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
+	    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes))
+		/* Link is still up, no need to retreain */
+		return false;
+
+	mhdp_rertain_link(mhdp);
+
+	return false;
+}
+
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
 {
 	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
@@ -696,8 +823,16 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 
 	//dev_dbg(mhdp->dev, "MHDP IRQ apb %x, mbox %x, sw_ev %x/%x/%x/%x\n", apb_stat, mbox_stat, sw_ev0, sw_ev1, sw_ev2, sw_ev3);
 
-	if (sw_ev0 & CDNS_DPTX_HPD)
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+	if (sw_ev0 & CDNS_DPTX_HPD) {
+		bool send_hotplug_event;
+		
+		mutex_lock(&mhdp->mutex);
+		send_hotplug_event = mhdp_check_hpd_pulse(mhdp);
+		mutex_unlock(&mhdp->mutex);
+
+		if (send_hotplug_event)
+			drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+	}
 
 	return IRQ_HANDLED;
 }
