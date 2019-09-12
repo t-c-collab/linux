@@ -773,6 +773,35 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
+static bool cdns_mhdp_link_probe(struct cdns_mhdp_device *mhdp)
+{
+	u8 status[DP_LINK_STATUS_SIZE];
+	int ret;
+
+	if (mhdp->link_up) {
+		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+		if (ret == sizeof(status)) {
+			if (!drm_dp_channel_eq_ok(status,
+						 mhdp->link.num_lanes) ||
+			    !drm_dp_clock_recovery_ok(status,
+						      mhdp->link.num_lanes))
+				/* Link is down */
+				mhdp->link_up = false;
+
+			return true;
+		} else {
+			/* DPCD communication failed, there is no connection */
+			return false;
+		}
+	}
+
+	ret = drm_dp_link_probe(&mhdp->aux, &mhdp->link);
+	if (ret)
+		return false; /* DPCD communication failed */
+
+	return true;
+}
+
 static int cdns_mhdp_detect(struct drm_connector *conn,
 			    struct drm_modeset_acquire_ctx *ctx,
 			    bool force)
@@ -801,7 +830,8 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 
 	ret = cdns_mhdp_get_hpd_status(mhdp);
 	if (ret > 0) {
-		mhdp->plugged = true;
+		mhdp->plugged = cdns_mhdp_link_probe(mhdp);
+
 		goto out;
 	}
 	if (ret < 0)
