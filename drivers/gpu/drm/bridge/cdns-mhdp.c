@@ -779,8 +779,20 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 
 	mutex_lock(&mhdp->mutex);
 
-	if (!mhdp->hw_enabled)
-		goto out;
+	if (!mhdp->hw_enabled)  {
+		const struct firmware *fw;
+
+		ret = request_firmware_direct(&fw, FW_NAME, mhdp->dev);
+		if (ret)
+			goto out;
+
+		ret = mhdp_fw_activate(fw, mhdp);
+
+		release_firmware(fw);
+
+		if (ret)
+			goto out;
+	}
 
 	ret = cdns_mhdp_get_hpd_status(mhdp);
 	if (ret > 0) {
