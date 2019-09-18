@@ -5,7 +5,7 @@
  * Copyright 2018 Cadence Design Systems, Inc.
  *
  */
-
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/io.h>
@@ -19,7 +19,8 @@
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 
-#define REF_CLK_19_2MHz
+#define REF_CLK_19_2MHz		19200000
+#define REF_CLK_25MHz		25000000
 
 #define DEFAULT_NUM_LANES	4
 #define MAX_NUM_LANES		4
@@ -169,6 +170,8 @@ struct cdns_dp_phy {
 	u32 max_bit_rate; /* Maximum link bit rate to use (in Mbps) */
 	struct reset_control *phy_rst;
 	struct device *dev;
+	struct clk *clk;
+	unsigned long ref_clk_rate;
 };
 
 enum phy_powerstate {
@@ -182,13 +185,10 @@ static int cdns_dp_phy_init(struct phy *phy);
 static int cdns_dp_phy_run(struct cdns_dp_phy *cdns_phy);
 static int cdns_dp_phy_wait_pma_cmn_ready(struct cdns_dp_phy *cdns_phy);
 static void cdns_dp_phy_pma_cfg(struct cdns_dp_phy *cdns_phy);
-#ifdef REF_CLK_19_2MHz
 static void cdns_dp_phy_pma_cmn_cfg_19_2mhz(struct cdns_dp_phy *cdns_phy);
 static void cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(struct cdns_dp_phy *cdns_phy, u32 rate, bool ssc);
-#else
 static void cdns_dp_phy_pma_cmn_cfg_25mhz(struct cdns_dp_phy *cdns_phy);
 static void cdns_dp_phy_pma_cmn_vco_cfg_25mhz(struct cdns_dp_phy *cdns_phy, u32 rate, bool ssc);
-#endif
 static void cdns_dp_phy_pma_lane_cfg(struct cdns_dp_phy *cdns_phy,
 				     unsigned int lane);
 static void cdns_dp_phy_pma_cmn_rate(struct cdns_dp_phy *cdns_phy,
@@ -355,11 +355,10 @@ static int cdns_dp_phy_init(struct phy *phy)
 
 	/* PHY PMA registers configuration functions */
 	/* Initialize PHY with max supported link rate, without SSC. */
-#ifdef REF_CLK_19_2MHz
-	cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(cdns_phy, cdns_phy->max_bit_rate, false);
-#else
-	cdns_dp_phy_pma_cmn_vco_cfg_25mhz(cdns_phy, cdns_phy->max_bit_rate, false);
-#endif
+	if (cdns_phy->ref_clk_rate ==  REF_CLK_19_2MHz)
+		cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(cdns_phy, cdns_phy->max_bit_rate, false);
+	else if (cdns_phy->ref_clk_rate == REF_CLK_25MHz)
+		cdns_dp_phy_pma_cmn_vco_cfg_25mhz(cdns_phy, cdns_phy->max_bit_rate, false);
 	cdns_dp_phy_pma_cmn_rate(cdns_phy, cdns_phy->max_bit_rate, cdns_phy->num_lanes);
 
 	/* take out of reset */
@@ -396,20 +395,16 @@ static void cdns_dp_phy_pma_cfg(struct cdns_dp_phy *cdns_phy)
 {
 	unsigned int i;
 
-#ifdef REF_CLK_19_2MHz
-	/* PMA common configuration 19.2MHz */
-	cdns_dp_phy_pma_cmn_cfg_19_2mhz(cdns_phy);
-#else
-	/* PMA common configuration 25MHz */
-	cdns_dp_phy_pma_cmn_cfg_25mhz(cdns_phy);
-#endif
-
+	if (cdns_phy->ref_clk_rate ==  REF_CLK_19_2MHz)
+		/* PMA common configuration 19.2MHz */
+		cdns_dp_phy_pma_cmn_cfg_19_2mhz(cdns_phy);
+	else if (cdns_phy->ref_clk_rate == REF_CLK_25MHz)
+		/* PMA common configuration 25MHz */
+		cdns_dp_phy_pma_cmn_cfg_25mhz(cdns_phy);
 	/* PMA lane configuration to deal with multi-link operation */
 	for (i = 0; i < cdns_phy->num_lanes; i++)
 		cdns_dp_phy_pma_lane_cfg(cdns_phy, i);
 }
-
-#ifdef REF_CLK_19_2MHz
 
 static void cdns_dp_phy_pma_cmn_cfg_19_2mhz(struct cdns_dp_phy *cdns_phy)
 {
@@ -568,7 +563,6 @@ static void cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(struct cdns_dp_phy *cdns_phy,
 	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL1_LOCK_PLLCNT_START, 0x0099);
 }
 
-#else
 
 static void cdns_dp_phy_pma_cmn_cfg_25mhz(struct cdns_dp_phy *cdns_phy)
 {
@@ -719,7 +713,6 @@ static void cdns_dp_phy_pma_cmn_vco_cfg_25mhz(struct cdns_dp_phy *cdns_phy,
 	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL1_LOCK_PLLCNT_START, 0x00C7);
 }
 
-#endif
 
 static void cdns_dp_phy_pma_cmn_rate(struct cdns_dp_phy *cdns_phy,
 				     u32 rate, u32 lanes)
@@ -770,12 +763,10 @@ static void cdns_dp_phy_pma_lane_cfg(struct cdns_dp_phy *cdns_phy,
 				     unsigned int lane)
 {
 	/* Per lane, refclock-dependent receiver detection setting */
-#ifdef REF_CLK_19_2MHz
-	cdns_dp_phy_write_phy(cdns_phy, TX_RCVDET_ST_TMR(lane), 0x0780);
-#else
-	cdns_dp_phy_write_phy(cdns_phy, TX_RCVDET_ST_TMR(lane), 0x09C4);
-#endif
-
+	if (cdns_phy->ref_clk_rate ==  REF_CLK_19_2MHz)
+		cdns_dp_phy_write_phy(cdns_phy, TX_RCVDET_ST_TMR(lane), 0x0780);
+	else if (cdns_phy->ref_clk_rate == REF_CLK_25MHz)
+		cdns_dp_phy_write_phy(cdns_phy, TX_RCVDET_ST_TMR(lane), 0x09C4);
 	/* Writing Tx/Rx Power State Controllers registers */
 	cdns_dp_phy_write_phy(cdns_phy, TX_PSC_A0(lane), 0x00FB);
 	cdns_dp_phy_write_phy(cdns_phy, TX_PSC_A2(lane), 0x04AA);
@@ -859,7 +850,7 @@ static int cdns_dp_phy_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
 	struct phy *phy;
-	int err;
+	int err, ret;
 
 	cdns_phy = devm_kzalloc(dev, sizeof(*cdns_phy), GFP_KERNEL);
 	if (!cdns_phy)
@@ -921,6 +912,25 @@ static int cdns_dp_phy_probe(struct platform_device *pdev)
 	default:
 		dev_err(dev, "unsupported max bit rate: %dMbps\n",
 			cdns_phy->max_bit_rate);
+		return -EINVAL;
+	}
+
+	cdns_phy->clk = devm_clk_get(dev, "dp_phy_refclk");
+	if (IS_ERR(cdns_phy->clk)) {
+		dev_err(dev, "dp_phy_refclk clock not found\n");
+		return PTR_ERR(cdns_phy->clk);
+	}
+
+	ret = clk_prepare_enable(cdns_phy->clk);
+	if (ret) {
+		dev_err(dev, "Failed to prepare ref clock\n");
+		return ret;
+	}
+
+	cdns_phy->ref_clk_rate = clk_get_rate(cdns_phy->clk);
+	if (!(cdns_phy->ref_clk_rate)) {
+		dev_err(dev, "Failed to get ref clock rate\n");
+		clk_disable_unprepare(cdns_phy->clk);
 		return -EINVAL;
 	}
 
@@ -1070,15 +1080,15 @@ static int cdns_dp_phy_configure_rate(struct cdns_dp_phy *cdns_phy,
 	ndelay(200);
 
 	/* DP Rate Change - VCO Output settings. */
-#ifdef REF_CLK_19_2MHz
-	/* PMA common configuration 19.2MHz */
-	cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(cdns_phy, dp->link_rate, dp->ssc);
-	cdns_dp_phy_pma_cmn_cfg_19_2mhz(cdns_phy);
-#else
-	/* PMA common configuration 25MHz */
-	cdns_dp_phy_pma_cmn_vco_cfg_25mhz(cdns_phy, dp->link_rate, dp->ssc);
-	cdns_dp_phy_pma_cmn_cfg_25mhz(cdns_phy);
-#endif
+	if (cdns_phy->ref_clk_rate ==  REF_CLK_19_2MHz) {
+		/* PMA common configuration 19.2MHz */
+		cdns_dp_phy_pma_cmn_vco_cfg_19_2mhz(cdns_phy, dp->link_rate, dp->ssc);
+		cdns_dp_phy_pma_cmn_cfg_19_2mhz(cdns_phy);
+	} else if (cdns_phy->ref_clk_rate == REF_CLK_25MHz) {
+		/* PMA common configuration 25MHz */
+		cdns_dp_phy_pma_cmn_vco_cfg_25mhz(cdns_phy, dp->link_rate, dp->ssc);
+		cdns_dp_phy_pma_cmn_cfg_25mhz(cdns_phy);
+	}
 	cdns_dp_phy_pma_cmn_rate(cdns_phy, dp->link_rate, dp->lanes);
 
 	/* Enable the cmn_pll0_en. */
