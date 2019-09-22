@@ -84,6 +84,11 @@
 #define FW_STANDBY				0
 #define FW_ACTIVE				1
 
+#define DPTX_READ_EVENT_HPD_TO_HIGH            BIT(0)
+#define DPTX_READ_EVENT_HPD_TO_LOW             BIT(1)
+#define DPTX_READ_EVENT_HPD_PULSE              BIT(2)
+#define DPTX_READ_EVENT_HPD_STATE              BIT(3)
+
 static inline u32 get_unaligned_be24(const void *p)
 {
 	const u8 *_p = p;
@@ -767,6 +772,48 @@ static int load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
+static void mhdp_check_link(struct cdns_mhdp_device *mhdp)
+{
+	struct drm_connector *conn = &mhdp->connector;
+	u8 status[DP_LINK_STATUS_SIZE];
+	bool hpd_state;
+	int hpd_event;
+	int ret;
+
+	/* Nothing to check if there is no link */
+	if (!mhdp->link_up)
+		return;
+
+	hpd_event = cdns_mhdp_read_event(mhdp);
+
+	/* Geting event bits faild, send HPD event */
+	if (hpd_event < 0) {
+		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
+			 __func__, hpd_event);
+		return;
+	}
+
+	hpd_state = !!(hpd_event & DPTX_READ_EVENT_HPD_STATE);
+
+	/* No point the check the link if HPD is down (cable is unplugged) */
+	if (!hpd_state)
+		return;
+
+	/* Check if the link is still up */
+	ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+
+	/* If dpcd read fais, we must assume the link is down too */
+	if (ret >= 0) {
+		if (drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
+		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes))
+			/* Link is Ok, no need to set link status property */
+			return;
+	}
+
+	/* Link is broken, so indicate it with the link status property */
+	drm_connector_set_link_status_property(conn, DRM_MODE_LINK_STATUS_BAD);
+}
+
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
 {
 	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
@@ -792,8 +839,11 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	bridge_attached = mhdp->bridge_attached;
 	spin_unlock(&mhdp->start_lock);
 
-	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD))
+	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
+		mhdp_check_link(mhdp);
+
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+	}
 
 	return IRQ_HANDLED;
 }
