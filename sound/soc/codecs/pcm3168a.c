@@ -9,10 +9,11 @@
 
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
+#include <linux/of_gpio.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
-
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/tlv.h>
@@ -32,6 +33,8 @@
 #define PCM3168A_FMT_I2S_TDM		0x6
 #define PCM3168A_FMT_LEFT_J_TDM		0x7
 #define PCM3168A_FMT_DSP_MASK		0x4
+
+static LIST_HEAD(reset_list);
 
 #define PCM3168A_NUM_SUPPLIES 6
 static const char *const pcm3168a_supply_names[PCM3168A_NUM_SUPPLIES] = {
@@ -59,7 +62,9 @@ struct pcm3168a_priv {
 	struct regulator_bulk_data supplies[PCM3168A_NUM_SUPPLIES];
 	struct regmap *regmap;
 	struct clk *scki;
+	struct gpio_desc *gpio_rst;
 	unsigned long sysclk;
+	struct list_head list;
 
 	struct pcm3168a_io_params io_params[2];
 };
@@ -714,6 +719,18 @@ static const struct snd_soc_component_driver pcm3168a_driver = {
 	.non_legacy_dai_naming	= 1,
 };
 
+static bool pcm3168a_is_shared_reset(int rst_line)
+{
+	struct pcm3168a_priv *a;
+
+	list_for_each_entry(a, &reset_list, list) {
+		if (a->gpio_rst && desc_to_gpio(a->gpio_rst) == rst_line)
+			return true;
+	}
+
+	return false;
+}
+
 int pcm3168a_probe(struct device *dev, struct regmap *regmap)
 {
 	struct pcm3168a_priv *pcm3168a;
@@ -724,6 +741,26 @@ int pcm3168a_probe(struct device *dev, struct regmap *regmap)
 		return -ENOMEM;
 
 	dev_set_drvdata(dev, pcm3168a);
+
+	pcm3168a->gpio_rst = devm_gpiod_get_optional(dev, "rst",
+						     GPIOD_OUT_HIGH);
+	if (IS_ERR(pcm3168a->gpio_rst)) {
+		int rst_line = of_get_named_gpio(dev->of_node, "rst-gpios", 0);
+
+		ret = PTR_ERR(pcm3168a->gpio_rst);
+		if (ret == -EPROBE_DEFER )
+			return ret;
+
+		if (!pcm3168a_is_shared_reset(rst_line)) {
+			dev_err(dev, "failed to acquire RST gpio: %d\n", ret);
+			return ret;
+		} else {
+			dev_dbg(dev, "shared RST gpio: %d\n", rst_line);
+			pcm3168a->gpio_rst = NULL;
+		}
+	} else {
+		gpiod_set_value_cansleep(pcm3168a->gpio_rst, 0);
+	}
 
 	pcm3168a->scki = devm_clk_get(dev, "scki");
 	if (IS_ERR(pcm3168a->scki)) {
@@ -783,6 +820,9 @@ int pcm3168a_probe(struct device *dev, struct regmap *regmap)
 		goto err_regulator;
 	}
 
+	INIT_LIST_HEAD(&pcm3168a->list);
+	list_add(&pcm3168a->list, &reset_list);
+
 	return 0;
 
 err_regulator:
@@ -806,6 +846,10 @@ static void pcm3168a_disable(struct device *dev)
 
 void pcm3168a_remove(struct device *dev)
 {
+	struct pcm3168a_priv *pcm3168a = dev_get_drvdata(dev);
+
+	list_del(&pcm3168a->list);
+
 	pm_runtime_disable(dev);
 #ifndef CONFIG_PM
 	pcm3168a_disable(dev);
