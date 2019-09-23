@@ -886,6 +886,8 @@
 			num_lanes = <4>;
 			max_bit_rate = <5400>;
 			#phy-cells = <0>;
+			clocks = <&wiz4_pll0_refclk>;
+			clock-names = "dp_phy_refclk";
 		};
 	};
 
