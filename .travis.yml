@@ -103,7 +103,7 @@ matrix:
           fi
         - mkdir checkpatch_dir
         - git format-patch ${TRAVIS_COMMIT_RANGE} -o checkpatch_dir
-        - ./scripts/checkpatch.pl --strict checkpatch_dir/*
+        - ./scripts/checkpatch.pl --strict --max-line-length=120 checkpatch_dir/*
     - name: "Modules arm64"
       env:
         - TOOLCHAIN="arm64"
