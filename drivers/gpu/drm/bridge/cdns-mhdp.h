@@ -232,6 +232,9 @@ struct cdns_mhdp_device {
 	struct clk *clk;
 	struct phy *phy;
 
+	/* This is to protect mailbox communications with the firmware */
+	struct mutex mbox_mutex;
+
 	struct drm_connector connector;
 	struct drm_bridge bridge;
 
