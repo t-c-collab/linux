@@ -205,6 +205,12 @@
 		states = <1800000 0x0
 			  3300000 0x1>;
 	};
+
+	clk_ov5640_fixed: clk_ov5640_fixed {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
 };
 
 &wkup_pmx0 {
@@ -585,7 +591,32 @@
 		reg = <0x20>;
 		gpio-controller;
 		#gpio-cells = <2>;
+
+		p0 {
+			/* P0 - CSI2_EXP_RSTz */
+			gpio-hog;
+			gpios = <0 GPIO_ACTIVE_LOW>;
+			output-low;
+			line-name = "CSI2_EXP_RSTz";
+		};
 	};
+
+	ov5640@3C {
+		compatible = "ovti,ov5640";
+		reg = <0x3c>;
+
+		clocks = <&clk_ov5640_fixed>;
+		clock-names = "xclk";
+
+		port {
+			csi2_cam0: endpoint {
+/*				remote-endpoint = <&csi2_phy0>; */
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
 };
 
 &mcu_cpsw {
