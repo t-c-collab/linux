@@ -1982,7 +1982,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "pm_runtime_get_sync failed\n");
 		pm_runtime_disable(&pdev->dev);
-		return ret;
+		goto clk_disable;
 	}
 
 	ret = cdns_mhdp_j721e_init(mhdp);
@@ -2005,10 +2005,9 @@ static int mhdp_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, mhdp_irq_handler,
 					IRQF_ONESHOT, "mhdp8546", mhdp);
 	if (ret) {
-		dev_err(&pdev->dev,
-			"cannot install IRQ %d\n", irq);
+		dev_err(&pdev->dev, "cannot install IRQ %d\n", irq);
 		ret = -EIO;
-		goto runtime_put;
+		goto j721e_fini;
 	}
 
 	/* Read source capabilities, based on PHY's device tree properties. */
@@ -2062,9 +2061,13 @@ static int mhdp_probe(struct platform_device *pdev)
 
 phy_exit:
 	phy_exit(mhdp->phy);
+j721e_fini:
+	cdns_mhdp_j721e_fini(mhdp);
 runtime_put:
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+clk_disable:
+	clk_disable_unprepare(mhdp->clk);
 
 	return ret;
 }
@@ -2105,6 +2108,8 @@ wait_loading:
 	}
 
 	phy_exit(mhdp->phy);
+
+	cdns_mhdp_j721e_fini(mhdp);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
