@@ -13,7 +13,8 @@
 #define USBG_NAMELEN 32
 
 #define fuas_to_gadget(f)	(f->function.config->cdev->gadget)
-#define UASP_SS_EP_COMP_LOG_STREAMS 4
+//#define UASP_SS_EP_COMP_LOG_STREAMS 4
+#define UASP_SS_EP_COMP_LOG_STREAMS 3
 #define UASP_SS_EP_COMP_NUM_STREAMS (1 << UASP_SS_EP_COMP_LOG_STREAMS)
 
 enum {
@@ -60,6 +61,7 @@ enum uas_state {
 	UASP_RECEIVE_DATA,
 	UASP_SEND_STATUS,
 	UASP_QUEUE_COMMAND,
+	UASP_ERR_SEND_STATUS,
 };
 
 #define USBG_MAX_CMD    64
@@ -78,9 +80,11 @@ struct usbg_cmd {
 	/* UAS only */
 	u16 tag;
 	u16 prio_attr;
+	struct response_iu response_iu;
 	struct sense_iu sense_iu;
 	enum uas_state state;
 	struct uas_stream *stream;
+	struct usb_request *req_err_status;
 
 	/* BOT only */
 	__le32 bot_tag;

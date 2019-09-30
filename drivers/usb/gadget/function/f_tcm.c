@@ -562,6 +562,56 @@ static void uasp_prepare_status(struct usbg_cmd *cmd)
 	stream->req_status->buf = iu;
 	stream->req_status->complete = uasp_status_data_cmpl;
 }
+static void uasp_prepare_err_status(struct usbg_cmd *cmd, u8 status);
+static void uasp_prepare_err_response(struct usbg_cmd *cmd, u8 status);
+
+static void uasp_err_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
+{
+	struct usbg_cmd *cmd = req->context;
+
+	transport_generic_free_cmd(&cmd->se_cmd, 0);
+}
+
+static void uasp_prepare_err_status(struct usbg_cmd *cmd, u8 status)
+{
+	struct se_cmd *se_cmd = &cmd->se_cmd;
+	struct sense_iu *iu = &cmd->sense_iu;
+
+	cmd->state = UASP_QUEUE_COMMAND;
+	iu->iu_id = IU_ID_STATUS;
+	iu->tag = cpu_to_be16(cmd->tag);
+
+	memset(cmd->req_err_status, 0, sizeof(*cmd->req_err_status));
+
+	iu->len = cpu_to_be16(se_cmd->scsi_sense_length);
+	iu->status = status;
+	cmd->req_err_status->context = cmd;
+	cmd->req_err_status->length = se_cmd->scsi_sense_length + 16;
+	cmd->req_err_status->buf = iu;
+	cmd->req_err_status->complete = uasp_err_status_data_cmpl;
+	cmd->req_err_status->stream_id = cmd->tag;
+}
+
+static void uasp_prepare_err_response(struct usbg_cmd *cmd, u8 response_code)
+{
+	struct response_iu *iu = &cmd->response_iu;
+
+	cmd->state = UASP_QUEUE_COMMAND;
+
+	memset(cmd->req_err_status, 0, sizeof(*cmd->req_err_status));
+	memset(&cmd->response_iu, 0, sizeof(cmd->response_iu));
+
+	iu->iu_id = IU_ID_RESPONSE;
+	iu->tag = cpu_to_be16(cmd->tag);
+	iu->response_code = response_code;
+
+	cmd->req_err_status->context = cmd;
+	cmd->req_err_status->length = sizeof(cmd->response_iu);
+	cmd->req_err_status->buf = iu;
+	cmd->req_err_status->complete = uasp_err_status_data_cmpl;
+	cmd->req_err_status->stream_id = cmd->tag;
+}
+
 
 static void uasp_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
 {
@@ -602,7 +652,6 @@ static void uasp_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
 
 	case UASP_QUEUE_COMMAND:
 		transport_generic_free_cmd(&cmd->se_cmd, 0);
-		usb_ep_queue(fu->ep_cmd, fu->cmd.req, GFP_ATOMIC);
 		break;
 
 	default:
@@ -612,6 +661,40 @@ static void uasp_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
 
 cleanup:
 	transport_generic_free_cmd(&cmd->se_cmd, 0);
+}
+
+static int uasp_send_error_status(struct usbg_cmd *cmd, u8 status)
+{
+	struct f_uas *fu = cmd->fu;
+
+	cmd->req_err_status = usb_ep_alloc_request(fu->ep_status, GFP_KERNEL);
+	if (!cmd->req_err_status)
+		pr_err(" ERROR in Allocationn of req_err_status req\n");
+
+	cmd->req_err_status->complete = uasp_err_status_data_cmpl;
+	cmd->req_err_status->context = cmd;
+	cmd->fu = fu;
+
+	uasp_prepare_err_status(cmd, status);
+
+	return usb_ep_queue(fu->ep_status, cmd->req_err_status, GFP_ATOMIC);
+}
+
+static int uasp_send_error_response(struct usbg_cmd *cmd, u8 response_code)
+{
+	struct f_uas *fu = cmd->fu;
+
+	cmd->req_err_status = usb_ep_alloc_request(fu->ep_status, GFP_KERNEL);
+	if (!cmd->req_err_status)
+		pr_err(" ERROR in Allocationn of req_err_status req\n");
+
+	cmd->req_err_status->complete = uasp_err_status_data_cmpl;
+	cmd->req_err_status->context = cmd;
+	cmd->fu = fu;
+
+	uasp_prepare_err_response(cmd, response_code);
+
+	return usb_ep_queue(fu->ep_status, cmd->req_err_status, GFP_ATOMIC);
 }
 
 static int uasp_send_status_response(struct usbg_cmd *cmd)
@@ -734,7 +817,7 @@ static void uasp_cmd_complete(struct usb_ep *ep, struct usb_request *req)
 	 * attention to properly sync STAUS endpoint with DATA IN + OUT so you
 	 * don't break HS.
 	 */
-	if (!ret)
+	if (ret < 0)
 		return;
 	usb_ep_queue(fu->ep_cmd, fu->cmd.req, GFP_ATOMIC);
 }
@@ -1104,7 +1187,8 @@ static int usbg_submit_command(struct f_uas *fu,
 	u32 cmd_len;
 	u16 scsi_tag;
 
-	if (cmd_iu->iu_id != IU_ID_COMMAND) {
+	if ((cmd_iu->iu_id != IU_ID_COMMAND)
+			&& !(fu->flags & USBG_USE_STREAMS)) {
 		pr_err("Unsupported type %d\n", cmd_iu->iu_id);
 		return -EINVAL;
 	}
@@ -1129,7 +1213,13 @@ static int usbg_submit_command(struct f_uas *fu,
 
 	if (fu->flags & USBG_USE_STREAMS) {
 		if (cmd->tag > UASP_SS_EP_COMP_NUM_STREAMS)
-			goto err;
+			return uasp_send_error_status(cmd, SAM_STAT_TASK_SET_FULL);
+
+		if (cmd_iu->iu_id != IU_ID_COMMAND) {
+			pr_err("Unsupported type %d\n", cmd_iu->iu_id);
+			return uasp_send_error_response(cmd, SAM_STAT_CHECK_CONDITION);
+		}
+
 		if (!cmd->tag)
 			cmd->stream = &fu->stream[0];
 		else
