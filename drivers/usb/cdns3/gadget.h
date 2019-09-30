@@ -1180,8 +1180,9 @@ struct cdns3_endpoint {
 	int			dequeue;
 	u8			trb_burst_size;
 
-	unsigned int		wa1_set:1;
 	struct cdns3_trb	*wa1_trb;
+	u32					ep_sts_pending;
+	unsigned int		wa1_set:1;
 	unsigned int		wa1_trb_index;
 	unsigned int		wa1_cycle_bit:1;
 
