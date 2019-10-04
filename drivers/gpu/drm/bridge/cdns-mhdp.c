@@ -965,10 +965,11 @@ static int mhdp_phy_configure(struct cdns_mhdp_device *mhdp, bool set_lanes,
 	return ret;
 }
 
-static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
+static int mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
 	u8 i;
+	int ret;
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_DISABLE);
@@ -996,7 +997,11 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 		mhdp->link_state.pre[i] = 0;
 	}
 	
-	mhdp_phy_configure(mhdp, true, true, true);
+	ret = mhdp_phy_configure(mhdp, true, true, true);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "PHY configuration failed during init\n");
+		return ret;
+	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_PHY_CONFIG,
 			    CDNS_PHY_COMMON_CONFIG |
@@ -1006,6 +1011,8 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_1 | DP_LINK_SCRAMBLING_DISABLE);
+
+	return 0;
 }
 
 static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
@@ -1096,13 +1103,15 @@ static void mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
 	}
 }
 
-static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
-					  u8 eq_tps,
-					  unsigned int training_interval)
+static int mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
+					 u8 eq_tps,
+					 unsigned int training_interval,
+					 bool *eq_done)
 {
 	u8 lanes_data[CDNS_DP_MAX_NUM_LANES], fail_counter_short = 0;
 	u8 dpcd[DP_LINK_STATUS_SIZE];
 	u32 reg32;
+	int ret;
 
 	dev_dbg(mhdp->dev, "Starting EQ phase\n");
 
@@ -1122,7 +1131,11 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	do {
 		mhdp_get_adjust_train(mhdp, dpcd, lanes_data);
 
-		mhdp_phy_configure(mhdp, false, false, true);
+		ret = mhdp_phy_configure(mhdp, false, false, true);
+		if (ret < 0) {
+			dev_err(mhdp->dev, "EQ: PHY configuration failed\n");
+			return ret;
+		}
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes,
 				    training_interval, lanes_data, dpcd);
@@ -1132,7 +1145,8 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 
 		if (drm_dp_channel_eq_ok(dpcd, mhdp->link.num_lanes)) {
 			dev_dbg(mhdp->dev, "EQ phase succeeded\n");
-			return true;
+			*eq_done = true;
+			return 0;
 		}
 
 		fail_counter_short++;
@@ -1144,7 +1158,7 @@ err:
 	dev_dbg(mhdp->dev, "EQ phase failed for %d lanes and %d rate\n",
 		mhdp->link.num_lanes, mhdp->link.rate);
 
-	return false;
+	return 0;
 }
 
 static void mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
@@ -1208,16 +1222,19 @@ static void mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
 	}
 }
 
-static bool mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp)
+static int mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp,
+					     bool *cr_done)
 {
 	u8 lanes_data[CDNS_DP_MAX_NUM_LANES],
 	fail_counter_short = 0, fail_counter_cr_long = 0;
 	u8 dpcd[DP_LINK_STATUS_SIZE];
-	bool cr_done;
+	int ret;
 
 	dev_dbg(mhdp->dev, "Starting CR phase\n");
 
-	mhdp_link_training_init(mhdp);
+	ret = mhdp_link_training_init(mhdp);
+	if (ret < 0)
+		return ret;
 
 	drm_dp_dpcd_read_link_status(&mhdp->aux, dpcd);
 
@@ -1228,12 +1245,16 @@ static bool mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp)
 
 		mhdp_get_adjust_train(mhdp, dpcd, lanes_data);
 
-		mhdp_phy_configure(mhdp, false, false, true);
+		ret = mhdp_phy_configure(mhdp, false, false, true);
+		if (ret < 0) {
+			dev_err(mhdp->dev, "CR: PHY configuration failed\n");
+			return ret;
+		}
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes, 100,
 				    lanes_data, dpcd);
 
-		mhdp_validate_cr(mhdp, &cr_done, &same_before_adjust,
+		mhdp_validate_cr(mhdp, cr_done, &same_before_adjust,
 				 &max_swing_reached, lanes_data, dpcd,
 				 requested_adjust_volt_swing,
 				 requested_adjust_pre_emphasis);
@@ -1243,9 +1264,9 @@ static bool mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp)
 			goto err;
 		}
 
-		if (cr_done) {
+		if (*cr_done) {
 			dev_dbg(mhdp->dev, "CR phase succeeded\n");
-			return true;
+			return 0;
 		}
 
 		/* Not all CR_DONE bits set */
@@ -1270,7 +1291,7 @@ err:
 	dev_dbg(mhdp->dev, "CR phase failed for %d lanes and %d rate\n",
 		mhdp->link.num_lanes, mhdp->link.rate);
 
-	return false;
+	return 0;
 }
 
 static void lower_link_rate(struct drm_dp_link *link)
@@ -1292,10 +1313,16 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			      unsigned int training_interval)
 {
 	u32 reg32;
+	bool cr_done = false, eq_done = false;
+	int ret;
 	const u8 eq_tps = eq_training_pattern_supported(mhdp->host, mhdp->sink);
 
 	while (1) {
-		if (!mhdp_link_training_clock_recovery(mhdp)) {
+		ret = mhdp_link_training_clock_recovery(mhdp, &cr_done);
+		if (ret < 0)
+			goto err;
+
+		if (!cr_done) {
 			if (drm_dp_link_rate_to_bw_code(mhdp->link.rate) !=
 			    DP_LINK_BW_1_62) {
 				dev_dbg(mhdp->dev,
@@ -1318,8 +1345,12 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			goto err;
 		}
 
-		if (mhdp_link_training_channel_eq(mhdp, eq_tps,
-						  training_interval))
+		ret = mhdp_link_training_channel_eq(mhdp, eq_tps,
+						    training_interval, &eq_done);
+		if (ret < 0)
+			goto err;
+
+		if (eq_done)
 			break;
 
 		if (mhdp->link.num_lanes > 1) {
