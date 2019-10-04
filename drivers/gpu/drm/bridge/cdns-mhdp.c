@@ -577,6 +577,17 @@ static u8 eq_training_pattern_supported(struct cdns_mhdp_host host,
 	return fls(host.pattern_supp & sink.pattern_supp);
 }
 
+static bool get_ssc_supported(struct cdns_mhdp_device *mhdp)
+{
+	bool ssc = false;
+
+	/* test if SSC is supported by both sides */
+	if ((mhdp->host.ssc) && (mhdp->sink.ssc))
+		ssc = true;
+
+	return ssc;
+}
+
 static int mhdp_fw_activate(const struct firmware *fw,
 			    struct cdns_mhdp_device *mhdp)
 {
@@ -932,6 +943,7 @@ static int mhdp_phy_configure(struct cdns_mhdp_device *mhdp, bool set_lanes,
 
 	phy_cfg.dp.link_rate = (mhdp->link.rate / 100);
 	phy_cfg.dp.lanes = (mhdp->link.num_lanes);
+	phy_cfg.dp.ssc = get_ssc_supported(mhdp);
 
 	for (i = 0; i < mhdp->link.num_lanes; i++) {
 		phy_cfg.dp.voltage[i] = mhdp->link_state.voltage[i];
@@ -1399,6 +1411,10 @@ static void mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
 	mhdp->sink.enhanced = !!(mhdp->link.capabilities &
 				 DP_LINK_CAP_ENHANCED_FRAMING);
 
+	/* Set SSC support */
+	mhdp->sink.ssc = !!(dpcd[DP_MAX_DOWNSPREAD] &
+				  DP_MAX_DOWNSPREAD_0_5);
+
 	/* Set TPS support */
 	mhdp->sink.pattern_supp = CDNS_SUPPORT_TPS(1) | CDNS_SUPPORT_TPS(2);
 	if (drm_dp_tps3_supported(dpcd))
@@ -1452,7 +1468,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
 	/* Spread AMP if required, enable 8b/10b coding */
-	amp[0] = mhdp->host.ssc ? DP_SPREAD_AMP_0_5 : 0;
+	amp[0] = get_ssc_supported(mhdp) ? DP_SPREAD_AMP_0_5 : 0;
 	amp[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&mhdp->aux, DP_DOWNSPREAD_CTRL, amp, 2);
 
