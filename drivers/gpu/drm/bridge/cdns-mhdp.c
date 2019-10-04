@@ -923,11 +923,34 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 	return 0;
 }
 
+static int mhdp_phy_configure(struct cdns_mhdp_device *mhdp, bool set_lanes,
+				bool set_rate, bool set_voltages)
+{
+	u8 i;
+	int ret;
+	union phy_configure_opts phy_cfg;
+
+	phy_cfg.dp.link_rate = (mhdp->link.rate / 100);
+	phy_cfg.dp.lanes = (mhdp->link.num_lanes);
+
+	for (i = 0; i < mhdp->link.num_lanes; i++) {
+		phy_cfg.dp.voltage[i] = mhdp->link_state.voltage[i];
+		phy_cfg.dp.pre[i] = mhdp->link_state.pre[i];
+	}
+
+	phy_cfg.dp.set_lanes = set_lanes;
+	phy_cfg.dp.set_rate = set_rate;
+	phy_cfg.dp.set_voltages = set_voltages;
+
+	ret = phy_configure(mhdp->phy, &phy_cfg);
+
+	return ret;
+}
+
 static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
 	u8 i;
-	union phy_configure_opts phy_cfg;
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_DISABLE);
@@ -950,19 +973,12 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 	mhdp->link_state.link_rate = mhdp->link.rate;
 	mhdp->link_state.num_lanes = mhdp->link.num_lanes;
 
-	phy_cfg.dp.link_rate = (mhdp->link.rate / 100);
-	phy_cfg.dp.lanes = (mhdp->link.num_lanes);
 	for (i = 0; i < 4; i++) {
 		mhdp->link_state.voltage[i] = 0;
 		mhdp->link_state.pre[i] = 0;
-		phy_cfg.dp.voltage[i] = 0;
-		phy_cfg.dp.pre[i] = 0;
 	}
-	phy_cfg.dp.ssc = false;
-	phy_cfg.dp.set_lanes = true;
-	phy_cfg.dp.set_rate = true;
-	phy_cfg.dp.set_voltages = true;
-	phy_configure(mhdp->phy,  &phy_cfg);
+	
+	mhdp_phy_configure(mhdp, true, true, true);
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_PHY_CONFIG,
 			    CDNS_PHY_COMMON_CONFIG |
@@ -976,8 +992,7 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 
 static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 				  u8 link_status[DP_LINK_STATUS_SIZE],
-				  u8 lanes_data[CDNS_DP_MAX_NUM_LANES],
-				  union phy_configure_opts *phy_cfg)
+				  u8 lanes_data[CDNS_DP_MAX_NUM_LANES])
 {
 	unsigned int i;
 	u8 adjust, max_pre_emphasis, max_volt_swing;
@@ -1002,14 +1017,12 @@ static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 			set_volt = 3 - set_pre;
 
 		mhdp->link_state.voltage[i] = set_volt;
-		phy_cfg->dp.voltage[i] = set_volt;
 		lanes_data[i] = set_volt;
 
 		if (set_volt == max_volt_swing)
 			lanes_data[i] |= DP_TRAIN_MAX_SWING_REACHED;
 
 		mhdp->link_state.pre[i] = set_pre;
-		phy_cfg->dp.pre[i] = set_pre;
 		lanes_data[i] |= (set_pre << DP_TRAIN_PRE_EMPHASIS_SHIFT);
 
 		if (set_pre == (max_pre_emphasis >> DP_TRAIN_PRE_EMPHASIS_SHIFT))
@@ -1072,7 +1085,6 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	u8 lanes_data[CDNS_DP_MAX_NUM_LANES], fail_counter_short = 0;
 	u8 dpcd[DP_LINK_STATUS_SIZE];
 	u32 reg32;
-	union phy_configure_opts phy_cfg;
 
 	dev_dbg(mhdp->dev, "Starting EQ phase\n");
 
@@ -1090,13 +1102,9 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	drm_dp_dpcd_read_link_status(&mhdp->aux, dpcd);
 
 	do {
-		mhdp_get_adjust_train(mhdp, dpcd, lanes_data, &phy_cfg);
-		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
-		phy_cfg.dp.ssc = false;
-		phy_cfg.dp.set_lanes = false;
-		phy_cfg.dp.set_rate = false;
-		phy_cfg.dp.set_voltages = true;
-		phy_configure(mhdp->phy,  &phy_cfg);
+		mhdp_get_adjust_train(mhdp, dpcd, lanes_data);
+
+		mhdp_phy_configure(mhdp, false, false, true);
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes,
 				    training_interval, lanes_data, dpcd);
@@ -1188,7 +1196,6 @@ static bool mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp)
 	fail_counter_short = 0, fail_counter_cr_long = 0;
 	u8 dpcd[DP_LINK_STATUS_SIZE];
 	bool cr_done;
-	union phy_configure_opts phy_cfg;
 
 	dev_dbg(mhdp->dev, "Starting CR phase\n");
 
@@ -1201,13 +1208,9 @@ static bool mhdp_link_training_clock_recovery(struct cdns_mhdp_device *mhdp)
 									requested_adjust_pre_emphasis[CDNS_DP_MAX_NUM_LANES] = {};
 		bool same_before_adjust, max_swing_reached;
 
-		mhdp_get_adjust_train(mhdp, dpcd, lanes_data, &phy_cfg);
-		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
-		phy_cfg.dp.ssc = false;
-		phy_cfg.dp.set_lanes = false;
-		phy_cfg.dp.set_rate = false;
-		phy_cfg.dp.set_voltages = true;
-		phy_configure(mhdp->phy,  &phy_cfg);
+		mhdp_get_adjust_train(mhdp, dpcd, lanes_data);
+
+		mhdp_phy_configure(mhdp, false, false, true);
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes, 100,
 				    lanes_data, dpcd);
@@ -1271,7 +1274,6 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			      unsigned int training_interval)
 {
 	u32 reg32;
-	union phy_configure_opts phy_cfg;
 	const u8 eq_tps = eq_training_pattern_supported(mhdp->host, mhdp->sink);
 
 	while (1) {
