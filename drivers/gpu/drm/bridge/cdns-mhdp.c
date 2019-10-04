@@ -946,9 +946,15 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 			    CDNS_DP_LANE_EN_LANES(mhdp->link.num_lanes));
 
 	drm_dp_link_configure(&mhdp->aux, &mhdp->link);
+
+	mhdp->link_state.link_rate = mhdp->link.rate;
+	mhdp->link_state.num_lanes = mhdp->link.num_lanes;
+
 	phy_cfg.dp.link_rate = (mhdp->link.rate / 100);
 	phy_cfg.dp.lanes = (mhdp->link.num_lanes);
 	for (i = 0; i < 4; i++) {
+		mhdp->link_state.voltage[i] = 0;
+		mhdp->link_state.pre[i] = 0;
 		phy_cfg.dp.voltage[i] = 0;
 		phy_cfg.dp.pre[i] = 0;
 	}
@@ -995,12 +1001,14 @@ static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 		if (set_volt + set_pre > 3)
 			set_volt = 3 - set_pre;
 
+		mhdp->link_state.voltage[i] = set_volt;
 		phy_cfg->dp.voltage[i] = set_volt;
 		lanes_data[i] = set_volt;
 
 		if (set_volt == max_volt_swing)
 			lanes_data[i] |= DP_TRAIN_MAX_SWING_REACHED;
 
+		mhdp->link_state.pre[i] = set_pre;
 		phy_cfg->dp.pre[i] = set_pre;
 		lanes_data[i] |= (set_pre << DP_TRAIN_PRE_EMPHASIS_SHIFT);
 

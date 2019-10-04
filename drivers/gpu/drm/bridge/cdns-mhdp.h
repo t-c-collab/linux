@@ -224,6 +224,13 @@ enum mhdp_hw_state { MHDP_HW_INACTIVE = 0, /* HW not initialized */
 		     MHDP_HW_READY,	   /* HW ready, FW active*/
 		     MHDP_HW_STOPPED };	   /* Driver removal FW to be stopped */
 
+struct cdns_mhdp_link_state {
+	unsigned int link_rate;
+	u8           num_lanes;
+	u8           voltage[4];
+	u8           pre[4];
+};
+
 struct cdns_mhdp_device {
 	void __iomem *regs;
 	void __iomem *j721e_regs;
@@ -240,6 +247,7 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;
+	struct cdns_mhdp_link_state link_state;
 	struct cdns_mhdp_display_fmt display_fmt;
 	s8 stream_id;
 
