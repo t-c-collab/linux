@@ -122,18 +122,24 @@ DECLARE_EVENT_CLASS(cdns3_log_epx_irq,
 		__string(ep_name, priv_ep->name)
 		__field(u32, ep_sts)
 		__field(u32, ep_traddr)
+		__field(u32, ep_last_sid)
+		__field(u32, use_streams)
 		__dynamic_array(char, str, CDNS3_MSG_MAX)
 	),
 	TP_fast_assign(
 		__assign_str(ep_name, priv_ep->name);
 		__entry->ep_sts = readl(&priv_dev->regs->ep_sts);
 		__entry->ep_traddr = readl(&priv_dev->regs->ep_traddr);
+		__entry->ep_last_sid = priv_ep->last_stream_id;
+		__entry->use_streams = priv_ep->use_streams;
 	),
-	TP_printk("%s, ep_traddr: %08x",
+	TP_printk("%s, ep_traddr: %08x ep_last_sid: %08x use_streams: %d",
 		  cdns3_decode_epx_irq(__get_str(str),
 				       __get_str(ep_name),
 				       __entry->ep_sts),
-		  __entry->ep_traddr)
+				       __entry->ep_traddr,
+				       __entry->ep_last_sid,
+				       __entry->use_streams)
 );
 
 DEFINE_EVENT(cdns3_log_epx_irq, cdns3_epx_irq,

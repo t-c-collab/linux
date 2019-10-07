@@ -205,7 +205,7 @@ static void cdns3_free_trb_pool(struct cdns3_endpoint *priv_ep)
 
 	if (priv_ep->trb_pool) {
 		dma_free_coherent(priv_dev->sysdev,
-				  cdns3_ring_size(priv_ep),
+				  priv_ep->alloc_ring_size,
 				  priv_ep->trb_pool, priv_ep->trb_pool_dma);
 		priv_ep->trb_pool = NULL;
 		priv_ep->num_trbs = 0;
@@ -225,9 +225,8 @@ int cdns3_allocate_trb_pool(struct cdns3_endpoint *priv_ep)
 	int num_trbs = ring_size / TRB_SIZE;
 	struct cdns3_trb *link_trb;
 
-	if (priv_ep->trb_pool && priv_ep->num_trbs != num_trbs) {
+	if (priv_ep->trb_pool && priv_ep->alloc_ring_size < ring_size)
 		cdns3_free_trb_pool(priv_ep);
-	}
 
 	if (!priv_ep->trb_pool) {
 		priv_ep->trb_pool = dma_alloc_coherent(priv_dev->sysdev,
@@ -236,13 +235,18 @@ int cdns3_allocate_trb_pool(struct cdns3_endpoint *priv_ep)
 						       GFP_DMA32 | GFP_ATOMIC);
 		if (!priv_ep->trb_pool)
 			return -ENOMEM;
-	} else {
+
+		priv_ep->alloc_ring_size = ring_size;
 		memset(priv_ep->trb_pool, 0, ring_size);
 	}
 
-	priv_ep->num_trbs = ring_size / TRB_SIZE;
+	priv_ep->num_trbs = num_trbs;
+
 	if (!priv_ep->num)
 		return 0;
+
+	/* Initialize the last TRB as Link TRB */
+	link_trb = (priv_ep->trb_pool + (priv_ep->num_trbs - 1));
 
 	if (priv_ep->use_streams) {
 		/*
@@ -251,8 +255,6 @@ int cdns3_allocate_trb_pool(struct cdns3_endpoint *priv_ep)
 		 */
 		link_trb->control = 0;
 	} else {
-		/* Initialize the last TRB as Link TRB */
-		link_trb = (priv_ep->trb_pool + (priv_ep->num_trbs - 1));
 		link_trb->buffer = TRB_BUFFER(priv_ep->trb_pool_dma);
 		link_trb->control = TRB_CYCLE | TRB_TYPE(TRB_LINK) | TRB_TOGGLE;
 	}

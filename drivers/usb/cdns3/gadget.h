@@ -1097,18 +1097,6 @@ struct cdns3_trb {
 /* Used structs */
 
 struct cdns3_device;
-struct cdns3_ring {
-	struct list_head	strm_pending_req_list;
-	struct list_head	strm_deferred_req_list;
-	struct cdns3_trb	*trb_pool;
-	dma_addr_t		trb_pool_dma;
-	int			free_trbs;
-	int			num_trbs;
-	u8			pcs;
-	u8			ccs;
-	int			enqueue;
-	int			dequeue;
-};
 /**
  * struct cdns3_endpoint - extended device side representation of USB endpoint.
  * @endpoint: usb endpoint
@@ -1129,6 +1117,7 @@ struct cdns3_ring {
  * @interval: interval between packets used for ISOC endpoint.
  * @free_trbs: number of free TRBs in transfer ring
  * @num_trbs: number of all TRBs in transfer ring
+ * @alloc_ring_size: size of the allocated TRB ring
  * @pcs: producer cycle state
  * @ccs: consumer cycle state
  * @enqueue: enqueue index in transfer ring
@@ -1174,6 +1163,7 @@ struct cdns3_endpoint {
 
 	int			free_trbs;
 	int			num_trbs;
+	int			alloc_ring_size;
 	u8			pcs;
 	u8			ccs;
 	int			enqueue;
@@ -1190,7 +1180,6 @@ struct cdns3_endpoint {
 	unsigned int		use_streams:1;
 	unsigned int		prime_flag:1;
 	u16			last_stream_id;
-	struct cdns3_ring	*ring;
 };
 
 /**
