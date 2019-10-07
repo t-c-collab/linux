@@ -563,7 +563,7 @@ static void uasp_prepare_status(struct usbg_cmd *cmd)
 	stream->req_status->complete = uasp_status_data_cmpl;
 }
 static void uasp_prepare_err_status(struct usbg_cmd *cmd, u8 status);
-static void uasp_prepare_err_response(struct usbg_cmd *cmd, u8 status);
+static void uasp_prepare_response(struct usbg_cmd *cmd, u8 status);
 
 static void uasp_err_status_data_cmpl(struct usb_ep *ep, struct usb_request *req)
 {
@@ -592,7 +592,7 @@ static void uasp_prepare_err_status(struct usbg_cmd *cmd, u8 status)
 	cmd->req_err_status->stream_id = cmd->tag;
 }
 
-static void uasp_prepare_err_response(struct usbg_cmd *cmd, u8 response_code)
+static void uasp_prepare_response(struct usbg_cmd *cmd, u8 response_code)
 {
 	struct response_iu *iu = &cmd->response_iu;
 
@@ -680,7 +680,7 @@ static int uasp_send_error_status(struct usbg_cmd *cmd, u8 status)
 	return usb_ep_queue(fu->ep_status, cmd->req_err_status, GFP_ATOMIC);
 }
 
-static int uasp_send_error_response(struct usbg_cmd *cmd, u8 response_code)
+static int uasp_send_response(struct usbg_cmd *cmd, u8 response_code)
 {
 	struct f_uas *fu = cmd->fu;
 
@@ -692,7 +692,7 @@ static int uasp_send_error_response(struct usbg_cmd *cmd, u8 response_code)
 	cmd->req_err_status->context = cmd;
 	cmd->fu = fu;
 
-	uasp_prepare_err_response(cmd, response_code);
+	uasp_prepare_response(cmd, response_code);
 
 	return usb_ep_queue(fu->ep_status, cmd->req_err_status, GFP_ATOMIC);
 }
@@ -1177,6 +1177,11 @@ static struct usbg_cmd *usbg_get_cmd(struct f_uas *fu,
 
 static void usbg_release_cmd(struct se_cmd *);
 
+static int uasp_handle_task_mgmt_cmd(struct usbg_cmd *cmd)
+{
+	return uasp_send_response(cmd, RC_TMF_COMPLETE);
+}
+
 static int usbg_submit_command(struct f_uas *fu,
 		void *cmdbuf, unsigned int len)
 {
@@ -1214,10 +1219,11 @@ static int usbg_submit_command(struct f_uas *fu,
 	if (fu->flags & USBG_USE_STREAMS) {
 		if (cmd->tag > UASP_SS_EP_COMP_NUM_STREAMS)
 			return uasp_send_error_status(cmd, SAM_STAT_TASK_SET_FULL);
-
-		if (cmd_iu->iu_id != IU_ID_COMMAND) {
+		if (cmd_iu->iu_id == IU_ID_TASK_MGMT) {
+			return uasp_handle_task_mgmt_cmd(cmd);
+		} else if (cmd_iu->iu_id != IU_ID_COMMAND) {
 			pr_err("Unsupported type %d\n", cmd_iu->iu_id);
-			return uasp_send_error_response(cmd, SAM_STAT_CHECK_CONDITION);
+			return uasp_send_response(cmd, RC_INVALID_INFO_UNIT);
 		}
 
 		if (!cmd->tag)
