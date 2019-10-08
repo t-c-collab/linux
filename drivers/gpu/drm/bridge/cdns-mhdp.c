@@ -1082,11 +1082,12 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 	return 0;
 }
 
-static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
+static int mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
 	u8 i;
 	union phy_configure_opts phy_cfg;
+	int ret;
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_DISABLE);
@@ -1115,7 +1116,12 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 	phy_cfg.dp.set_lanes = true;
 	phy_cfg.dp.set_rate = true;
 	phy_cfg.dp.set_voltages = true;
-	phy_configure(mhdp->phy,  &phy_cfg);
+	ret = phy_configure(mhdp->phy, &phy_cfg);
+	if (ret) {
+		dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+			__func__, ret);
+		return ret;
+	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_PHY_CONFIG,
 			    CDNS_PHY_COMMON_CONFIG |
@@ -1125,6 +1131,8 @@ static void mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   DP_TRAINING_PATTERN_1 | DP_LINK_SCRAMBLING_DISABLE);
+
+	return 0;
 }
 
 static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
@@ -1224,6 +1232,7 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	u8 link_status[DP_LINK_STATUS_SIZE];
 	u32 reg32;
 	union phy_configure_opts phy_cfg;
+	int ret;
 
 	dev_dbg(mhdp->dev, "Starting EQ phase\n");
 
@@ -1247,7 +1256,12 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
 		phy_cfg.dp.set_voltages = true;
-		phy_configure(mhdp->phy,  &phy_cfg);
+		ret = phy_configure(mhdp->phy, &phy_cfg);
+		if (ret) {
+			dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+				__func__, ret);
+			goto err;
+		}
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes,
 				    training_interval, lanes_data, link_status);
@@ -1340,10 +1354,13 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 	u8 link_status[DP_LINK_STATUS_SIZE];
 	bool cr_done;
 	union phy_configure_opts phy_cfg;
+	int ret;
 
 	dev_dbg(mhdp->dev, "Starting CR phase\n");
 
-	mhdp_link_training_init(mhdp);
+	ret = mhdp_link_training_init(mhdp);
+	if (ret)
+		goto err;
 
 	drm_dp_dpcd_read_link_status(&mhdp->aux, link_status);
 
@@ -1358,7 +1375,12 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
 		phy_cfg.dp.set_voltages = true;
-		phy_configure(mhdp->phy,  &phy_cfg);
+		ret = phy_configure(mhdp->phy, &phy_cfg);
+		if (ret) {
+			dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+				__func__, ret);
+			goto err;
+		}
 
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes, 100,
 				    lanes_data, link_status);
@@ -1424,6 +1446,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 	u32 reg32;
 	union phy_configure_opts phy_cfg;
 	const u8 eq_tps = eq_training_pattern_supported(mhdp->host, mhdp->sink);
+	int ret;
 
 	while (1) {
 		if (!mhdp_link_training_cr(mhdp)) {
@@ -1439,7 +1462,12 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 				phy_cfg.dp.set_lanes = false;
 				phy_cfg.dp.set_rate = true;
 				phy_cfg.dp.set_voltages = false;
-				phy_configure(mhdp->phy,  &phy_cfg);
+				ret = phy_configure(mhdp->phy, &phy_cfg);
+				if (ret) {
+					dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+						__func__, ret);
+					goto err;
+				}
 
 				continue;
 			} else if (mhdp->link.num_lanes > 1) {
@@ -1455,7 +1483,12 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 				phy_cfg.dp.set_lanes = true;
 				phy_cfg.dp.set_rate = false;
 				phy_cfg.dp.set_voltages = false;
-				phy_configure(mhdp->phy,  &phy_cfg);
+				ret = phy_configure(mhdp->phy, &phy_cfg);
+				if (ret) {
+					dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+						__func__, ret);
+					goto err;
+				}
 
 				continue;
 			}
@@ -1480,7 +1513,12 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			phy_cfg.dp.set_lanes = true;
 			phy_cfg.dp.set_rate = false;
 			phy_cfg.dp.set_voltages = false;
-			phy_configure(mhdp->phy,  &phy_cfg);
+			ret = phy_configure(mhdp->phy,  &phy_cfg);
+			if (ret) {
+				dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+					__func__, ret);
+				goto err;
+			}
 
 			continue;
 		} else if (drm_dp_link_rate_to_bw_code(mhdp->link.rate) !=
@@ -1495,7 +1533,12 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			phy_cfg.dp.set_lanes = false;
 			phy_cfg.dp.set_rate = true;
 			phy_cfg.dp.set_voltages = false;
-			phy_configure(mhdp->phy,  &phy_cfg);
+			ret = phy_configure(mhdp->phy,  &phy_cfg);
+			if (ret) {
+				dev_err(mhdp->dev, "%s: phy_configure() failed: %d\n",
+					__func__, ret);
+				goto err;
+			}
 
 			continue;
 		}
