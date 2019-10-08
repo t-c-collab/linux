@@ -863,9 +863,46 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	return connector_status_disconnected;
 }
 
+static
+bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
+			    const struct drm_display_mode *mode,
+			    int lanes, int rate)
+{
+	u32 max_bw, req_bw, bpp;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	req_bw = mode->clock * bpp / 8;
+
+	max_bw = lanes * rate;
+
+	if (req_bw > max_bw) {
+		dev_dbg(mhdp->dev, "%s: %s (%u * %u/8 =) %u > %u (= %u * %u)\n",
+			__func__, mode->name, mode->clock, bpp, req_bw,
+			max_bw, lanes, rate);
+
+		return false;
+	}
+
+	return true;
+}
+
+static
+enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
+					  struct drm_display_mode *mode)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
+
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->host.lanes_cnt,
+				    mhdp->host.link_rate))
+		return MODE_CLOCK_HIGH;
+
+	return MODE_OK;
+}
+
 static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
 	.detect_ctx = cdns_mhdp_detect,
 	.get_modes = cdns_mhdp_get_modes,
+	.mode_valid = cdns_mhdp_mode_valid,
 };
 
 static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
@@ -1544,6 +1581,14 @@ static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 
 	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
 
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate)) {
+		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
+		return -EINVAL;
+	}
+
 	/* find optimal tu_size */
 	required_bandwidth = pxlclock * bpp / 8;
 	available_bandwidth = mhdp->link.num_lanes * rate;
@@ -1560,8 +1605,13 @@ static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
 		  tu_size - vs < 2) && tu_size < 64);
 
-	if (vs > 64)
+	if (vs > 64) {
+		dev_err(mhdp->dev,
+			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
 		return -EINVAL;
+	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
 			    CDNS_DP_FRAMER_TU_VS(vs) |
@@ -1852,7 +1902,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "pm_runtime_get_sync failed\n");
 		pm_runtime_disable(&pdev->dev);
-		return ret;
+		goto clk_disable;
 	}
 
 	if (mhdp->ops && mhdp->ops->init) {
@@ -1877,10 +1927,9 @@ static int mhdp_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, mhdp_irq_handler,
 					IRQF_ONESHOT, "mhdp8546", mhdp);
 	if (ret) {
-		dev_err(&pdev->dev,
-			"cannot install IRQ %d\n", irq);
+		dev_err(&pdev->dev, "cannot install IRQ %d\n", irq);
 		ret = -EIO;
-		goto runtime_put;
+		goto j721e_fini;
 	}
 
 	/* Read source capabilities, based on PHY's device tree properties. */
@@ -1934,9 +1983,13 @@ static int mhdp_probe(struct platform_device *pdev)
 
 phy_exit:
 	phy_exit(mhdp->phy);
+j721e_fini:
+	cdns_mhdp_j721e_fini(mhdp);
 runtime_put:
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+clk_disable:
+	clk_disable_unprepare(mhdp->clk);
 
 	return ret;
 }
@@ -1980,6 +2033,8 @@ wait_loading:
 	}
 
 	phy_exit(mhdp->phy);
+
+	cdns_mhdp_j721e_fini(mhdp);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
