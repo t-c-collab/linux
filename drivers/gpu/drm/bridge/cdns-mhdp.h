@@ -15,6 +15,7 @@
 #include <drm/drm_connector.h>
 #include <drm/drm_dp_helper.h>
 
+/* Register offsets */
 #define CDNS_APB_CFG				0x00000
 #define CDNS_APB_CTRL				(CDNS_APB_CFG + 0x00)
 #define CDNS_CPU_STALL				BIT(3)
@@ -185,6 +186,96 @@
 #define CDNS_DP_LANE_EN_LANES(x)		GENMASK(x - 1, 0)
 #define CDNS_DP_ENHNCD				(CDNS_DPTX_GLOBAL + 0x04)
 
+/* mailbox */
+#define MAILBOX_RETRY_US			1000
+#define MAILBOX_TIMEOUT_US			5000000
+
+#define MB_OPCODE_ID				0
+#define MB_MODULE_ID				1
+#define MB_SIZE_MSB_ID				2
+#define MB_SIZE_LSB_ID				3
+#define MB_DATA_ID				4
+
+#define MB_MODULE_ID_DP_TX			0x01
+#define MB_MODULE_ID_HDCP_TX			0x07
+#define MB_MODULE_ID_HDCP_RX			0x08
+#define MB_MODULE_ID_HDCP_GENERAL		0x09
+#define MB_MODULE_ID_GENERAL			0x0a
+
+/* firmware and opcodes */
+#define FW_NAME					"cadence/mhdp8546.bin"
+#define CDNS_MHDP_IMEM				0x10000
+
+#define GENERAL_MAIN_CONTROL			0x01
+#define GENERAL_TEST_ECHO			0x02
+#define GENERAL_BUS_SETTINGS			0x03
+#define GENERAL_TEST_ACCESS			0x04
+#define GENERAL_REGISTER_READ			0x07
+
+#define DPTX_SET_POWER_MNG			0x00
+#define DPTX_SET_HOST_CAPABILITIES		0x01
+#define DPTX_GET_EDID				0x02
+#define DPTX_READ_DPCD				0x03
+#define DPTX_WRITE_DPCD				0x04
+#define DPTX_ENABLE_EVENT			0x05
+#define DPTX_WRITE_REGISTER			0x06
+#define DPTX_READ_REGISTER			0x07
+#define DPTX_WRITE_FIELD			0x08
+#define DPTX_TRAINING_CONTROL			0x09
+#define DPTX_READ_EVENT				0x0a
+#define DPTX_READ_LINK_STAT			0x0b
+#define DPTX_SET_VIDEO				0x0c
+#define DPTX_SET_AUDIO				0x0d
+#define DPTX_GET_LAST_AUX_STAUS			0x0e
+#define DPTX_SET_LINK_BREAK_POINT		0x0f
+#define DPTX_FORCE_LANES			0x10
+#define DPTX_HPD_STATE				0x11
+#define DPTX_ADJUST_LT				0x12
+
+#define FW_STANDBY				0
+#define FW_ACTIVE				1
+
+/* HPD */
+#define DPTX_READ_EVENT_HPD_TO_HIGH             BIT(0)
+#define DPTX_READ_EVENT_HPD_TO_LOW              BIT(1)
+#define DPTX_READ_EVENT_HPD_PULSE               BIT(2)
+#define DPTX_READ_EVENT_HPD_STATE               BIT(3)
+
+/* general */
+#define CDNS_DP_TRAINING_PATTERN_4		0x7
+
+#define CDNS_KEEP_ALIVE_TIMEOUT			2000
+
+#define CDNS_LANE_1				BIT(0)
+#define CDNS_LANE_2				BIT(1)
+#define CDNS_LANE_4				BIT(2)
+
+#define CDNS_VOLT_SWING(x)			((x) & GENMASK(1, 0))
+#define CDNS_FORCE_VOLT_SWING			BIT(2)
+
+#define CDNS_PRE_EMPHASIS(x)			((x) & GENMASK(1, 0))
+#define CDNS_FORCE_PRE_EMPHASIS			BIT(2)
+
+#define CDNS_SUPPORT_TPS(x)			BIT((x) - 1)
+
+#define CDNS_FAST_LINK_TRAINING			BIT(0)
+
+#define CDNS_LANE_MAPPING_TYPE_C_LANE_0(x)	((x) & GENMASK(1, 0))
+#define CDNS_LANE_MAPPING_TYPE_C_LANE_1(x)	((x) & GENMASK(3, 2))
+#define CDNS_LANE_MAPPING_TYPE_C_LANE_2(x)	((x) & GENMASK(5, 4))
+#define CDNS_LANE_MAPPING_TYPE_C_LANE_3(x)	((x) & GENMASK(7, 6))
+#define CDNS_LANE_MAPPING_NORMAL		0xe4
+#define CDNS_LANE_MAPPING_FLIPPED		0x1b
+
+#define CDNS_DP_MAX_NUM_LANES			4
+#define CDNS_DP_TEST_VSC_SDP			(1 << 6) /* 1.3+ */
+#define CDNS_DP_TEST_COLOR_FORMAT_RAW_Y_ONLY	(1 << 7)
+
+#define CDNS_MHDP_MAX_STREAMS   4
+
+#define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
+#define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
+
 struct cdns_mhdp_host {
 	unsigned int link_rate;
 	u8 lanes_cnt;
@@ -273,10 +364,6 @@ struct cdns_mhdp_device {
 	enum mhdp_hw_state hw_state;
 };
 
-#define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
-#define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
-
-#define CDNS_MHDP_MAX_STREAMS   4
 
 u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt);
 void cdns_mhdp_configure_video(struct drm_bridge *bridge);

@@ -38,57 +38,23 @@
 #include "cdns-mhdp.h"
 #include "cdns-mhdp-j721e.h"
 
-/* CDNS MHDP Helpers */
-#define MAILBOX_RETRY_US		1000
-#define MAILBOX_TIMEOUT_US		5000000
+#ifdef CONFIG_DRM_CDNS_MHDP_J721E
+static const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
+	.init = cdns_mhdp_j721e_init,
+	.exit = cdns_mhdp_j721e_fini,
+	.enable = cdns_mhdp_j721e_enable,
+	.disable = cdns_mhdp_j721e_disable,
+};
+#endif
 
-/* mailbox */
-#define MB_OPCODE_ID			0
-#define MB_MODULE_ID			1
-#define MB_SIZE_MSB_ID			2
-#define MB_SIZE_LSB_ID			3
-#define MB_DATA_ID			4
-
-#define MB_MODULE_ID_DP_TX		0x01
-#define MB_MODULE_ID_HDCP_TX		0x07
-#define MB_MODULE_ID_HDCP_RX		0x08
-#define MB_MODULE_ID_HDCP_GENERAL	0x09
-#define MB_MODULE_ID_GENERAL		0x0a
-
-/* general opcode */
-#define GENERAL_MAIN_CONTROL		0x01
-#define GENERAL_TEST_ECHO		0x02
-#define GENERAL_BUS_SETTINGS		0x03
-#define GENERAL_TEST_ACCESS		0x04
-#define GENERAL_REGISTER_READ		0x07
-
-#define DPTX_SET_POWER_MNG			0x00
-#define DPTX_SET_HOST_CAPABILITIES		0x01
-#define DPTX_GET_EDID				0x02
-#define DPTX_READ_DPCD				0x03
-#define DPTX_WRITE_DPCD				0x04
-#define DPTX_ENABLE_EVENT			0x05
-#define DPTX_WRITE_REGISTER			0x06
-#define DPTX_READ_REGISTER			0x07
-#define DPTX_WRITE_FIELD			0x08
-#define DPTX_TRAINING_CONTROL			0x09
-#define DPTX_READ_EVENT				0x0a
-#define DPTX_READ_LINK_STAT			0x0b
-#define DPTX_SET_VIDEO				0x0c
-#define DPTX_SET_AUDIO				0x0d
-#define DPTX_GET_LAST_AUX_STAUS			0x0e
-#define DPTX_SET_LINK_BREAK_POINT		0x0f
-#define DPTX_FORCE_LANES			0x10
-#define DPTX_HPD_STATE				0x11
-#define DPTX_ADJUST_LT				0x12
-
-#define FW_STANDBY				0
-#define FW_ACTIVE				1
-
-#define DPTX_READ_EVENT_HPD_TO_HIGH            BIT(0)
-#define DPTX_READ_EVENT_HPD_TO_LOW             BIT(1)
-#define DPTX_READ_EVENT_HPD_PULSE              BIT(2)
-#define DPTX_READ_EVENT_HPD_STATE              BIT(3)
+static const struct of_device_id mhdp_ids[] = {
+	{ .compatible = "cdns,mhdp8546", },
+#ifdef CONFIG_DRM_CDNS_MHDP_J721E
+	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
+#endif
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, mhdp_ids);
 
 static inline u32 get_unaligned_be24(const void *p)
 {
@@ -582,58 +548,6 @@ err_adjust_lt:
 
 	return ret;
 }
-
-/* EOF CDNS MHDP Helpers */
-
-#define FW_NAME					"cadence/mhdp8546.bin"
-#define CDNS_MHDP_IMEM				0x10000
-
-#define CDNS_DP_TRAINING_PATTERN_4		0x7
-
-#define CDNS_KEEP_ALIVE_TIMEOUT			2000
-
-#ifdef CONFIG_DRM_CDNS_MHDP_J721E
-static const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
-	.init = cdns_mhdp_j721e_init,
-	.exit = cdns_mhdp_j721e_fini,
-	.enable = cdns_mhdp_j721e_enable,
-	.disable = cdns_mhdp_j721e_disable,
-};
-#endif
-
-static const struct of_device_id mhdp_ids[] = {
-	{ .compatible = "cdns,mhdp8546", },
-#ifdef CONFIG_DRM_CDNS_MHDP_J721E
-	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
-#endif
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, mhdp_ids);
-
-#define CDNS_LANE_1				BIT(0)
-#define CDNS_LANE_2				BIT(1)
-#define CDNS_LANE_4				BIT(2)
-
-#define CDNS_VOLT_SWING(x)			((x) & GENMASK(1, 0))
-#define CDNS_FORCE_VOLT_SWING			BIT(2)
-
-#define CDNS_PRE_EMPHASIS(x)			((x) & GENMASK(1, 0))
-#define CDNS_FORCE_PRE_EMPHASIS			BIT(2)
-
-#define CDNS_SUPPORT_TPS(x)			BIT((x) - 1)
-
-#define CDNS_FAST_LINK_TRAINING			BIT(0)
-
-#define CDNS_LANE_MAPPING_TYPE_C_LANE_0(x)	((x) & GENMASK(1, 0))
-#define CDNS_LANE_MAPPING_TYPE_C_LANE_1(x)	((x) & GENMASK(3, 2))
-#define CDNS_LANE_MAPPING_TYPE_C_LANE_2(x)	((x) & GENMASK(5, 4))
-#define CDNS_LANE_MAPPING_TYPE_C_LANE_3(x)	((x) & GENMASK(7, 6))
-#define CDNS_LANE_MAPPING_NORMAL		0xe4
-#define CDNS_LANE_MAPPING_FLIPPED		0x1b
-
-#define CDNS_DP_MAX_NUM_LANES			4
-#define CDNS_DP_TEST_VSC_SDP			(1 << 6) /* 1.3+ */
-#define CDNS_DP_TEST_COLOR_FORMAT_RAW_Y_ONLY	(1 << 7)
 
 static unsigned int max_link_rate(struct cdns_mhdp_host host,
 				  struct cdns_mhdp_sink sink)
