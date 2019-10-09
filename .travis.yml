@@ -33,7 +33,7 @@ env:
   global:
     - export BUILD_THREADS=$(grep "^processor" /proc/cpuinfo | wc -l)
     - export CCACHE_SLOPPINESS=time_macros
-    - export BUILD_TARGETS="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-dp.ko"
+    - export BUILD_TARGETS="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-torrent.ko"
 
 before_script:
   - ccache -z
