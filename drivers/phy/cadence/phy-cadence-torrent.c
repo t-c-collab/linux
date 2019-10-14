@@ -48,58 +48,108 @@
  * register offsets from SD0801 PHY register block base (i.e MHDP
  * register base + 0x500000)
  */
-#define CMN_SSM_BANDGAP_TMR		0x00084
-#define CMN_SSM_BIAS_TMR		0x00088
-#define CMN_PLLSM0_PLLPRE_TMR		0x000a8
-#define CMN_PLLSM0_PLLLOCK_TMR		0x000b0
-#define CMN_PLLSM1_PLLPRE_TMR		0x000c8
-#define CMN_PLLSM1_PLLLOCK_TMR		0x000d0
-#define CMN_BGCAL_INIT_TMR		0x00190
-#define CMN_BGCAL_ITER_TMR		0x00194
-#define CMN_IBCAL_INIT_TMR		0x001d0
-#define CMN_PLL0_VCOCAL_INIT_TMR	0x00210
-#define CMN_PLL0_VCOCAL_ITER_TMR	0x00214
-#define CMN_PLL0_VCOCAL_REFTIM_START	0x00218
-#define CMN_PLL0_VCOCAL_PLLCNT_START	0x00220
-#define CMN_PLL0_INTDIV_M0		0x00240
-#define CMN_PLL0_FRACDIVL_M0		0x00244
-#define CMN_PLL0_FRACDIVH_M0		0x00248
-#define CMN_PLL0_HIGH_THR_M0		0x0024c
-#define CMN_PLL0_DSM_DIAG_M0		0x00250
-#define CMN_PLL0_LOCK_PLLCNT_START	0x00278
-#define CMN_PLL1_VCOCAL_INIT_TMR	0x00310
-#define CMN_PLL1_VCOCAL_ITER_TMR	0x00314
-#define CMN_PLL1_DSM_DIAG_M0		0x00350
-#define CMN_TXPUCAL_INIT_TMR		0x00410
-#define CMN_TXPUCAL_ITER_TMR		0x00414
-#define CMN_TXPDCAL_INIT_TMR		0x00430
-#define CMN_TXPDCAL_ITER_TMR		0x00434
-#define CMN_RXCAL_INIT_TMR		0x00450
-#define CMN_RXCAL_ITER_TMR		0x00454
-#define CMN_SD_CAL_INIT_TMR		0x00490
-#define CMN_SD_CAL_ITER_TMR		0x00494
-#define CMN_SD_CAL_REFTIM_START		0x00498
-#define CMN_SD_CAL_PLLCNT_START		0x004a0
-#define CMN_PDIAG_PLL0_CTRL_M0		0x00680
-#define CMN_PDIAG_PLL0_CLK_SEL_M0	0x00684
-#define CMN_PDIAG_PLL0_CP_PADJ_M0	0x00690
-#define CMN_PDIAG_PLL0_CP_IADJ_M0	0x00694
-#define CMN_PDIAG_PLL0_FILT_PADJ_M0	0x00698
-#define CMN_PDIAG_PLL0_CP_PADJ_M1	0x006d0
-#define CMN_PDIAG_PLL0_CP_IADJ_M1	0x006d4
-#define CMN_PDIAG_PLL1_CLK_SEL_M0	0x00704
-#define XCVR_DIAG_PLLDRC_CTRL		0x10394
-#define XCVR_DIAG_HSCLK_SEL		0x10398
-#define XCVR_DIAG_HSCLK_DIV		0x1039c
-#define TX_PSC_A0			0x10400
-#define TX_PSC_A1			0x10404
-#define TX_PSC_A2			0x10408
-#define TX_PSC_A3			0x1040c
-#define RX_PSC_A0			0x20000
-#define RX_PSC_A1			0x20004
-#define RX_PSC_A2			0x20008
-#define RX_PSC_A3			0x2000c
-#define PHY_PLL_CFG			0x30038
+#define CMN_SSM_BANDGAP_TMR		(0x00084 / 2)
+#define CMN_SSM_BIAS_TMR		(0x00088 / 2)
+#define CMN_PLLSM0_PLLPRE_TMR		(0x000a8 / 2)
+#define CMN_PLLSM0_PLLLOCK_TMR		(0x000b0 / 2)
+#define CMN_PLLSM1_PLLPRE_TMR		(0x000c8 / 2)
+#define CMN_PLLSM1_PLLLOCK_TMR		(0x000d0 / 2)
+#define CMN_BGCAL_INIT_TMR		(0x00190 / 2)
+#define CMN_BGCAL_ITER_TMR		(0x00194 / 2)
+#define CMN_IBCAL_INIT_TMR		(0x001d0 / 2)
+#define CMN_PLL0_VCOCAL_TCTRL		(0x00208 / 2)
+#define CMN_PLL0_VCOCAL_INIT_TMR	(0x00210 / 2)
+#define CMN_PLL0_VCOCAL_ITER_TMR	(0x00214 / 2)
+#define CMN_PLL0_VCOCAL_REFTIM_START	(0x00218 / 2)
+#define CMN_PLL0_VCOCAL_PLLCNT_START	(0x00220 / 2)
+#define CMN_PLL0_INTDIV_M0		(0x00240 / 2)
+#define CMN_PLL0_FRACDIVL_M0		(0x00244 / 2)
+#define CMN_PLL0_FRACDIVH_M0		(0x00248 / 2)
+#define CMN_PLL0_HIGH_THR_M0		(0x0024c / 2)
+#define CMN_PLL0_DSM_DIAG_M0		(0x00250 / 2)
+#define CMN_PLL0_SS_CTRL1_M0		(0x00260 / 2)
+#define CMN_PLL0_SS_CTRL2_M0            (0x00264 / 2)
+#define CMN_PLL0_SS_CTRL3_M0            (0x00268 / 2)
+#define CMN_PLL0_SS_CTRL4_M0            (0x0026C / 2)
+#define CMN_PLL0_LOCK_REFCNT_START      (0x00270 / 2)
+#define CMN_PLL0_LOCK_PLLCNT_START	(0x00278 / 2)
+#define CMN_PLL0_LOCK_PLLCNT_THR        (0x0027C / 2)
+#define CMN_PLL1_VCOCAL_TCTRL		(0x00308 / 2)
+#define CMN_PLL1_VCOCAL_INIT_TMR	(0x00310 / 2)
+#define CMN_PLL1_VCOCAL_ITER_TMR	(0x00314 / 2)
+#define CMN_PLL1_VCOCAL_REFTIM_START	(0x00318 / 2)
+#define CMN_PLL1_VCOCAL_PLLCNT_START	(0x00320 / 2)
+#define CMN_PLL1_INTDIV_M0		(0x00340 / 2)
+#define CMN_PLL1_FRACDIVL_M0		(0x00344 / 2)
+#define CMN_PLL1_FRACDIVH_M0		(0x00348 / 2)
+#define CMN_PLL1_HIGH_THR_M0		(0x0034c / 2)
+#define CMN_PLL1_DSM_DIAG_M0		(0x00350 / 2)
+#define CMN_PLL1_SS_CTRL1_M0		(0x00360 / 2)
+#define CMN_PLL1_SS_CTRL2_M0            (0x00364 / 2)
+#define CMN_PLL1_SS_CTRL3_M0            (0x00368 / 2)
+#define CMN_PLL1_SS_CTRL4_M0            (0x0036C / 2)
+#define CMN_PLL1_LOCK_REFCNT_START      (0x00370 / 2)
+#define CMN_PLL1_LOCK_PLLCNT_START	(0x00378 / 2)
+#define CMN_PLL1_LOCK_PLLCNT_THR        (0x0037C / 2)
+#define CMN_TXPUCAL_INIT_TMR		(0x00410 / 2)
+#define CMN_TXPUCAL_ITER_TMR		(0x00414 / 2)
+#define CMN_TXPDCAL_INIT_TMR		(0x00430 / 2)
+#define CMN_TXPDCAL_ITER_TMR		(0x00434 / 2)
+#define CMN_RXCAL_INIT_TMR		(0x00450 / 2)
+#define CMN_RXCAL_ITER_TMR		(0x00454 / 2)
+#define CMN_SD_CAL_INIT_TMR		(0x00490 / 2)
+#define CMN_SD_CAL_ITER_TMR		(0x00494 / 2)
+#define CMN_SD_CAL_REFTIM_START		(0x00498 / 2)
+#define CMN_SD_CAL_PLLCNT_START		(0x004a0 / 2)
+#define CMN_PDIAG_PLL0_CTRL_M0		(0x00680 / 2)
+#define CMN_PDIAG_PLL0_CLK_SEL_M0	(0x00684 / 2)
+#define CMN_PDIAG_PLL0_CP_PADJ_M0	(0x00690 / 2)
+#define CMN_PDIAG_PLL0_CP_IADJ_M0	(0x00694 / 2)
+#define CMN_PDIAG_PLL0_FILT_PADJ_M0	(0x00698 / 2)
+#define CMN_PDIAG_PLL0_CP_PADJ_M1	(0x006d0 / 2)
+#define CMN_PDIAG_PLL0_CP_IADJ_M1	(0x006d4 / 2)
+#define CMN_PDIAG_PLL1_CTRL_M0		(0x00700 / 2)
+#define CMN_PDIAG_PLL1_CLK_SEL_M0	(0x00704 / 2)
+#define CMN_PDIAG_PLL1_CP_PADJ_M0	(0x00710 / 2)
+#define CMN_PDIAG_PLL1_CP_IADJ_M0	(0x00714 / 2)
+#define CMN_PDIAG_PLL1_FILT_PADJ_M0	(0x00718 / 2)
+#define CMN_PDIAG_PLL1_CP_PADJ_M1	(0x00750 / 2)
+#define CMN_PDIAG_PLL1_CP_IADJ_M1	(0x00754 / 2)
+
+#define XCVR_DIAG_PLLDRC_CTRL(j)		(0x4000 + 0x01ca + (j) * 0x400)
+#define XCVR_DIAG_HSCLK_SEL(j)			(0x4000 + 0x01cc + (j) * 0x400)
+#define XCVR_DIAG_HSCLK_DIV(j)			(0x4000 + 0x01ce + (j) * 0x400)
+#define XCVR_DIAG_BIDI_CTRL(j)			(0x4000 + 0x01d4 + (j) * 0x400)
+#define TX_PSC_A0(j)				(0x4000 + 0x0200 + (j) * 0x400)
+#define TX_PSC_A1(j)				(0x4000 + 0x0202 + (j) * 0x400)
+#define TX_PSC_A2(j)				(0x4000 + 0x0204 + (j) * 0x400)
+#define TX_PSC_A3(j)				(0x4000 + 0x0206 + (j) * 0x400)
+
+#define TX_RCVDET_ST_TMR(j)			(0x4000 + 0x0246 + (j) * 0x400)
+
+#define RX_PSC_A0(j)				(0x8000 + 0x0000 + (j) * 0x400)
+#define RX_PSC_A1(j)				(0x8000 + 0x0002 + (j) * 0x400)
+#define RX_PSC_A2(j)				(0x8000 + 0x0004 + (j) * 0x400)
+#define RX_PSC_A3(j)				(0x8000 + 0x0006 + (j) * 0x400)
+
+#define TX_TXCC_CTRL(j)				(0x4000 + 0x80 + (j) * 0x400)
+#define TX_DIAG_ACYA(j)				(0x4000 + 0x3ce + (j) * 0x400)
+#define DRV_DIAG_TX_DRV(j)			(0x4000 + 0x18c + (j) * 0x400)
+#define TX_TXCC_MGNFS_MULT_000(j)		(0x4000 + 0xa0 + (j) * 0x400)
+#define TX_TXCC_CPOST_MULT_00(j)		(0x4000 + 0x98 + (j) * 0x400)
+
+#define PHY_PLL_CFG				(0xc000 + 0x001c)
+
+#define PHY_PMA_CMN_CTRL2			0xe002
+#define PHY_PMA_PLL_RAW_CTRL			0xe006
+
+#define TX_DIAG_ACYA_HBDC_MASK			0x0001U
+
+#define RX_PSC_CAL(j)				(0x8000 + 0x000c + (j) * 0x400)
+
+#define RX_REE_GCSM1_CTRL(j)			(0x8000 + 0x0210 + (j) * 0x400)
+#define RX_REE_GCSM2_CTRL(j)			(0x8000 + 0x0220 + (j) * 0x400)
+#define RX_REE_PERGCSM_CTRL(j)			(0x8000 + 0x0230 + (j) * 0x400)
 
 struct cdns_torrent_phy {
 	void __iomem *base;	/* DPTX registers base */
@@ -112,7 +162,7 @@ struct cdns_torrent_phy {
 static int cdns_torrent_dp_init(struct phy *phy);
 static void cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy);
 static
-void cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy);
+int cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy);
 static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy);
 static
 void cdns_torrent_dp_pma_cmn_cfg_25mhz(struct cdns_torrent_phy *cdns_phy);
@@ -132,13 +182,49 @@ static const struct phy_ops cdns_torrent_phy_ops = {
 	.owner		= THIS_MODULE,
 };
 
+/* PHY mmr access functions */
+
+static void cdns_dp_phy_write_phy(struct cdns_torrent_phy *cdns_phy,
+				  u32 offset, u16 val)
+{
+	writew(val, cdns_phy->sd_base + offset);
+}
+
+static u16 cdns_dp_phy_read_phy(struct cdns_torrent_phy *cdns_phy, u32 offset)
+{
+	return readw(cdns_phy->sd_base + offset);
+}
+
+#define cdns_phy_read_poll_timeout(offset, val, cond, delay_us, timeout_us) \
+	readw_poll_timeout(cdns_phy->sd_base + (offset), val, \
+			   cond, delay_us, timeout_us)
+
+/* DPTX mmr access functions */
+
+static void cdns_dp_phy_write_dp(struct cdns_torrent_phy *cdns_phy,
+				 u32 offset, u16 val)
+{
+	writel(val, cdns_phy->base + offset);
+}
+
+static u32 cdns_dp_phy_read_dp(struct cdns_torrent_phy *cdns_phy, u32 offset)
+{
+	return readl(cdns_phy->base + offset);
+}
+
+#define cdns_phy_read_dp_poll_timeout(cdns_phy, offset, val, cond, \
+				      delay_us, timeout_us) \
+	readl_poll_timeout((cdns_phy)->base + (offset), \
+			   val, cond, delay_us, timeout_us)
+
 static int cdns_torrent_dp_init(struct phy *phy)
 {
 	unsigned char lane_bits;
+	int r;
 
 	struct cdns_torrent_phy *cdns_phy = phy_get_drvdata(phy);
 
-	writel(0x0003, cdns_phy->base + PHY_AUX_CTRL); /* enable AUX */
+	cdns_dp_phy_write_dp(cdns_phy, PHY_AUX_CTRL, 0x0003); /* enable AUX */
 
 	/* PHY PMA registers configuration function */
 	cdns_torrent_dp_pma_cfg(cdns_phy);
@@ -187,11 +273,11 @@ static int cdns_torrent_dp_init(struct phy *phy)
 	 * used lanes
 	 */
 	lane_bits = (1 << cdns_phy->num_lanes) - 1;
-	writel(((0xF & ~lane_bits) << 4) | (0xF & lane_bits),
-	       cdns_phy->base + PHY_RESET);
+	cdns_dp_phy_write_dp(cdns_phy, PHY_RESET,
+			     ((0xF & ~lane_bits) << 4) | (0xF & lane_bits));
 
 	/* release pma_xcvr_pllclk_en_ln_*, only for the master lane */
-	writel(0x0001, cdns_phy->base + PHY_PMA_XCVR_PLLCLK_EN);
+	cdns_dp_phy_write_dp(cdns_phy, PHY_PMA_XCVR_PLLCLK_EN, 0x0001);
 
 	/* PHY PMA registers configuration functions */
 	cdns_torrent_dp_pma_cmn_vco_cfg_25mhz(cdns_phy);
@@ -199,23 +285,30 @@ static int cdns_torrent_dp_init(struct phy *phy)
 
 	/* take out of reset */
 	cdns_dp_phy_write_field(cdns_phy, PHY_RESET, 8, 1, 1);
-	cdns_torrent_dp_wait_pma_cmn_ready(cdns_phy);
+	r = cdns_torrent_dp_wait_pma_cmn_ready(cdns_phy);
+	if (r)
+		return r;
 	cdns_torrent_dp_run(cdns_phy);
 
 	return 0;
 }
 
 static
-void cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy)
+int cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy)
 {
 	unsigned int reg;
 	int ret;
 
-	ret = readl_poll_timeout(cdns_phy->base + PHY_PMA_CMN_READY, reg,
-				 reg & 1, 0, 500);
-	if (ret == -ETIMEDOUT)
+	ret = cdns_phy_read_dp_poll_timeout(cdns_phy, PHY_PMA_CMN_READY, reg,
+					    reg & 1, 0, 5000);
+	if (ret == -ETIMEDOUT) {
 		dev_err(cdns_phy->dev,
-			"timeout waiting for PMA common ready\n");
+				"timeout waiting for PMA common ready\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+
 }
 
 static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy)
@@ -234,34 +327,36 @@ static
 void cdns_torrent_dp_pma_cmn_cfg_25mhz(struct cdns_torrent_phy *cdns_phy)
 {
 	/* refclock registers - assumes 25 MHz refclock */
-	writel(0x0019, cdns_phy->sd_base + CMN_SSM_BIAS_TMR);
-	writel(0x0032, cdns_phy->sd_base + CMN_PLLSM0_PLLPRE_TMR);
-	writel(0x00D1, cdns_phy->sd_base + CMN_PLLSM0_PLLLOCK_TMR);
-	writel(0x0032, cdns_phy->sd_base + CMN_PLLSM1_PLLPRE_TMR);
-	writel(0x00D1, cdns_phy->sd_base + CMN_PLLSM1_PLLLOCK_TMR);
-	writel(0x007D, cdns_phy->sd_base + CMN_BGCAL_INIT_TMR);
-	writel(0x007D, cdns_phy->sd_base + CMN_BGCAL_ITER_TMR);
-	writel(0x0019, cdns_phy->sd_base + CMN_IBCAL_INIT_TMR);
-	writel(0x001E, cdns_phy->sd_base + CMN_TXPUCAL_INIT_TMR);
-	writel(0x0006, cdns_phy->sd_base + CMN_TXPUCAL_ITER_TMR);
-	writel(0x001E, cdns_phy->sd_base + CMN_TXPDCAL_INIT_TMR);
-	writel(0x0006, cdns_phy->sd_base + CMN_TXPDCAL_ITER_TMR);
-	writel(0x02EE, cdns_phy->sd_base + CMN_RXCAL_INIT_TMR);
-	writel(0x0006, cdns_phy->sd_base + CMN_RXCAL_ITER_TMR);
-	writel(0x0002, cdns_phy->sd_base + CMN_SD_CAL_INIT_TMR);
-	writel(0x0002, cdns_phy->sd_base + CMN_SD_CAL_ITER_TMR);
-	writel(0x000E, cdns_phy->sd_base + CMN_SD_CAL_REFTIM_START);
-	writel(0x012B, cdns_phy->sd_base + CMN_SD_CAL_PLLCNT_START);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_SSM_BIAS_TMR, 0x0019);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLLSM0_PLLPRE_TMR, 0x0032);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLLSM0_PLLLOCK_TMR, 0x00D1);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLLSM1_PLLPRE_TMR, 0x0032);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLLSM1_PLLLOCK_TMR, 0x00D1);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_BGCAL_INIT_TMR, 0x007D);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_BGCAL_ITER_TMR, 0x007D);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_IBCAL_INIT_TMR, 0x0019);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_TXPUCAL_INIT_TMR, 0x001E);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_TXPUCAL_ITER_TMR, 0x0006);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_TXPDCAL_INIT_TMR, 0x001E);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_TXPDCAL_ITER_TMR, 0x0006);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_RXCAL_INIT_TMR, 0x02EE);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_RXCAL_ITER_TMR, 0x0006);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_SD_CAL_INIT_TMR, 0x0002);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_SD_CAL_ITER_TMR, 0x0002);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_SD_CAL_REFTIM_START, 0x000E);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_SD_CAL_PLLCNT_START, 0x012B);
+
 	/* PLL registers */
-	writel(0x0409, cdns_phy->sd_base + CMN_PDIAG_PLL0_CP_PADJ_M0);
-	writel(0x1001, cdns_phy->sd_base + CMN_PDIAG_PLL0_CP_IADJ_M0);
-	writel(0x0F08, cdns_phy->sd_base + CMN_PDIAG_PLL0_FILT_PADJ_M0);
-	writel(0x0004, cdns_phy->sd_base + CMN_PLL0_DSM_DIAG_M0);
-	writel(0x00FA, cdns_phy->sd_base + CMN_PLL0_VCOCAL_INIT_TMR);
-	writel(0x0004, cdns_phy->sd_base + CMN_PLL0_VCOCAL_ITER_TMR);
-	writel(0x00FA, cdns_phy->sd_base + CMN_PLL1_VCOCAL_INIT_TMR);
-	writel(0x0004, cdns_phy->sd_base + CMN_PLL1_VCOCAL_ITER_TMR);
-	writel(0x0318, cdns_phy->sd_base + CMN_PLL0_VCOCAL_REFTIM_START);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PDIAG_PLL0_CP_PADJ_M0, 0x0509);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PDIAG_PLL0_CP_IADJ_M0, 0x0F00);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PDIAG_PLL0_FILT_PADJ_M0, 0x0F08);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_DSM_DIAG_M0, 0x0004);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_VCOCAL_INIT_TMR, 0x00FA);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_VCOCAL_ITER_TMR, 0x0004);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL1_VCOCAL_INIT_TMR, 0x00FA);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL1_VCOCAL_ITER_TMR, 0x0004);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_VCOCAL_REFTIM_START, 0x0317);
+
 }
 
 static
@@ -269,41 +364,42 @@ void cdns_torrent_dp_pma_cmn_vco_cfg_25mhz(struct cdns_torrent_phy *cdns_phy)
 {
 	/* Assumes 25 MHz refclock */
 	switch (cdns_phy->max_bit_rate) {
-		/* Setting VCO for 10.8GHz */
+	/* Setting VCO for 10.8GHz */
 	case 2700:
 	case 5400:
-		writel(0x01B0, cdns_phy->sd_base + CMN_PLL0_INTDIV_M0);
-		writel(0x0000, cdns_phy->sd_base + CMN_PLL0_FRACDIVL_M0);
-		writel(0x0002, cdns_phy->sd_base + CMN_PLL0_FRACDIVH_M0);
-		writel(0x0120, cdns_phy->sd_base + CMN_PLL0_HIGH_THR_M0);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_INTDIV_M0, 0x01B0);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVL_M0, 0x0000);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_HIGH_THR_M0, 0x0120);
 		break;
-		/* Setting VCO for 9.72GHz */
+	/* Setting VCO for 9.72GHz */
 	case 2430:
 	case 3240:
-		writel(0x0184, cdns_phy->sd_base + CMN_PLL0_INTDIV_M0);
-		writel(0xCCCD, cdns_phy->sd_base + CMN_PLL0_FRACDIVL_M0);
-		writel(0x0002, cdns_phy->sd_base + CMN_PLL0_FRACDIVH_M0);
-		writel(0x0104, cdns_phy->sd_base + CMN_PLL0_HIGH_THR_M0);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_INTDIV_M0, 0x0184);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVL_M0, 0xCCCD);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_HIGH_THR_M0, 0x0104);
 		break;
-		/* Setting VCO for 8.64GHz */
+	/* Setting VCO for 8.64GHz */
 	case 2160:
 	case 4320:
-		writel(0x0159, cdns_phy->sd_base + CMN_PLL0_INTDIV_M0);
-		writel(0x999A, cdns_phy->sd_base + CMN_PLL0_FRACDIVL_M0);
-		writel(0x0002, cdns_phy->sd_base + CMN_PLL0_FRACDIVH_M0);
-		writel(0x00E7, cdns_phy->sd_base + CMN_PLL0_HIGH_THR_M0);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_INTDIV_M0, 0x0159);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVL_M0, 0x999A);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_HIGH_THR_M0, 0x00E7);
 		break;
-		/* Setting VCO for 8.1GHz */
+	/* Setting VCO for 8.1GHz */
 	case 8100:
-		writel(0x0144, cdns_phy->sd_base + CMN_PLL0_INTDIV_M0);
-		writel(0x0000, cdns_phy->sd_base + CMN_PLL0_FRACDIVL_M0);
-		writel(0x0002, cdns_phy->sd_base + CMN_PLL0_FRACDIVH_M0);
-		writel(0x00D8, cdns_phy->sd_base + CMN_PLL0_HIGH_THR_M0);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_INTDIV_M0, 0x0144);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVL_M0, 0x0000);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_HIGH_THR_M0, 0x00D8);
 		break;
 	}
 
-	writel(0x0002, cdns_phy->sd_base + CMN_PDIAG_PLL0_CTRL_M0);
-	writel(0x0318, cdns_phy->sd_base + CMN_PLL0_VCOCAL_PLLCNT_START);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PDIAG_PLL0_CTRL_M0, 0x0002);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PLL0_VCOCAL_PLLCNT_START, 0x0315);
+
 }
 
 static void cdns_torrent_dp_pma_cmn_rate(struct cdns_torrent_phy *cdns_phy)
@@ -313,7 +409,7 @@ static void cdns_torrent_dp_pma_cmn_rate(struct cdns_torrent_phy *cdns_phy)
 	unsigned int i;
 
 	/* 16'h0000 for single DP link configuration */
-	writel(0x0000, cdns_phy->sd_base + PHY_PLL_CFG);
+	cdns_dp_phy_write_phy(cdns_phy, PHY_PLL_CFG, 0x0000);
 
 	switch (cdns_phy->max_bit_rate) {
 	case 1620:
@@ -324,7 +420,7 @@ static void cdns_torrent_dp_pma_cmn_rate(struct cdns_torrent_phy *cdns_phy)
 	case 2430:
 	case 2700:
 		clk_sel_val = 0x0701;
-		 hsclk_div_val = 1;
+		hsclk_div_val = 1;
 		break;
 	case 3240:
 		clk_sel_val = 0x0b00;
@@ -341,30 +437,36 @@ static void cdns_torrent_dp_pma_cmn_rate(struct cdns_torrent_phy *cdns_phy)
 		break;
 	}
 
-	writel(clk_sel_val, cdns_phy->sd_base + CMN_PDIAG_PLL0_CLK_SEL_M0);
+	cdns_dp_phy_write_phy(cdns_phy, CMN_PDIAG_PLL0_CLK_SEL_M0, clk_sel_val);
 
 	/* PMA lane configuration to deal with multi-link operation */
-	for (i = 0; i < cdns_phy->num_lanes; i++) {
-		writel(hsclk_div_val,
-		       cdns_phy->sd_base + (XCVR_DIAG_HSCLK_DIV | (i << 11)));
-	}
+	for (i = 0; i < cdns_phy->num_lanes; i++)
+		cdns_dp_phy_write_phy(cdns_phy, XCVR_DIAG_HSCLK_DIV(i),
+				      hsclk_div_val);
+
 }
 
 static void cdns_torrent_dp_pma_lane_cfg(struct cdns_torrent_phy *cdns_phy,
-					 unsigned int lane)
+		unsigned int lane)
 {
-	unsigned int lane_bits = (lane & LANE_MASK) << 11;
-
 	/* Writing Tx/Rx Power State Controllers registers */
-	writel(0x00FB, cdns_phy->sd_base + (TX_PSC_A0 | lane_bits));
-	writel(0x04AA, cdns_phy->sd_base + (TX_PSC_A2 | lane_bits));
-	writel(0x04AA, cdns_phy->sd_base + (TX_PSC_A3 | lane_bits));
-	writel(0x0000, cdns_phy->sd_base + (RX_PSC_A0 | lane_bits));
-	writel(0x0000, cdns_phy->sd_base + (RX_PSC_A2 | lane_bits));
-	writel(0x0000, cdns_phy->sd_base + (RX_PSC_A3 | lane_bits));
+	cdns_dp_phy_write_phy(cdns_phy, TX_PSC_A0(lane), 0x00FB);
+	cdns_dp_phy_write_phy(cdns_phy, TX_PSC_A2(lane), 0x04AA);
+	cdns_dp_phy_write_phy(cdns_phy, TX_PSC_A3(lane), 0x04AA);
+	cdns_dp_phy_write_phy(cdns_phy, RX_PSC_A0(lane), 0x0000);
+	cdns_dp_phy_write_phy(cdns_phy, RX_PSC_A2(lane), 0x0000);
+	cdns_dp_phy_write_phy(cdns_phy, RX_PSC_A3(lane), 0x0000);
 
-	writel(0x0001, cdns_phy->sd_base + (XCVR_DIAG_PLLDRC_CTRL | lane_bits));
-	writel(0x0000, cdns_phy->sd_base + (XCVR_DIAG_HSCLK_SEL | lane_bits));
+	cdns_dp_phy_write_phy(cdns_phy, RX_PSC_CAL(lane), 0x0000);
+
+	cdns_dp_phy_write_phy(cdns_phy, RX_REE_GCSM1_CTRL(lane), 0x0000);
+	cdns_dp_phy_write_phy(cdns_phy, RX_REE_GCSM2_CTRL(lane), 0x0000);
+	cdns_dp_phy_write_phy(cdns_phy, RX_REE_PERGCSM_CTRL(lane), 0x0000);
+
+	cdns_dp_phy_write_phy(cdns_phy, XCVR_DIAG_BIDI_CTRL(lane), 0x000F);
+	cdns_dp_phy_write_phy(cdns_phy, XCVR_DIAG_PLLDRC_CTRL(lane), 0x0001);
+	cdns_dp_phy_write_phy(cdns_phy, XCVR_DIAG_HSCLK_SEL(lane), 0x0000);
+
 }
 
 static void cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy)
@@ -379,8 +481,10 @@ static void cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy)
 	 * waiting for ACK of pma_xcvr_pllclk_en_ln_*, only for the
 	 * master lane
 	 */
-	ret = readl_poll_timeout(cdns_phy->base + PHY_PMA_XCVR_PLLCLK_EN_ACK,
-				 read_val, read_val & 1, 0, POLL_TIMEOUT_US);
+	ret = cdns_phy_read_dp_poll_timeout(cdns_phy,
+					    PHY_PMA_XCVR_PLLCLK_EN_ACK,
+					    read_val, read_val & 1, 0,
+					    POLL_TIMEOUT_US);
 	if (ret == -ETIMEDOUT)
 		dev_err(cdns_phy->dev,
 			"timeout waiting for link PLL clock enable ack\n");
@@ -405,28 +509,35 @@ static void cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy)
 		break;
 	}
 
-	writel(write_val1, cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_REQ);
+	cdns_dp_phy_write_dp(cdns_phy,
+			     PHY_PMA_XCVR_POWER_STATE_REQ, write_val1);
 
-	ret = readl_poll_timeout(cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_ACK,
-				 read_val, (read_val & mask) == write_val1, 0,
-				 POLL_TIMEOUT_US);
+	ret = cdns_phy_read_dp_poll_timeout(cdns_phy,
+					    PHY_PMA_XCVR_POWER_STATE_ACK,
+					    read_val,
+					    (read_val & mask) == write_val1, 0,
+					    POLL_TIMEOUT_US);
+
 	if (ret == -ETIMEDOUT)
 		dev_err(cdns_phy->dev,
 			"timeout waiting for link power state ack\n");
 
-	writel(0, cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_REQ);
+	cdns_dp_phy_write_dp(cdns_phy, PHY_PMA_XCVR_POWER_STATE_REQ, 0);
 	ndelay(100);
 
-	writel(write_val2, cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_REQ);
+	cdns_dp_phy_write_dp(cdns_phy,
+			     PHY_PMA_XCVR_POWER_STATE_REQ, write_val2);
 
-	ret = readl_poll_timeout(cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_ACK,
-				 read_val, (read_val & mask) == write_val2, 0,
-				 POLL_TIMEOUT_US);
+	ret = cdns_phy_read_dp_poll_timeout(cdns_phy,
+					    PHY_PMA_XCVR_POWER_STATE_ACK,
+					    read_val,
+					    (read_val & mask) == write_val2,
+					    0, POLL_TIMEOUT_US);
 	if (ret == -ETIMEDOUT)
 		dev_err(cdns_phy->dev,
 			"timeout waiting for link power state ack\n");
 
-	writel(0, cdns_phy->base + PHY_PMA_XCVR_POWER_STATE_REQ);
+	cdns_dp_phy_write_dp(cdns_phy, PHY_PMA_XCVR_POWER_STATE_REQ, 0);
 	ndelay(100);
 }
 
@@ -438,9 +549,12 @@ static void cdns_dp_phy_write_field(struct cdns_torrent_phy *cdns_phy,
 {
 	unsigned int read_val;
 
-	read_val = readl(cdns_phy->base + offset);
-	writel(((val << start_bit) | (read_val & ~(((1 << num_bits) - 1) <<
-		start_bit))), cdns_phy->base + offset);
+	read_val = cdns_dp_phy_read_dp(cdns_phy, offset);
+	cdns_dp_phy_write_dp(cdns_phy, offset,
+			     ((val << start_bit) |
+			     (read_val & ~(((1 << num_bits) - 1) <<
+			     start_bit))));
+
 }
 
 static int cdns_torrent_phy_probe(struct platform_device *pdev)
@@ -464,12 +578,12 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		return PTR_ERR(phy);
 	}
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	cdns_phy->base = devm_ioremap_resource(&pdev->dev, regs);
 	if (IS_ERR(cdns_phy->base))
 		return PTR_ERR(cdns_phy->base);
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	cdns_phy->sd_base = devm_ioremap_resource(&pdev->dev, regs);
 	if (IS_ERR(cdns_phy->sd_base))
 		return PTR_ERR(cdns_phy->sd_base);
@@ -497,6 +611,7 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		cdns_phy->max_bit_rate = DEFAULT_MAX_BIT_RATE;
 
 	switch (cdns_phy->max_bit_rate) {
+	case 1620:
 	case 2160:
 	case 2430:
 	case 2700:
