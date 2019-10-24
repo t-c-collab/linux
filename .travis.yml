@@ -33,7 +33,7 @@ env:
   global:
     - export BUILD_THREADS=$(grep "^processor" /proc/cpuinfo | wc -l)
     - export CCACHE_SLOPPINESS=time_macros
-    - export BUILD_TARGETS="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-dp.ko"
+    - export BUILD_TARGETS="drivers/gpu/drm/bridge/mhdp8546.ko drivers/phy/ti/phy-j721e-wiz.ko drivers/phy/cadence/phy-cadence-torrent.ko"
 
 before_script:
   - ccache -z
@@ -80,7 +80,7 @@ script:
   - make -j${BUILD_THREADS} mrproper
   - make -j${BUILD_THREADS} ${DEFCONFIG}
   - ./scripts/config -e COMPILE_TEST -d GENERIC_COMPAT_VDSO
-  - ./scripts/config -m DRM_CDNS_MHDP -m PHY_CADENCE_DP -m PHY_J721E_WIZ
+  - ./scripts/config -m DRM_CDNS_MHDP -m PHY_CADENCE_TORRENT -m PHY_J721E_WIZ
   - make olddefconfig
   - make -k -j${BUILD_THREADS} ${BUILD_TARGETS} 2> >(tee build.log)
   - if [[ -v CHECK_SPARSE ]]; then make -k C=2 CHECK=$SPARSE -j${BUILD_THREADS} ${BUILD_TARGETS} 2> >(tee sparse.log); fi
