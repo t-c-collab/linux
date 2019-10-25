@@ -1677,6 +1677,11 @@ static int cdns_torrent_dp_configure(struct phy *phy, union phy_configure_opts *
 }
 
 static const struct cdns_torrent_data cdns_map_torrent = {
+	0x2,
+	0x2,
+};
+
+static const struct cdns_torrent_data cdns_ti_map_torrent = {
 	0x0,
 	0x1,
 };
@@ -1685,6 +1690,10 @@ static const struct of_device_id cdns_torrent_phy_of_match[] = {
 	{
 		.compatible = "cdns,torrent-phy",
 		.data = &cdns_map_torrent,
+	},
+	{
+		.compatible = "cdns,ti,torrent-phy",
+		.data = &cdns_ti_map_torrent,
 	},
 	{}
 };
