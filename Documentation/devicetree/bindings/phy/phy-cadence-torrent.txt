@@ -7,6 +7,7 @@ the Cadence MHDP DisplayPort controller.
 -------------------------------------------------------------------------------
 Required properties (controller (parent) node):
 - compatible	: Should be "cdns,torrent-phy"
+		  Use "cdns,ti,torrent-phy" for TI J7 SoCs
 - clocks	: PHY reference clock. Must contain an entry in clock-names.
 		  See ../clocks/clock-bindings.txt for details.
 - clock-names	: Must be "refclk"
