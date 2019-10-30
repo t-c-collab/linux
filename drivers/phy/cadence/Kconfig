@@ -27,3 +27,10 @@ config PHY_CADENCE_SIERRA
 	select GENERIC_PHY
 	help
 	  Enable this to support the Cadence Sierra PHY driver
+
+config PHY_CADENCE_TORRENT
+	tristate "Cadence TORRENT PHY Driver"
+	depends on OF && HAS_IOMEM && RESET_CONTROLLER
+	select GENERIC_PHY
+	help
+	  Enable this to support the Cadence Torrent PHY driver

@@ -1,10 +1,10 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  *
  * This header provides constants for the phy framework
  *
- * Copyright (C) 2014 STMicroelectronics
- * Author: Gabriel Fernandez <gabriel.fernandez@st.com>
+ * Copyright (c) 2019 Cadence Design Systems
+ * Author: Anil Varughese <aniljoy@cadence.com>
  */
 
 #ifndef _DT_BINDINGS_PHY
@@ -16,5 +16,6 @@
 #define PHY_TYPE_USB2		3
 #define PHY_TYPE_USB3		4
 #define PHY_TYPE_UFS		5
+#define PHY_TYPE_DP		6
 
 #endif /* _DT_BINDINGS_PHY */
