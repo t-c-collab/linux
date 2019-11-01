@@ -363,6 +363,7 @@ struct cdns_mhdp_device {
 	spinlock_t start_lock;
 	u8 bridge_attached : 1;
 	enum mhdp_hw_state hw_state;
+	enum drm_bus_flags conn_bus_flags_defaults;
 };
 
 
