@@ -549,22 +549,19 @@ err_adjust_lt:
 	return ret;
 }
 
-static unsigned int max_link_rate(struct cdns_mhdp_host host,
-				  struct cdns_mhdp_sink sink)
+static unsigned int mhdp_max_link_rate(struct cdns_mhdp_device *mhdp)
 {
-	return min(host.link_rate, sink.link_rate);
+	return min(mhdp->host.link_rate, mhdp->sink.link_rate);
 }
 
-static u8 mhdp_max_num_lanes(struct cdns_mhdp_host host,
-			     struct cdns_mhdp_sink sink)
+static u8 mhdp_max_num_lanes(struct cdns_mhdp_device *mhdp)
 {
-	return min_t(u8, sink.lanes_cnt, host.lanes_cnt);
+	return min_t(u8, mhdp->sink.lanes_cnt, mhdp->host.lanes_cnt);
 }
 
-static u8 eq_training_pattern_supported(struct cdns_mhdp_host host,
-					struct cdns_mhdp_sink sink)
+static u8 mhdp_eq_training_pattern_supported(struct cdns_mhdp_device *mhdp)
 {
-	return fls(host.pattern_supp & sink.pattern_supp);
+	return fls(mhdp->host.pattern_supp & mhdp->sink.pattern_supp);
 }
 
 static bool mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
@@ -975,14 +972,16 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 	if (ret)
 		return ret;
 
-	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
+	conn->display_info.bus_flags = mhdp->conn_bus_flags_defaults;
 	/*
 	 * HACK: DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
 	 * in the display controller. This is achieved for the time being
 	 * by defining SAMPLE_NEGEDGE here.
 	 */
-	conn->display_info.bus_flags |= DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
-		DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
+	if (!(strcmp(mhdp_ids->compatible, "ti,j721e-mhdp8546")))
+		conn->display_info.bus_flags |=
+					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
+					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
 
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
@@ -1370,7 +1369,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			      unsigned int training_interval)
 {
 	u32 reg32;
-	const u8 eq_tps = eq_training_pattern_supported(mhdp->host, mhdp->sink);
+	const u8 eq_tps = mhdp_eq_training_pattern_supported(mhdp);
 
 	while (1) {
 		if (!mhdp_link_training_cr(mhdp)) {
@@ -1385,8 +1384,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 				dev_dbg(mhdp->dev,
 					"Reducing lanes number during CR phase\n");
 				mhdp->link.num_lanes >>= 1;
-				mhdp->link.rate = max_link_rate(mhdp->host,
-								mhdp->sink);
+				mhdp->link.rate = mhdp_max_link_rate(mhdp);
 
 				continue;
 			}
@@ -1411,7 +1409,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			dev_dbg(mhdp->dev,
 				"Reducing link rate during EQ phase\n");
 			lower_link_rate(&mhdp->link);
-			mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp->host, mhdp->sink);
+			mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
 
 			continue;
 		}
@@ -1544,8 +1542,8 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 
 	mhdp_fill_sink_caps(mhdp, reg0);
 
-	mhdp->link.rate = max_link_rate(mhdp->host, mhdp->sink);
-	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp->host, mhdp->sink);
+	mhdp->link.rate = mhdp_max_link_rate(mhdp);
+	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
 
 	/* Disable framer for link training */
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
@@ -1913,6 +1911,7 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	mhdp->clk = clk;
 	mhdp->dev = &pdev->dev;
+	mhdp->conn_bus_flags_defaults = DRM_BUS_FLAG_DE_HIGH;
 	mutex_init(&mhdp->mbox_mutex);
 	spin_lock_init(&mhdp->start_lock);
 	dev_set_drvdata(&pdev->dev, mhdp);
