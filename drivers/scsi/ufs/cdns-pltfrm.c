@@ -19,6 +19,108 @@
 
 #define CDNS_UFS_REG_HCLKDIV	0xFC
 #define CDNS_UFS_REG_PHY_XCFGD1	0x113C
+#define CDNS_UFS_MAX 12
+
+struct cdns_ufs_host {
+	/**
+	 * cdns_ufs_dme_attr_val - for storing L4 attributes
+	 */
+	u32 cdns_ufs_dme_attr_val[CDNS_UFS_MAX];
+};
+/**
+ * cdns_ufs_enable_intr - enable interrupts
+ * @hba: per adapter instance
+ * @intrs: interrupt bits
+ */
+static void cdns_ufs_enable_intr(struct ufs_hba *hba, u32 intrs)
+{
+	u32 set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
+
+	set = set | intrs;
+	ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
+}
+/**
+ * cdns_ufs_disable_intr - disable interrupts
+ * @hba: per adapter instance
+ * @intrs: interrupt bits
+ */
+static void cdns_ufs_disable_intr(struct ufs_hba *hba, u32 intrs)
+{
+	u32 set = ufshcd_readl(hba, REG_INTERRUPT_ENABLE);
+
+	set = set & ~intrs;
+	ufshcd_writel(hba, set, REG_INTERRUPT_ENABLE);
+}
+
+/**
+ * cdns_ufs_get_l4_attr - get L4 attributes on local side
+ * @hba: per adapter instance
+ *
+ */
+static void cdns_ufs_get_l4_attr(struct ufs_hba *hba)
+{
+	struct cdns_ufs_host *host = ufshcd_get_variant(hba);
+
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_PEERDEVICEID),
+				&host->cdns_ufs_dme_attr_val[0]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_PEERCPORTID),
+				&host->cdns_ufs_dme_attr_val[1]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_TRAFFICCLASS),
+				&host->cdns_ufs_dme_attr_val[2]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_PROTOCOLID),
+				&host->cdns_ufs_dme_attr_val[3]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_CPORTFLAGS),
+				&host->cdns_ufs_dme_attr_val[4]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_TXTOKENVALUE),
+				&host->cdns_ufs_dme_attr_val[5]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_RXTOKENVALUE),
+				&host->cdns_ufs_dme_attr_val[6]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_LOCALBUFFERSPACE),
+				&host->cdns_ufs_dme_attr_val[7]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_PEERBUFFERSPACE),
+				&host->cdns_ufs_dme_attr_val[8]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_CREDITSTOSEND),
+				&host->cdns_ufs_dme_attr_val[9]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_CPORTMODE),
+				&host->cdns_ufs_dme_attr_val[10]);
+	ufshcd_dme_get(hba, UIC_ARG_MIB(T_CONNECTIONSTATE),
+				&host->cdns_ufs_dme_attr_val[11]);
+}
+/**
+ * cdns_ufs_set_l4_attr - set L4 attributes on local side
+ * @hba: per adapter instance
+ *
+ */
+static void cdns_ufs_set_l4_attr(struct ufs_hba *hba)
+{
+	struct cdns_ufs_host *host = ufshcd_get_variant(hba);
+
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_CONNECTIONSTATE), 0);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_PEERDEVICEID),
+				host->cdns_ufs_dme_attr_val[0]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_PEERCPORTID),
+				host->cdns_ufs_dme_attr_val[1]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_TRAFFICCLASS),
+				host->cdns_ufs_dme_attr_val[2]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_PROTOCOLID),
+				host->cdns_ufs_dme_attr_val[3]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_CPORTFLAGS),
+				host->cdns_ufs_dme_attr_val[4]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_TXTOKENVALUE),
+				host->cdns_ufs_dme_attr_val[5]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_RXTOKENVALUE),
+				host->cdns_ufs_dme_attr_val[6]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_LOCALBUFFERSPACE),
+				host->cdns_ufs_dme_attr_val[7]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_PEERBUFFERSPACE),
+				host->cdns_ufs_dme_attr_val[8]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_CREDITSTOSEND),
+				host->cdns_ufs_dme_attr_val[9]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_CPORTMODE),
+				host->cdns_ufs_dme_attr_val[10]);
+	ufshcd_dme_set(hba, UIC_ARG_MIB(T_CONNECTIONSTATE),
+				host->cdns_ufs_dme_attr_val[11]);
+}
 
 /**
  * Sets HCLKDIV register value based on the core_clk
@@ -71,10 +173,53 @@ static int cdns_ufs_set_hclkdiv(struct ufs_hba *hba)
 static int cdns_ufs_hce_enable_notify(struct ufs_hba *hba,
 				      enum ufs_notify_change_status status)
 {
-	if (status != PRE_CHANGE)
-		return 0;
+	int err = 0;
 
-	return cdns_ufs_set_hclkdiv(hba);
+	switch (status) {
+	case PRE_CHANGE:
+		err = cdns_ufs_set_hclkdiv(hba);
+		break;
+	case POST_CHANGE:
+		/**
+		 * Hibern8 interrupts(UHESE, UHXSE) disabled
+		 * during initialization.
+		 */
+		cdns_ufs_disable_intr(hba, UFSHCD_UIC_HIBERN8_MASK);
+		break;
+	default:
+		dev_err(hba->dev, "%s: invalid status %d\n", __func__, status);
+		err = -EINVAL;
+		break;
+	}
+	return err;
+}
+
+/**
+ * Called around hibern8 enter/exit.
+ * @hba: host controller instance
+ * @status: notify stage (pre, post change)
+ * @cmd: UIC Command
+ *
+ */
+static void cdns_ufs_hibern8_notify(struct ufs_hba *hba, enum uic_cmd_dme cmd,
+					enum ufs_notify_change_status status)
+{
+	if (status == PRE_CHANGE && cmd == UIC_CMD_DME_HIBER_ENTER) {
+		/**
+		 * Hibern8 interrupts(UHESE, UHXSE) enabled
+		 * before manual hibernate entry.
+		 */
+		cdns_ufs_enable_intr(hba, UFSHCD_UIC_HIBERN8_MASK);
+		cdns_ufs_get_l4_attr(hba);
+	}
+	if (status == POST_CHANGE && cmd == UIC_CMD_DME_HIBER_EXIT) {
+		/**
+		 * Hibern8 interrupts(UHESE, UHXSE) disabled
+		 * after manual hibern8 exit.
+		 */
+		cdns_ufs_disable_intr(hba, UFSHCD_UIC_HIBERN8_MASK);
+		cdns_ufs_set_l4_attr(hba);
+	}
 }
 
 /**
@@ -140,6 +285,7 @@ static const struct ufs_hba_variant_ops cdns_ufs_pltfm_hba_vops = {
 	.name = "cdns-ufs-pltfm",
 	.hce_enable_notify = cdns_ufs_hce_enable_notify,
 	.link_startup_notify = cdns_ufs_link_startup_notify,
+	.hibern8_notify = cdns_ufs_hibern8_notify,
 };
 
 static const struct ufs_hba_variant_ops cdns_ufs_m31_16nm_pltfm_hba_vops = {
@@ -148,6 +294,7 @@ static const struct ufs_hba_variant_ops cdns_ufs_m31_16nm_pltfm_hba_vops = {
 	.hce_enable_notify = cdns_ufs_hce_enable_notify,
 	.link_startup_notify = cdns_ufs_link_startup_notify,
 	.phy_initialization = cdns_ufs_m31_16nm_phy_initialization,
+	.hibern8_notify = cdns_ufs_hibern8_notify,
 };
 
 static const struct of_device_id cdns_ufs_of_match[] = {
@@ -176,15 +323,27 @@ static int cdns_ufs_pltfrm_probe(struct platform_device *pdev)
 	const struct of_device_id *of_id;
 	struct ufs_hba_variant_ops *vops;
 	struct device *dev = &pdev->dev;
+	struct cdns_ufs_host *host;
+	struct ufs_hba *hba;
 
 	of_id = of_match_node(cdns_ufs_of_match, dev->of_node);
 	vops = (struct ufs_hba_variant_ops *)of_id->data;
 
 	/* Perform generic probe */
 	err = ufshcd_pltfrm_init(pdev, vops);
-	if (err)
+	if (err) {
 		dev_err(dev, "ufshcd_pltfrm_init() failed %d\n", err);
-
+		goto out;
+	}
+	host = devm_kzalloc(dev, sizeof(*host), GFP_KERNEL);
+	if (!host) {
+		err = -ENOMEM;
+		dev_err(dev, "%s: no memory for cdns host\n", __func__);
+		goto out;
+	}
+	hba =  platform_get_drvdata(pdev);
+	ufshcd_set_variant(hba, host);
+out:
 	return err;
 }
 
