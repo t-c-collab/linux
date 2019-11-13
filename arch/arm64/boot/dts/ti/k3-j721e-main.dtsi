@@ -929,13 +929,16 @@
 
 		serdes4: serdes@5050000 {
 			/* XXX we also map EDP0 registers here as the PHY driver needs those... */
-			compatible = "cdns,torrent-phy";
+			compatible = "ti,j721e-serdes-10g";
 			reg = <0x00 0x05050000 0x0 0x00010000>, /* SERDES_10G0 */
 			      <0x00 0x0A030A00 0x0 0x00000040>; /* DSS_EDP0_V2A_CORE_VP_REGS_APB + 30A00 */
 
 			resets = <&serdes_wiz4 0>, <&serdes_wiz4 1>,
 				 <&serdes_wiz4 2>, <&serdes_wiz4 3>,
 				 <&serdes_wiz4 4>;
+
+			clocks = <&wiz4_pll0_refclk>;
+			clock-names = "refclk";
 
 			num_lanes = <4>;
 			max_bit_rate = <5400>;
