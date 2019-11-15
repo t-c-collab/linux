@@ -86,6 +86,17 @@
 			      "audio-refclk2",
 			      "audio-refclk2-48000", "audio-refclk2-44100";
 	};
+
+	dp0: connector {
+		compatible = "dp-connector";
+		label = "DP0";
+
+		port {
+			dp_connector_in: endpoint {
+				remote-endpoint = <&dp_bridge_output>;
+			};
+		};
+	};
 };
 
 &main_pmx0 {
@@ -106,6 +117,12 @@
 			J721E_IOPAD(0x240, PIN_INPUT, 0) /* (R26) MMC1_DAT3 */
 			J721E_IOPAD(0x258, PIN_INPUT, 0) /* (P23) MMC1_SDCD */
 			J721E_IOPAD(0x25c, PIN_INPUT, 0) /* (R28) MMC1_SDWP */
+		>;
+	};
+
+	dp0_pins_default: dp0_pins_default {
+		pinctrl-single,pins = <
+			J721E_IOPAD(0x1c4, PIN_INPUT, 5) /* SPI0_CS1.DP0_HPD */
 		>;
 	};
 
@@ -257,6 +274,55 @@
 &main_sdhci2 {
 	/* Unused */
 	status = "disabled";
+};
+
+&dss {
+	status = "ok";
+};
+
+&dss_ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	port@0 {
+		reg = <0>;
+
+		dpi_out_real0: endpoint {
+			remote-endpoint = <&dp_bridge_input>;
+		};
+	};
+};
+
+&serdes_wiz4 {
+	lane0-mode = <PHY_TYPE_DP>;
+	lane1-mode = <PHY_TYPE_DP>;
+	lane2-mode = <PHY_TYPE_DP>;
+	lane3-mode = <PHY_TYPE_DP>;
+};
+
+&mhdp {
+	status = "ok";
+	pinctrl-names = "default";
+	pinctrl-0 = <&dp0_pins_default>;
+};
+
+&dp0_ports {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	port@0 {
+		reg = <0>;
+		dp_bridge_input: endpoint {
+			remote-endpoint = <&dpi_out_real0>;
+		};
+	};
+
+	port@1 {
+		reg = <1>;
+		dp_bridge_output: endpoint {
+			remote-endpoint = <&dp_connector_in>;
+		};
+	};
 };
 
 &main_i2c0 {
