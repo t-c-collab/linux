@@ -17,6 +17,14 @@ properties:
   compatible:
     const: cdns,torrent-phy
 
+  clocks:
+    maxItems: 1
+    description:
+      PHY reference clock. Must contain an entry in clock-names.
+
+  clock-names:
+    const: "refclk"
+
   reg:
     items:
       - description: Offset of the DPTX PHY configuration registers.
@@ -41,6 +49,8 @@ properties:
 
 required:
   - compatible
+  - clocks
+  - clock-names
   - reg
   - "#phy-cells"
 
@@ -53,5 +63,7 @@ examples:
           num_lanes = <4>;
           max_bit_rate = <8100>;
           #phy-cells = <0>;
+          clocks = <&ref_clk>;
+          clock-names = "refclk";
     };
 ...
