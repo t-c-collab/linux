@@ -14,7 +14,9 @@ maintainers:
 
 properties:
   compatible:
-    const: cdns,torrent-phy
+    anyOf:
+      - const: cdns,torrent-phy
+      - const: ti,j721e-serdes-10g
 
   clocks:
     maxItems: 1
