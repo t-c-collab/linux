@@ -6,6 +6,7 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_fb_helper.h>
@@ -91,26 +92,21 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 		}
 
 		if (panel) {
-			u32 conn_type;
-
 			dev_dbg(dev, "Setting up panel for port %d\n", i);
 
+			/* XXX check if panel conn_type agrees with vp bus */
 			switch (feat->vp_bus_type[i]) {
 			case DISPC_VP_OLDI:
 				enc_type = DRM_MODE_ENCODER_LVDS;
-				conn_type = DRM_MODE_CONNECTOR_LVDS;
 				break;
 			case DISPC_VP_DPI:
 				enc_type = DRM_MODE_ENCODER_DPI;
-				conn_type = DRM_MODE_CONNECTOR_DPI;
 				break;
 			default:
-				conn_type = DRM_MODE_CONNECTOR_Unknown;
 				break;
 			}
 
-			bridge = devm_drm_panel_bridge_add(dev, panel,
-							   conn_type);
+			bridge = devm_drm_panel_bridge_add(dev, panel);
 			if (IS_ERR(bridge)) {
 				dev_err(dev, "failed to set up panel bridge for port %d\n", i);
 				return PTR_ERR(bridge);

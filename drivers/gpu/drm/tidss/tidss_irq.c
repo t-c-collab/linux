@@ -4,7 +4,7 @@
  * Author: Tomi Valkeinen <tomi.valkeinen@ti.com>
  */
 
-#include <drm/drmP.h>
+#include <drm/drm_print.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
