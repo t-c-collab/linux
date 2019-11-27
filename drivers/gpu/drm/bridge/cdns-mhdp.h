@@ -275,6 +275,19 @@
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
 #define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
 
+/* XXX drm_dp -helper struct definitions */
+
+#define DP_LINK_CAP_ENHANCED_FRAMING (1 << 0)
+
+struct drm_dp_link {
+	unsigned char revision;
+	unsigned int rate;
+	unsigned int num_lanes;
+	unsigned long capabilities;
+};
+
+/* XXX drm_dp -helper struct definitions end */
+
 struct cdns_mhdp_host {
 	unsigned int link_rate;
 	u8 lanes_cnt;
