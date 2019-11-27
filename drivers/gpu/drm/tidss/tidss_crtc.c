@@ -351,7 +351,7 @@ struct tidss_crtc *tidss_crtc_create(struct tidss_device *tidss,
 
 	crtc =  &tcrtc->crtc;
 
-	ret = drm_crtc_init_with_planes(tidss->ddev, crtc, primary,
+	ret = drm_crtc_init_with_planes(&tidss->ddev, crtc, primary,
 					NULL, &tidss_crtc_funcs, NULL);
 	if (ret < 0)
 		return ERR_PTR(ret);

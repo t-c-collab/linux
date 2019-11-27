@@ -184,7 +184,7 @@ struct tidss_plane *tidss_plane_create(struct tidss_device *tidss,
 	possible_crtcs = crtc_mask;
 	type = plane_type;
 
-	ret = drm_universal_plane_init(tidss->ddev, &tplane->plane,
+	ret = drm_universal_plane_init(&tidss->ddev, &tplane->plane,
 				       possible_crtcs,
 				       &tidss_plane_funcs,
 				       formats, num_formats,

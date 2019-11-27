@@ -2491,7 +2491,6 @@ int dispc_runtime_resume(struct dispc_device *dispc)
 	return 0;
 }
 
-
 void dispc_remove(struct tidss_device *tidss)
 {
 	dev_dbg(tidss->dev, "%s\n", __func__);

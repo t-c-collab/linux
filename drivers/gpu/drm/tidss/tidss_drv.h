@@ -15,8 +15,8 @@
 typedef u32 dispc_irq_t;
 
 struct tidss_device {
+	struct drm_device ddev;		/* DRM device for DSS */
 	struct device *dev;		/* Underlying DSS device */
-	struct drm_device *ddev;	/* DRM device for DSS */
 
 	const struct dispc_features *feat;
 	struct dispc_device *dispc;

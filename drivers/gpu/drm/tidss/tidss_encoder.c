@@ -75,7 +75,7 @@ struct drm_encoder *tidss_encoder_create(struct tidss_device *tidss,
 
 	enc->possible_crtcs = possible_crtcs;
 
-	ret = drm_encoder_init(tidss->ddev, enc, &encoder_funcs,
+	ret = drm_encoder_init(&tidss->ddev, enc, &encoder_funcs,
 			       encoder_type, NULL);
 	if (ret < 0)
 		return ERR_PTR(ret);

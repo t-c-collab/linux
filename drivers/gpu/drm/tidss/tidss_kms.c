@@ -187,7 +187,7 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 
 int tidss_modeset_init(struct tidss_device *tidss)
 {
-	struct drm_device *ddev = tidss->ddev;
+	struct drm_device *ddev = &tidss->ddev;
 	unsigned int i;
 	int ret;
 
@@ -228,7 +228,7 @@ err_mode_config_cleanup:
 
 void tidss_modeset_cleanup(struct tidss_device *tidss)
 {
-	struct drm_device *ddev = tidss->ddev;
+	struct drm_device *ddev = &tidss->ddev;
 
 	drm_mode_config_cleanup(ddev);
 }

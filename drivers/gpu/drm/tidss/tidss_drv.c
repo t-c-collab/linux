@@ -76,7 +76,7 @@ static int __maybe_unused tidss_suspend(struct device *dev)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	return drm_mode_config_helper_suspend(tidss->ddev);
+	return drm_mode_config_helper_suspend(&tidss->ddev);
 }
 
 static int __maybe_unused tidss_resume(struct device *dev)
@@ -85,7 +85,7 @@ static int __maybe_unused tidss_resume(struct device *dev)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	return drm_mode_config_helper_resume(tidss->ddev);
+	return drm_mode_config_helper_resume(&tidss->ddev);
 }
 
 #ifdef CONFIG_PM
@@ -98,27 +98,28 @@ static const struct dev_pm_ops tidss_pm_ops = {
 
 #endif /* CONFIG_PM */
 
-/* Platform driver */
-
 /* DRM device Information */
+
+static void tidss_release(struct drm_device *ddev)
+{
+	struct tidss_device *tidss = ddev->dev_private;
+
+	drm_kms_helper_poll_fini(ddev);
+
+	tidss_modeset_cleanup(tidss);
+
+	drm_dev_fini(ddev);
+
+	kfree(tidss);
+}
+
 DEFINE_DRM_GEM_CMA_FOPS(tidss_fops);
 
 static struct drm_driver tidss_driver = {
-	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC |
-					DRIVER_HAVE_IRQ,
-	.gem_free_object_unlocked = drm_gem_cma_free_object,
-	.gem_vm_ops		= &drm_gem_cma_vm_ops,
-	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
-	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
-	.gem_prime_import	= drm_gem_prime_import,
-	.gem_prime_export	= drm_gem_prime_export,
-	.gem_prime_get_sg_table	= drm_gem_cma_prime_get_sg_table,
-	.gem_prime_import_sg_table = drm_gem_cma_prime_import_sg_table,
-	.gem_prime_vmap		= drm_gem_cma_prime_vmap,
-	.gem_prime_vunmap	= drm_gem_cma_prime_vunmap,
-	.gem_prime_mmap		= drm_gem_cma_prime_mmap,
-	.dumb_create		= drm_gem_cma_dumb_create,
+	.driver_features	= DRIVER_GEM | DRIVER_MODESET | DRIVER_ATOMIC,
 	.fops			= &tidss_fops,
+	.release		= tidss_release,
+	DRM_GEM_CMA_VMAP_DRIVER_OPS,
 	.name			= "tidss",
 	.desc			= "TI Keystone DSS",
 	.date			= "20180215",
@@ -141,29 +142,33 @@ static int tidss_probe(struct platform_device *pdev)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	tidss = devm_kzalloc(dev, sizeof(*tidss), GFP_KERNEL);
-	if (tidss == NULL)
+	/* Can't use devm_* since drm_device's lifetime may exceed dev's */
+	tidss = kzalloc(sizeof(*tidss), GFP_KERNEL);
+	if (!tidss)
 		return -ENOMEM;
+
+	ddev = &tidss->ddev;
+
+	ret = devm_drm_dev_init(&pdev->dev, ddev, &tidss_driver);
+	if (ret) {
+		kfree(ddev);
+		return ret;
+	}
 
 	tidss->dev = dev;
 	tidss->feat = of_device_get_match_data(dev);
 
 	platform_set_drvdata(pdev, tidss);
 
-	ddev = drm_dev_alloc(&tidss_driver, dev);
-	if (IS_ERR(ddev))
-		return PTR_ERR(ddev);
-
-	tidss->ddev = ddev;
 	ddev->dev_private = tidss;
-
-	pm_runtime_enable(dev);
 
 	ret = dispc_init(tidss);
 	if (ret) {
 		dev_err(dev, "failed to initialize dispc: %d\n", ret);
-		goto err_disable_pm;
+		return ret;
 	}
+
+	pm_runtime_enable(dev);
 
 #ifndef CONFIG_PM
 	/* If we don't have PM, we need to call resume manually */
@@ -180,21 +185,23 @@ static int tidss_probe(struct platform_device *pdev)
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
 		ret = irq;
-		goto err_modeset_cleanup;
+		goto err_runtime_suspend;
 	}
 
 	ret = drm_irq_install(ddev, irq);
 	if (ret) {
 		dev_err(dev, "drm_irq_install failed: %d\n", ret);
-		goto err_modeset_cleanup;
+		goto err_runtime_suspend;
 	}
 
 	drm_kms_helper_poll_init(ddev);
 
+	drm_mode_config_reset(ddev);
+
 	ret = drm_dev_register(ddev, 0);
 	if (ret) {
 		dev_err(dev, "failed to register DRM device\n");
-		goto err_poll_fini;
+		goto err_irq_uninstall;
 	}
 
 	drm_fbdev_generic_setup(ddev, 32);
@@ -203,28 +210,14 @@ static int tidss_probe(struct platform_device *pdev)
 
 	return 0;
 
-err_poll_fini:
-	drm_kms_helper_poll_fini(ddev);
-
-	drm_atomic_helper_shutdown(ddev);
-
+err_irq_uninstall:
 	drm_irq_uninstall(ddev);
-
-err_modeset_cleanup:
-	tidss_modeset_cleanup(tidss);
 
 err_runtime_suspend:
 #ifndef CONFIG_PM
-	/* If we don't have PM, we need to call suspend manually */
 	dispc_runtime_suspend(tidss->dispc);
 #endif
-
-	dispc_remove(tidss);
-
-err_disable_pm:
 	pm_runtime_disable(dev);
-
-	drm_dev_put(ddev);
 
 	return ret;
 }
@@ -233,34 +226,33 @@ static int tidss_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct tidss_device *tidss = platform_get_drvdata(pdev);
-	struct drm_device *ddev = tidss->ddev;
+	struct drm_device *ddev = &tidss->ddev;
 
 	dev_dbg(dev, "%s\n", __func__);
 
 	drm_dev_unregister(ddev);
 
-	drm_kms_helper_poll_fini(ddev);
-
 	drm_atomic_helper_shutdown(ddev);
 
 	drm_irq_uninstall(ddev);
-
-	tidss_modeset_cleanup(tidss);
 
 #ifndef CONFIG_PM
 	/* If we don't have PM, we need to call suspend manually */
 	dispc_runtime_suspend(tidss->dispc);
 #endif
-
-	dispc_remove(tidss);
-
 	pm_runtime_disable(dev);
 
-	drm_dev_put(ddev);
+	/* devm allocated dispc goes away with the dev so mark it NULL */
+	dispc_remove(tidss);
 
 	dev_dbg(dev, "%s done\n", __func__);
 
 	return 0;
+}
+
+static void tidss_shutdown(struct platform_device *pdev)
+{
+	drm_atomic_helper_shutdown(platform_get_drvdata(pdev));
 }
 
 static const struct of_device_id tidss_of_table[] = {
@@ -275,6 +267,7 @@ MODULE_DEVICE_TABLE(of, tidss_of_table);
 static struct platform_driver tidss_platform_driver = {
 	.probe		= tidss_probe,
 	.remove		= tidss_remove,
+	.shutdown	= tidss_shutdown,
 	.driver		= {
 		.name	= "tidss",
 #ifdef CONFIG_PM
