@@ -1,0 +1,101 @@
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/display/bridge/cdns,mhdp.yaml#"
+$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+
+title: Cadence MHDP bridge
+
+maintainers:
+  - Swapnil Jakhade <sjakhade@cadence.com>
+  - Yuti Amonkar <yamonkar@cadence.com>
+
+properties:
+  compatible:
+    items:
+      - const: ti,j721e-mhdp8546
+      - const: cdns,mhdp8546
+
+  clocks:
+    items:
+      descrption:
+        DP bridge clock, it's used by the IP to know how to translate a number of
+        clock cycles into a time (which is used to comply with DP standard timings
+        and delays).
+
+  reg:
+    items:
+      - description:
+          Register block of mhdptx abp registers upto PHY mapped area(AUX_CONFIG_P).
+          The AUX and PMA registers are mapped to associated phy driver.
+      - description:
+          Register block for DSS_EDP0_INTG_CFG_VP registers in case of TI J7 SoCs.
+
+  phys:
+    description: see the Documentation/devicetree/bindings/phy/phy-cadence-torrent.yaml
+
+  phy-names:
+    const: dpphy
+
+  interrupts:
+    maxItems: 1
+
+  power-domains:
+    maxItems: 1
+    description: phandle to the associated power domain
+
+  ports:
+    type: object
+    description:
+      Ports as described in Documentation/devictree/bindings/graph.txt
+    properties:
+       port@0:
+         description:
+           input port representing the DP bridge input
+
+       port@1:
+         description:
+           output port representing the DP bridge output
+    required:
+      - port@0
+      - port@1
+
+required:
+  - compatible
+  - clocks
+  - reg
+  - phys
+  - phy-names
+  - ports
+
+additionalProperties: false
+
+examples:
+  - |
+    mhdp: dp-bridge@f0fb000000 {
+        compatible = "ti,j721e-mhdp8546", "cdns,mhdp8546";
+        reg = <0xf0 0xfb000000 0x0 0x1000000>,
+              <0xf0 0xfc000000 0x0 0x2000000>;
+        clocks = <&mhdp_clock>;
+        phys = <&dp_phy>;
+        phy-names = "dpphy";
+
+        ports {
+              #address-cells = <1>;
+              #size-cells = <0>;
+
+              port@0 {
+                     reg = <0>;
+                     dp_bridge_input: endpoint {
+                                               remote-endpoint = <&xxx_dpi_output>;
+                     };
+              };
+
+              port@1 {
+                     reg = <1>;
+                     dp_bridge_output: endpoint {
+                                     remote-endpoint = <&xxx_dp_connector_input>;
+                     };
+              };
+      };
+    };
+...
