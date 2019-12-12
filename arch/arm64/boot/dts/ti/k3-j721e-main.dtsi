@@ -1562,6 +1562,70 @@
 		};
 	};
 
+	csi2rx0: csi-bridge@ {
+		compatible = "cdns,csi2rx";
+		reg = <0x00 0x04504000 0x00 0x1000>;
+
+		clocks = <&k3_clks 26 2>,
+			 <&k3_clks 26 2>,
+			 <&k3_clks 26 3>,
+			 <&k3_clks 26 3>,
+			 <&k3_clks 26 3>,
+			 <&k3_clks 26 3>;
+		clock-names = "sys_clk", "p_clk",
+			      "pixel_if0_clk", "pixel_if1_clk",
+			      "pixel_if2_clk", "pixel_if3_clk";
+
+		power-domains = <&k3_pds 26 TI_SCI_PD_EXCLUSIVE>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				csi2rx_in_sensor: endpoint {
+					/* remote-endpoint = <&sensor_out_csi2rx>; */
+					clock-lanes = <0>;
+					data-lanes = <1 2>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				csi2rx_out_grabber0: endpoint {
+					/* remote-endpoint = <&grabber0_in_csi2rx>; */
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				csi2rx_out_grabber1: endpoint {
+					/* remote-endpoint = <&grabber1_in_csi2rx>; */
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+
+				csi2rx_out_grabber2: endpoint {
+					/* remote-endpoint = <&grabber2_in_csi2rx>; */
+				};
+			};
+
+			port@4 {
+				reg = <4>;
+
+				csi2rx_out_grabber3: endpoint {
+					/* remote-endpoint = <&grabber3_in_csi2rx>; */
+				};
+			};
+		};
+	};
+
 	gpu: gpu@4e20000000 {
 		compatible = "ti,j721e-pvr", "img,pvr-ge8430";
 		reg = <0x4e 0x20000000 0x00 0x80000>;
