@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2017 Cadence Design Systems Inc.
  */
-
+#define DEBUG
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -282,7 +282,9 @@ static int csi2rx_get_resources(struct csi2rx_priv *csi2rx,
 {
 	struct resource *res;
 	unsigned char i;
-	u32 dev_cfg;
+	u32 dev_cfg, idreg;
+
+	dev_dbg(&pdev->dev, "%s:\n", __func__);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	csi2rx->base = devm_ioremap_resource(&pdev->dev, res);
@@ -318,7 +320,11 @@ static int csi2rx_get_resources(struct csi2rx_priv *csi2rx,
 
 	clk_prepare_enable(csi2rx->p_clk);
 	dev_cfg = readl(csi2rx->base + CSI2RX_DEVICE_CFG_REG);
+	idreg = readl(csi2rx->base + 0xffc);
 	clk_disable_unprepare(csi2rx->p_clk);
+
+	dev_dbg(&pdev->dev, "%s: dev_cfg: 0x%08x\n", __func__, dev_cfg);
+	dev_dbg(&pdev->dev, "%s: idreg: 0x%08x (should be 0x50220200\n", __func__, idreg);
 
 	csi2rx->max_lanes = dev_cfg & 7;
 	if (csi2rx->max_lanes > CSI2RX_LANES_MAX) {
@@ -365,6 +371,8 @@ static int csi2rx_parse_dt(struct csi2rx_priv *csi2rx)
 	struct fwnode_handle *fwh;
 	struct device_node *ep;
 	int ret;
+
+	dev_dbg(csi2rx->dev, "%s:\n", __func__);
 
 	ep = of_graph_get_endpoint_by_regs(csi2rx->dev->of_node, 0, 0);
 	if (!ep)
@@ -418,6 +426,8 @@ static int csi2rx_probe(struct platform_device *pdev)
 	struct csi2rx_priv *csi2rx;
 	unsigned int i;
 	int ret;
+
+	dev_dbg(&pdev->dev, "%s:\n", __func__);
 
 	csi2rx = kzalloc(sizeof(*csi2rx), GFP_KERNEL);
 	if (!csi2rx)
