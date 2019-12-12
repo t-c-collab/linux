@@ -2,7 +2,7 @@
 /*
  * Copyright: 2017-2018 Cadence Design Systems, Inc.
  */
-
+#define DEBUG
 #include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/io.h>
@@ -317,6 +317,8 @@ static int cdns_dphy_probe(struct platform_device *pdev)
 	struct resource *res;
 	int ret;
 
+	dev_dbg(&pdev->dev, "%s:\n", __func__);
+
 	dphy = devm_kzalloc(&pdev->dev, sizeof(*dphy), GFP_KERNEL);
 	if (!dphy)
 		return -ENOMEM;
@@ -325,6 +327,8 @@ static int cdns_dphy_probe(struct platform_device *pdev)
 	dphy->ops = of_device_get_match_data(&pdev->dev);
 	if (!dphy->ops)
 		return -EINVAL;
+
+	dev_dbg(&pdev->dev, "%s: after of_device_get_match_data()\n", __func__);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	dphy->regs = devm_ioremap_resource(&pdev->dev, res);
@@ -335,15 +339,21 @@ static int cdns_dphy_probe(struct platform_device *pdev)
 	if (IS_ERR(dphy->psm_clk))
 		return PTR_ERR(dphy->psm_clk);
 
+	dev_dbg(&pdev->dev, "%s: after devm_clk_get(psm)\n", __func__);
+
 	dphy->pll_ref_clk = devm_clk_get(&pdev->dev, "pll_ref");
 	if (IS_ERR(dphy->pll_ref_clk))
 		return PTR_ERR(dphy->pll_ref_clk);
+
+	dev_dbg(&pdev->dev, "%s: after devm_clk_get(pll_ref)\n", __func__);
 
 	if (dphy->ops->probe) {
 		ret = dphy->ops->probe(dphy);
 		if (ret)
 			return ret;
 	}
+
+	dev_dbg(&pdev->dev, "%s: after dphy->ops->probe()\n", __func__);
 
 	dphy->phy = devm_phy_create(&pdev->dev, NULL, &cdns_dphy_ops);
 	if (IS_ERR(dphy->phy)) {
