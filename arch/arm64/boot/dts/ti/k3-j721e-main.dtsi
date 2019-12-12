@@ -1562,7 +1562,17 @@
 		};
 	};
 
-	csi2rx0: csi-bridge@ {
+	dphy0: dphy@04580000{
+		compatible = "cdns,dphy";
+		reg = <0x00 0x04580000 0x00 0x1000>;
+		power-domains = <&k3_pds 147 TI_SCI_PD_EXCLUSIVE>;
+		clocks = <&k3_clks 147 0>,
+			 <&k3_clks 147 1>;
+		clock-names = "psm", "pll_ref";
+		#phy-cells = <0>;
+	};
+
+	csi2rx0: csi-bridge@04504000 {
 		compatible = "cdns,csi2rx";
 		reg = <0x00 0x04504000 0x00 0x1000>;
 
@@ -1577,6 +1587,9 @@
 			      "pixel_if2_clk", "pixel_if3_clk";
 
 		power-domains = <&k3_pds 26 TI_SCI_PD_EXCLUSIVE>;
+
+		phy = <&dphy0>;
+		phy-names = "dphy";
 
 		ports {
 			#address-cells = <1>;
