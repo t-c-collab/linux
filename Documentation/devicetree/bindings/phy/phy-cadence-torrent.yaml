@@ -6,8 +6,8 @@ $schema: "http://devicetree.org/meta-schemas/core.yaml#"
 title: Cadence Torrent SD0801 PHY binding for DisplayPort
 
 description:
-  This binding describes the Cadence SD0801 PHY hardware included with
-  the Cadence MHDP DisplayPort controller.
+  This binding describes the Cadence SD0801 PHY (also known as Torrent PHY)
+  hardware included with the Cadence MHDP DisplayPort controller.
 
 maintainers:
   - Swapnil Jakhade <sjakhade@cadence.com>
@@ -19,6 +19,12 @@ properties:
       - cdns,torrent-phy
       - ti,j721e-serdes-10g
 
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
   clocks:
     maxItems: 1
     description:
@@ -28,51 +34,107 @@ properties:
     const: refclk
 
   reg:
+    minItems: 1
+    maxItems: 2
     items:
+      - description: Offset of the Torrent PHY configuration registers.
       - description: Offset of the DPTX PHY configuration registers.
-      - description: Offset of the SD0801 PHY configuration registers.
 
   reg-names:
+    minItems: 1
+    maxItems: 2
     items:
+      - const: torrent_phy
       - const: dptx_phy
-      - const: sd0801_phy
 
-  "#phy-cells":
-    const: 0
-
-  num_lanes:
+  resets:
     description:
-      Number of DisplayPort lanes.
-    allOf:
-      - $ref: /schemas/types.yaml#/definitions/uint32
-      - enum: [1, 2, 4]
+      Must contain an entry for each in reset-names.
+      See Documentation/devicetree/bindings/reset/reset.txt
 
-  max_bit_rate:
+  reset-names:
     description:
-      Maximum DisplayPort link bit rate to use, in Mbps
-    allOf:
-      - $ref: /schemas/types.yaml#/definitions/uint32
-      - enum: [2160, 2430, 2700, 3240, 4320, 5400, 8100]
+      Must be "torrent_reset". It controls the reset to the
+      torrent PHY.
+
+patternProperties:
+  '^torrent-phy@[0-7]+$':
+    type: object
+    description:
+      Each group of PHY lanes with a single master lane should be represented as a sub-node.
+    properties:
+      reg:
+        description:
+          The master lane number. This is the lowest numbered lane in the lane group.
+
+      resets:
+        description:
+          Contains list of resets to get all the link lanes out of reset.
+
+      "#phy-cells":
+        description:
+          Generic PHY binding.
+        const: 0
+
+      cdns,phy-type:
+        description:
+          Should be PHY_TYPE_DP.
+        $ref: /schemas/types.yaml#/definitions/uint32
+
+      cdns,num-lanes:
+        description:
+          Number of DisplayPort lanes.
+        allOf:
+          - $ref: /schemas/types.yaml#/definitions/uint32
+          - enum: [1, 2, 4]
+
+      cdns,max-bit-rate:
+        description:
+          Maximum DisplayPort link bit rate to use, in Mbps
+        allOf:
+          - $ref: /schemas/types.yaml#/definitions/uint32
+          - enum: [2160, 2430, 2700, 3240, 4320, 5400, 8100]
+
+    required:
+      - reg
+      - resets
+      - "#phy-cells"
+      - cdns,phy-type
 
 required:
   - compatible
+  - "#address-cells"
+  - "#size-cells"
   - clocks
   - clock-names
   - reg
-  - "#phy-cells"
+  - reg-names
+  - resets
+  - reset-names
 
 additionalProperties: false
 
 examples:
   - |
-    dp_phy: phy@f0fb030a00 {
+    #include <dt-bindings/phy/phy.h>
+    torrent_phy: phy@f0fb500000 {
           compatible = "cdns,torrent-phy";
-          reg = <0xf0 0xfb030a00 0x0 0x00000040>,
-                <0xf0 0xfb500000 0x0 0x00100000>;
-          num_lanes = <4>;
-          max_bit_rate = <8100>;
-          #phy-cells = <0>;
+          reg = <0xf0 0xfb500000 0x0 0x00100000>,
+                <0xf0 0xfb030a00 0x0 0x00000040>;
+          reg-names = "torrent_phy", "dptx_phy";
+          resets = <&phyrst 0>;
+          reset-names = "torrent_reset";
           clocks = <&ref_clk>;
           clock-names = "refclk";
+          #address-cells = <1>;
+          #size-cells = <0>;
+          torrent_phy_dp: torrent-phy@0 {
+                    reg = <0>;
+                    resets = <&phyrst 1>;
+                    #phy-cells = <0>;
+                    cdns,phy-type = <PHY_TYPE_DP>;
+                    cdns,num-lanes = <4>;
+                    cdns,max-bit-rate = <8100>;
+          };
     };
 ...
