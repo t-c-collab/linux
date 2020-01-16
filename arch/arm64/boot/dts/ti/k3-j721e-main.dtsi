@@ -360,7 +360,7 @@
 
 		clocks = <&k3_clks 151 36>;
 
-		phys = <&serdes4>;
+		phys = <&torrent_phy_dp>;
 		phy-names = "dpphy";
 
 		interrupt-parent = <&gic500>;
