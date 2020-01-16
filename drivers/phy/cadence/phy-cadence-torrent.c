@@ -189,13 +189,13 @@ struct cdns_torrent_inst {
 	struct phy *phy;
 	u32 mlane;
 	u32 phy_type;
+	u32 num_lanes;
 	struct reset_control *lnk_rst;
 };
 
 struct cdns_torrent_phy {
 	void __iomem *base;	/* DPTX registers base */
 	void __iomem *sd_base; /* SD0801 registers base */
-	u32 num_lanes; /* Number of lanes to use */
 	u32 max_bit_rate; /* Maximum link bit rate to use (in Mbps) */
 	struct reset_control *phy_rst;
 	struct device *dev;
@@ -225,10 +225,11 @@ enum phy_powerstate {
 
 static int cdns_torrent_dp_init(struct phy *phy);
 static int cdns_torrent_dp_exit(struct phy *phy);
-static int cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy);
+static int cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy, u32 lanes);
 static
 int cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy);
-static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy);
+static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy,
+				    struct cdns_torrent_inst *inst);
 static
 void cdns_torrent_dp_pma_cmn_cfg_19_2mhz(struct cdns_torrent_phy *cdns_phy);
 static
@@ -579,7 +580,7 @@ static int cdns_torrent_dp_configure_rate(struct cdns_torrent_phy *cdns_phy,
 /*
  * Verify, that parameters to configure PHY with are correct.
  */
-static int cdns_torrent_dp_verify_config(struct cdns_torrent_phy *cdns_phy,
+static int cdns_torrent_dp_verify_config(struct cdns_torrent_inst *inst,
 					 struct phy_configure_opts_dp *dp)
 {
 	u8 i;
@@ -614,7 +615,7 @@ static int cdns_torrent_dp_verify_config(struct cdns_torrent_phy *cdns_phy,
 	}
 
 	/* Check against actual number of PHY's lanes. */
-	if (dp->lanes > cdns_phy->num_lanes)
+	if (dp->lanes > inst->num_lanes)
 		return -EINVAL;
 
 	/*
@@ -718,7 +719,7 @@ static int cdns_torrent_dp_set_lanes(struct cdns_torrent_phy *cdns_phy,
 	/* release pma_xcvr_pllclk_en_ln_*, only for the master lane */
 	cdns_torrent_dp_write(regmap, PHY_PMA_XCVR_PLLCLK_EN, 0x0001);
 
-	ret = cdns_torrent_dp_run(cdns_phy);
+	ret = cdns_torrent_dp_run(cdns_phy, dp->lanes);
 
 	return ret;
 }
@@ -806,10 +807,11 @@ static void cdns_torrent_dp_set_voltages(struct cdns_torrent_phy *cdns_phy,
 static int cdns_torrent_dp_configure(struct phy *phy,
 				     union phy_configure_opts *opts)
 {
+	struct cdns_torrent_inst *inst = phy_get_drvdata(phy);
 	struct cdns_torrent_phy *cdns_phy = dev_get_drvdata(phy->dev.parent);
 	int ret;
 
-	ret = cdns_torrent_dp_verify_config(cdns_phy, &opts->dp);
+	ret = cdns_torrent_dp_verify_config(inst, &opts->dp);
 	if (ret) {
 		dev_err(&phy->dev, "invalid params for phy configure\n");
 		return ret;
@@ -841,7 +843,7 @@ static int cdns_torrent_dp_init(struct phy *phy)
 {
 	unsigned char lane_bits;
 	int ret;
-
+	struct cdns_torrent_inst *inst = phy_get_drvdata(phy);
 	struct cdns_torrent_phy *cdns_phy = dev_get_drvdata(phy->dev.parent);
 	struct regmap *regmap = cdns_phy->regmap_dptx_phy_reg;
 
@@ -871,19 +873,19 @@ static int cdns_torrent_dp_init(struct phy *phy)
 	cdns_torrent_dp_write(regmap, PHY_AUX_CTRL, 0x0003); /* enable AUX */
 
 	/* PHY PMA registers configuration function */
-	cdns_torrent_dp_pma_cfg(cdns_phy);
+	cdns_torrent_dp_pma_cfg(cdns_phy, inst);
 
 	/*
 	 * Set lines power state to A0
 	 * Set lines pll clk enable to 0
 	 */
-	cdns_torrent_dp_set_a0_pll(cdns_phy, cdns_phy->num_lanes);
+	cdns_torrent_dp_set_a0_pll(cdns_phy, inst->num_lanes);
 
 	/*
 	 * release phy_l0*_reset_n and pma_tx_elec_idle_ln_* based on
 	 * used lanes
 	 */
-	lane_bits = (1 << cdns_phy->num_lanes) - 1;
+	lane_bits = (1 << inst->num_lanes) - 1;
 	cdns_torrent_dp_write(regmap, PHY_RESET,
 			      ((0xF & ~lane_bits) << 4) | (0xF & lane_bits));
 
@@ -901,7 +903,7 @@ static int cdns_torrent_dp_init(struct phy *phy)
 						      cdns_phy->max_bit_rate,
 						      false);
 	cdns_torrent_dp_pma_cmn_rate(cdns_phy, cdns_phy->max_bit_rate,
-				     cdns_phy->num_lanes);
+				     inst->num_lanes);
 
 	/* take out of reset */
 	regmap_field_write(cdns_phy->phy_reset_ctrl, 0x1);
@@ -912,7 +914,7 @@ static int cdns_torrent_dp_init(struct phy *phy)
 	if (ret)
 		return ret;
 
-	ret = cdns_torrent_dp_run(cdns_phy);
+	ret = cdns_torrent_dp_run(cdns_phy, inst->num_lanes);
 
 	return ret;
 }
@@ -943,7 +945,8 @@ int cdns_torrent_dp_wait_pma_cmn_ready(struct cdns_torrent_phy *cdns_phy)
 	return 0;
 }
 
-static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy)
+static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy,
+				    struct cdns_torrent_inst *inst)
 {
 	unsigned int i;
 
@@ -955,7 +958,7 @@ static void cdns_torrent_dp_pma_cfg(struct cdns_torrent_phy *cdns_phy)
 		cdns_torrent_dp_pma_cmn_cfg_25mhz(cdns_phy);
 
 	/* PMA lane configuration to deal with multi-link operation */
-	for (i = 0; i < cdns_phy->num_lanes; i++)
+	for (i = 0; i < inst->num_lanes; i++)
 		cdns_torrent_dp_pma_lane_cfg(cdns_phy, i);
 }
 
@@ -1393,7 +1396,7 @@ static void cdns_torrent_dp_pma_cmn_rate(struct cdns_torrent_phy *cdns_phy,
 			       CMN_PDIAG_PLL1_CLK_SEL_M0, clk_sel_val);
 
 	/* PMA lane configuration to deal with multi-link operation */
-	for (i = 0; i < cdns_phy->num_lanes; i++)
+	for (i = 0; i < lanes; i++)
 		cdns_torrent_phy_write(cdns_phy->regmap_tx_lane_cdb[i],
 				       XCVR_DIAG_HSCLK_DIV, hsclk_div_val);
 }
@@ -1503,7 +1506,7 @@ static int cdns_torrent_dp_set_power_state(struct cdns_torrent_phy *cdns_phy,
 	return ret;
 }
 
-static int cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy)
+static int cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy, u32 lanes)
 {
 	unsigned int read_val;
 	int ret;
@@ -1524,13 +1527,11 @@ static int cdns_torrent_dp_run(struct cdns_torrent_phy *cdns_phy)
 
 	ndelay(100);
 
-	ret = cdns_torrent_dp_set_power_state(cdns_phy, cdns_phy->num_lanes,
-					      POWERSTATE_A2);
+	ret = cdns_torrent_dp_set_power_state(cdns_phy, lanes, POWERSTATE_A2);
 	if (ret)
 		return ret;
 
-	ret = cdns_torrent_dp_set_power_state(cdns_phy, cdns_phy->num_lanes,
-					      POWERSTATE_A0);
+	ret = cdns_torrent_dp_set_power_state(cdns_phy, lanes, POWERSTATE_A0);
 
 	return ret;
 }
@@ -1789,12 +1790,12 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 			goto put_child;
 		}
 
-		cdns_phy->num_lanes = DEFAULT_NUM_LANES;
+		cdns_phy->phys[node].num_lanes = DEFAULT_NUM_LANES;
 		of_property_read_u32(child, "cdns,num-lanes",
-				     &cdns_phy->num_lanes);
+				     &cdns_phy->phys[node].num_lanes);
 
 		if (cdns_phy->phys[node].phy_type == PHY_TYPE_DP) {
-			switch (cdns_phy->num_lanes) {
+			switch (cdns_phy->phys[node].num_lanes) {
 			case 1:
 			case 2:
 			case 4:
@@ -1802,7 +1803,7 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				break;
 			default:
 				dev_err(dev, "unsupported number of lanes: %d\n",
-					cdns_phy->num_lanes);
+					cdns_phy->phys[node].num_lanes);
 				ret = -EINVAL;
 				goto put_child;
 			}
@@ -1844,6 +1845,10 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				ret = PTR_ERR(gphy);
 				goto put_child;
 			}
+			dev_info(dev, "%d lanes, max bit rate %d.%03d Gbps\n",
+				 cdns_phy->phys[node].num_lanes,
+				 cdns_phy->max_bit_rate / 1000,
+				 cdns_phy->max_bit_rate % 1000);
 		} else {
 			dev_err(dev, "Driver supports only PHY_TYPE_DP\n");
 			ret = -ENOTSUPP;
@@ -1872,11 +1877,6 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		ret = PTR_ERR(phy_provider);
 		goto put_lnk_rst;
 	}
-
-	dev_info(dev, "%d lanes, max bit rate %d.%03d Gbps\n",
-		 cdns_phy->num_lanes,
-		 cdns_phy->max_bit_rate / 1000,
-		 cdns_phy->max_bit_rate % 1000);
 
 	return 0;
 
