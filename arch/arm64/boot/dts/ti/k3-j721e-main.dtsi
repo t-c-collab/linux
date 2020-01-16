@@ -495,15 +495,20 @@
 			reg = <0x00 0x05050000 0x0 0x00010000>, /* SERDES_10G0 */
 			      <0x00 0x0A030A00 0x0 0x00000040>; /* DSS_EDP0_V2A_CORE_VP_REGS_APB + 30A00 */
 
-			resets = <&serdes_wiz4 0>, <&serdes_wiz4 1>,
-				 <&serdes_wiz4 2>, <&serdes_wiz4 3>,
-				 <&serdes_wiz4 4>;
-
-			num_lanes = <4>;
-			max_bit_rate = <5400>;
-			#phy-cells = <0>;
+			resets = <&serdes_wiz4 0>;
+			reset-names = "torrent_reset";
 			clocks = <&wiz4_pll0_refclk>;
 			clock-names = "refclk";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			torrent_phy_dp: torrent-phy@0{
+				reg = <0>;
+				resets = <&serdes_wiz4 1>;
+				cdns,phy-type = <PHY_TYPE_DP>;
+				cdns,num-lanes = <4>;
+				cdns,max-bit-rate = <5400>;
+				#phy-cells = <0>;
+			};
 		};
 	};
 
@@ -516,7 +521,7 @@
 
 		clocks = <&k3_clks 151 36>;
 
-		phys = <&serdes4>;
+		phys = <&torrent_phy_dp>;
 		phy-names = "dpphy";
 
 		interrupt-parent = <&gic500>;
