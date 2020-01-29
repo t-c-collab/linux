@@ -16,7 +16,9 @@ maintainers:
 
 properties:
   compatible:
-    const: cdns,torrent-phy
+    enum:
+      - cdns,torrent-phy
+      - ti,j721e-serdes-10g
 
   '#address-cells':
     const: 1
