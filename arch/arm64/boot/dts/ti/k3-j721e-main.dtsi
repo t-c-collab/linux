@@ -495,15 +495,21 @@
 			reg = <0x00 0x05050000 0x0 0x00010000>, /* SERDES_10G0 */
 			      <0x00 0x0A030A00 0x0 0x00000040>; /* DSS_EDP0_V2A_CORE_VP_REGS_APB + 30A00 */
 
-			resets = <&serdes_wiz4 0>, <&serdes_wiz4 1>,
-				 <&serdes_wiz4 2>, <&serdes_wiz4 3>,
-				 <&serdes_wiz4 4>;
-
-			num_lanes = <4>;
-			max_bit_rate = <5400>;
-			#phy-cells = <0>;
+			reg-names = "torrent_phy", "dptx_phy";
+			resets = <&serdes_wiz4 0>;
 			clocks = <&wiz4_pll0_refclk>;
 			clock-names = "refclk";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			torrent_phy_dp: phy@0 {
+				reg = <0>;
+				resets = <&serdes_wiz4 1>, <&serdes_wiz4 2>,
+					 <&serdes_wiz4 3>, <&serdes_wiz4 4>;
+				#phy-cells = <0>;
+				cdns,phy-type = <PHY_TYPE_DP>;
+				cdns,num-lanes = <4>;
+				cdns,max-bit-rate = <5400>;
+			};
 		};
 	};
 
@@ -512,12 +518,12 @@
 		reg = <0x00 0x0A000000 0x0 0x30A00>, /* DSS_EDP0_V2A_CORE_VP_REGS_APB - upto PHY mapped area */
 		      <0x00 0x04F40000 0x0 0x20>;    /* DSS_EDP0_INTG_CFG_VP */
 
+		reg-names = "mhdptx", "j721e-intg";
 		status = "disabled";
 
 		clocks = <&k3_clks 151 36>;
 
-		phys = <&serdes4>;
-		phy-names = "dpphy";
+		phys = <&torrent_phy_dp>;
 
 		interrupt-parent = <&gic500>;
 		interrupts = <GIC_SPI 614 IRQ_TYPE_LEVEL_HIGH>;
