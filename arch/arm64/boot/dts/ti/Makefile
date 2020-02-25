@@ -6,7 +6,8 @@
 # Copyright (C) 2016-2018 Texas Instruments Incorporated - http://www.ti.com/
 #
 
-dtb-$(CONFIG_ARCH_K3_AM6_SOC) += k3-am654-base-board.dtb
+dtb-$(CONFIG_ARCH_K3_AM6_SOC) += k3-am654-base-board.dtb  \
+				 k3-am654-evm-tc358876.dtbo
 
 dtb-$(CONFIG_ARCH_K3_J721E_SOC) += k3-j721e-common-proc-board.dtb \
 				   k3-j721e-common-proc-board-infotainment.dtbo
