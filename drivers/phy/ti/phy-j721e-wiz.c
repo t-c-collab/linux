@@ -5,6 +5,7 @@
  * Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
  * Author: Kishon Vijay Abraham I <kishon@ti.com>
  */
+#define DEBUG 1
 
 #include <dt-bindings/phy/phy.h>
 #include <linux/clk.h>
@@ -822,6 +823,8 @@ static int wiz_probe(struct platform_device *pdev)
 	u32 num_lanes;
 	int ret;
 
+	printk("%s:%d\n", __FILE__, __LINE__);
+
 	wiz = devm_kzalloc(dev, sizeof(*wiz), GFP_KERNEL);
 	if (!wiz)
 		return -ENOMEM;
@@ -959,6 +962,7 @@ static int wiz_probe(struct platform_device *pdev)
 	}
 
 	of_node_put(child_node);
+	printk("%s:%d\n", __FILE__, __LINE__);
 	return 0;
 
 err_wiz_init:
