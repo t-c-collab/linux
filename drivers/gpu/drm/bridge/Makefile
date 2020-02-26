@@ -21,5 +21,9 @@ obj-$(CONFIG_DRM_TI_TPD12S015) += ti-tpd12s015.o
 obj-$(CONFIG_DRM_CDNS_MHDP) += cdns-mhdp.o
 cdns-mhdp-objs := cdns-mhdp-core.o
 
+ifeq ($(CONFIG_DRM_CDNS_MHDP_J721E),y)
+	cdns-mhdp-objs += cdns-mhdp-j721e.o
+endif
+
 obj-y += analogix/
 obj-y += synopsys/
