@@ -5,7 +5,6 @@
  * Copyright 2018 Cadence Design Systems, Inc.
  *
  */
-#define DEBUG 1
 
 #include <dt-bindings/phy/phy.h>
 #include <linux/clk.h>
@@ -1716,8 +1715,6 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 	struct device_node *child;
 	int ret, subnodes, node = 0, i;
 
-	printk("%s:%d\n", __FILE__, __LINE__);
-
 	/* Get init data for this PHY */
 	match = of_match_device(cdns_torrent_phy_of_match, dev);
 	if (!match)
@@ -1883,8 +1880,6 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		ret = PTR_ERR(phy_provider);
 		goto put_lnk_rst;
 	}
-
-	printk("%s:%d\n", __FILE__, __LINE__);
 
 	return 0;
 
