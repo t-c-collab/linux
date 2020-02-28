@@ -12,6 +12,7 @@
 #include <linux/platform_device.h>
 
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
 #include <drm/drm_device.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_print.h>
@@ -65,7 +66,7 @@ static struct dvo_config rgb_24bit_de_cfg = {
 	.awg_fwgen_fct = sti_awg_generate_code_data_enable_mode,
 };
 
-/**
+/*
  * STI digital video output structure
  *
  * @dev: driver device
@@ -338,7 +339,7 @@ static int sti_dvo_connector_get_modes(struct drm_connector *connector)
 	struct sti_dvo *dvo = dvo_connector->dvo;
 
 	if (dvo->panel)
-		return drm_panel_get_modes(dvo->panel);
+		return drm_panel_get_modes(dvo->panel, connector);
 
 	return 0;
 }

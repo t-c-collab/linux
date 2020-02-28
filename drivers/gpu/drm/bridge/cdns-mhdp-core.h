@@ -272,6 +272,8 @@
 
 #define CDNS_MHDP_MAX_STREAMS   4
 
+#define DP_LINK_CAP_ENHANCED_FRAMING BIT(0)
+
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
 #define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
 

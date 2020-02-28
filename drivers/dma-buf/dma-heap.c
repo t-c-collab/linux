@@ -106,7 +106,7 @@ static long dma_heap_ioctl_allocate(struct file *file, void *data)
 	return 0;
 }
 
-unsigned int dma_heap_ioctl_cmds[] = {
+static unsigned int dma_heap_ioctl_cmds[] = {
 	DMA_HEAP_IOCTL_ALLOC,
 };
 
@@ -157,7 +157,8 @@ static long dma_heap_ioctl(struct file *file, unsigned int ucmd,
 		ret = dma_heap_ioctl_allocate(file, kdata);
 		break;
 	default:
-		return -ENOTTY;
+		ret = -ENOTTY;
+		goto err;
 	}
 
 	if (copy_to_user((void __user *)arg, kdata, out_size) != 0)
@@ -294,4 +295,4 @@ static int dma_heap_init(void)
 
 	return 0;
 }
-core_initcall(dma_heap_init);
+subsys_initcall(dma_heap_init);

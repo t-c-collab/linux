@@ -16,6 +16,7 @@
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_bridge.h>
 
 #include <drm/drm_dp_helper.h>
 #include <drm/drm_of.h>
@@ -200,7 +201,7 @@ static int rockchip_lvds_connector_get_modes(struct drm_connector *connector)
 	struct rockchip_lvds *lvds = connector_to_lvds(connector);
 	struct drm_panel *panel = lvds->panel;
 
-	return drm_panel_get_modes(panel);
+	return drm_panel_get_modes(panel, connector);
 }
 
 static const

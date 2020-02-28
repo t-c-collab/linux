@@ -574,7 +574,7 @@ static int sa1100fb_mmap(struct fb_info *info,
 	return vm_iomap_memory(vma, info->fix.mmio_start, info->fix.mmio_len);
 }
 
-static struct fb_ops sa1100fb_ops = {
+static const struct fb_ops sa1100fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_check_var	= sa1100fb_check_var,
 	.fb_set_par	= sa1100fb_set_par,
@@ -967,19 +967,6 @@ static void sa1100fb_task(struct work_struct *w)
 }
 
 #ifdef CONFIG_CPU_FREQ
-/*
- * Calculate the minimum DMA period over all displays that we own.
- * This, together with the SDRAM bandwidth defines the slowest CPU
- * frequency that can be selected.
- */
-static unsigned int sa1100fb_min_dma_period(struct sa1100fb_info *fbi)
-{
-	/*
-	 * FIXME: we need to verify _all_ consoles.
-	 */
-	return sa1100fb_display_dma_period(&fbi->fb.var);
-}
-
 /*
  * CPU clock speed change handler.  We need to adjust the LCD timing
  * parameters when the CPU clock is adjusted by the power management

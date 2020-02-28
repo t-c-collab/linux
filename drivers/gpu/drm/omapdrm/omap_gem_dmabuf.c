@@ -146,8 +146,6 @@ static const struct dma_buf_ops omap_dmabuf_ops = {
 	.release = drm_gem_dmabuf_release,
 	.begin_cpu_access = omap_gem_dmabuf_begin_cpu_access,
 	.end_cpu_access = omap_gem_dmabuf_end_cpu_access,
-	.map = omap_gem_dmabuf_kmap,
-	.unmap = omap_gem_dmabuf_kunmap,
 	.mmap = omap_gem_dmabuf_mmap,
 };
 

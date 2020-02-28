@@ -4500,7 +4500,7 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 	tv.num_shared = 1;
 	list_add(&tv.head, &list);
 
-	r = ttm_eu_reserve_buffers(&ticket, &list, false, NULL, true);
+	r = ttm_eu_reserve_buffers(&ticket, &list, false, NULL);
 	if (r) {
 		dev_err(adev->dev, "fail to reserve bo (%d)\n", r);
 		return r;
@@ -4843,7 +4843,13 @@ static int to_drm_connector_type(enum signal_type st)
 
 static struct drm_encoder *amdgpu_dm_connector_to_encoder(struct drm_connector *connector)
 {
-	return drm_encoder_find(connector->dev, NULL, connector->encoder_ids[0]);
+	struct drm_encoder *encoder;
+
+	/* There is only one encoder per connector */
+	drm_connector_for_each_possible_encoder(connector, encoder)
+		return encoder;
+
+	return NULL;
 }
 
 static void amdgpu_dm_get_native_mode(struct drm_connector *connector)
@@ -5195,11 +5201,12 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 
 	connector_type = to_drm_connector_type(link->connector_signal);
 
-	res = drm_connector_init(
+	res = drm_connector_init_with_ddc(
 			dm->ddev,
 			&aconnector->base,
 			&amdgpu_dm_connector_funcs,
-			connector_type);
+			connector_type,
+			&i2c->base);
 
 	if (res) {
 		DRM_ERROR("connector_init failed\n");

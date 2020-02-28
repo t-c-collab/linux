@@ -12,7 +12,6 @@
 #include <linux/mutex.h>
 #include <linux/wait.h>
 #include <linux/hrtimer.h>
-#include <drm/drmP.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>

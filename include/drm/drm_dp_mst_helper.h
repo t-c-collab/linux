@@ -287,7 +287,7 @@ struct drm_dp_remote_dpcd_write {
 struct drm_dp_remote_i2c_read {
 	u8 num_transactions;
 	u8 port_number;
-	struct {
+	struct drm_dp_remote_i2c_read_tx {
 		u8 i2c_dev_id;
 		u8 num_bytes;
 		u8 *bytes;
@@ -481,28 +481,32 @@ struct drm_dp_mst_topology_mgr {
 	int conn_base_id;
 
 	/**
-	 * @down_rep_recv: Message receiver state for down replies. This and
-	 * @up_req_recv are only ever access from the work item, which is
-	 * serialised.
+	 * @down_rep_recv: Message receiver state for down replies.
 	 */
 	struct drm_dp_sideband_msg_rx down_rep_recv;
 	/**
-	 * @up_req_recv: Message receiver state for up requests. This and
-	 * @down_rep_recv are only ever access from the work item, which is
-	 * serialised.
+	 * @up_req_recv: Message receiver state for up requests.
 	 */
 	struct drm_dp_sideband_msg_rx up_req_recv;
 
 	/**
-	 * @lock: protects mst state, primary, dpcd.
+	 * @lock: protects @mst_state, @mst_primary, @dpcd, and
+	 * @payload_id_table_cleared.
 	 */
 	struct mutex lock;
 
 	/**
-	 * @mst_state: If this manager is enabled for an MST capable port. False
-	 * if no MST sink/branch devices is connected.
+	 * @mst_state: If this manager is enabled for an MST capable port.
+	 * False if no MST sink/branch devices is connected.
 	 */
-	bool mst_state;
+	bool mst_state : 1;
+
+	/**
+	 * @payload_id_table_cleared: Whether or not we've cleared the payload
+	 * ID table for @mst_primary. Protected by @lock.
+	 */
+	bool payload_id_table_cleared : 1;
+
 	/**
 	 * @mst_primary: Pointer to the primary/first branch device.
 	 */

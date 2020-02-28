@@ -32,7 +32,7 @@ static int tidss_encoder_atomic_check(struct drm_encoder *encoder,
 	 * bridge timings, or from the connector's display_info if no
 	 * bridge defines the timings.
 	 */
-	for (bridge = encoder->bridge; bridge; bridge = bridge->next) {
+	drm_for_each_bridge_in_chain(encoder, bridge) {
 		if (!bridge->timings)
 			continue;
 
