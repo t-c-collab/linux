@@ -1039,7 +1039,7 @@ static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
 	.destroy = drm_connector_cleanup,
 };
 
-static int cdns_mhdp_attach(struct drm_bridge *bridge)
+static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_flags flags)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
@@ -1048,6 +1048,11 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge)
 	int ret;
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
+		DRM_ERROR("Fix bridge driver to make connector optional!");
+		return -EINVAL;
+	}
 
 	if (&mhdp->bridge != bridge)
 		return -ENODEV;
