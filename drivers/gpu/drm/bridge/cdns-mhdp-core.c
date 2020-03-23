@@ -23,7 +23,9 @@
 #include <linux/slab.h>
 #include <linux/wait.h>
 
+#include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
+#include <drm/drm_atomic_state_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc_helper.h>
@@ -1550,7 +1552,8 @@ err:
 	return -EIO;
 }
 
-static void cdns_mhdp_disable(struct drm_bridge *bridge)
+static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
+				     struct drm_bridge_state *bridge_state)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
@@ -1726,21 +1729,18 @@ error:
 	return err;
 }
 
-static void cdns_mhdp_configure_video(struct drm_bridge *bridge)
+static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
+				      const struct drm_display_mode *mode)
 {
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	unsigned int dp_framer_sp = 0, msa_horizontal_1,
 		msa_vertical_1, bnd_hsync2vsync, hsync2vsync_pol_ctrl,
 		misc0 = 0, misc1 = 0, pxl_repr,
 		front_porch, back_porch, msa_h0, msa_v0, hsync, vsync,
 		dp_vertical_1;
-	struct drm_display_mode *mode;
 	u32 bpp, bpc, pxlfmt;
 	u32 framer;
 	u8 stream_id = mhdp->stream_id;
 	int ret;
-
-	mode = &bridge->encoder->crtc->state->mode;
 
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
@@ -1900,19 +1900,17 @@ static void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
 
-static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
+static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
+				const struct drm_display_mode *mode)
 {
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
-	struct drm_display_mode *mode;
 	int pxlclock;
 	u32 bpp, bpc, pxlfmt;
 
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
 
-	mode = &bridge->encoder->crtc->state->mode;
 	pxlclock = mode->crtc_clock;
 
 	mhdp->stream_id = 0;
@@ -1966,14 +1964,20 @@ static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
 			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
 						   0 : tu_size - vs));
 
-	cdns_mhdp_configure_video(bridge);
+	cdns_mhdp_configure_video(mhdp, mode);
 
 	return 0;
 }
 
-static void cdns_mhdp_enable(struct drm_bridge *bridge)
+static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
+				    struct drm_bridge_state *bridge_state)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	struct drm_atomic_state *state = bridge_state->base.state;
+	struct drm_crtc_state *crtc_state;
+	struct drm_connector *connector;
+	struct drm_connector_state *conn_state;
+	const struct drm_display_mode *mode;
 	u32 resp;
 	int ret;
 
@@ -1995,7 +1999,22 @@ static void cdns_mhdp_enable(struct drm_bridge *bridge)
 	if (!mhdp->link_up)
 		cdns_mhdp_link_up(mhdp);
 
-	cdns_mhdp_sst_enable(bridge);
+	connector = drm_atomic_get_new_connector_for_encoder(state,
+							     bridge->encoder);
+	if (WARN_ON(!connector))
+		return;
+
+	conn_state = drm_atomic_get_new_connector_state(state, connector);
+	if (WARN_ON(!conn_state))
+		return;
+
+	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
+	if (WARN_ON(!crtc_state))
+		return;
+
+	mode = &crtc_state->adjusted_mode;
+
+	cdns_mhdp_sst_enable(mhdp, mode);
 }
 
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
@@ -2015,10 +2034,13 @@ static void cdns_mhdp_detach(struct drm_bridge *bridge)
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
-	.enable = cdns_mhdp_enable,
-	.disable = cdns_mhdp_disable,
+	.atomic_enable = cdns_mhdp_atomic_enable,
+	.atomic_disable = cdns_mhdp_atomic_disable,
 	.attach = cdns_mhdp_attach,
 	.detach = cdns_mhdp_detach,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_reset = drm_atomic_helper_bridge_reset,
 };
 
 static int mhdp_probe(struct platform_device *pdev)
