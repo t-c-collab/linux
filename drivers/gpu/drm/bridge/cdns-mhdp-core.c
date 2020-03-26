@@ -21,6 +21,7 @@
 #include <linux/phy/phy-dp.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/wait.h>
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
@@ -36,6 +37,8 @@
 #include "cdns-mhdp-core.h"
 
 #include "cdns-mhdp-j721e.h"
+
+static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 
 #ifdef CONFIG_DRM_CDNS_MHDP_J721E
 static const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
@@ -698,7 +701,7 @@ static int mhdp_fw_activate(const struct firmware *fw,
 	spin_lock(&mhdp->start_lock);
 
 	mhdp->hw_state = MHDP_HW_READY;
-
+	wake_up(&fw_load_wq);
 	/*
 	 * Here we must keep the lock while enabling the interrupts
 	 * since it would otherwise be possible that interrupt enable
@@ -2122,28 +2125,24 @@ clk_disable:
 static int mhdp_remove(struct platform_device *pdev)
 {
 	struct cdns_mhdp_device *mhdp = dev_get_drvdata(&pdev->dev);
-	unsigned int timeout = 10;
+	unsigned long timeout = msecs_to_jiffies(100);
 	bool stop_fw = false;
 	int ret = 0;
 
 	drm_bridge_remove(&mhdp->bridge);
 
-wait_loading:
-	spin_lock(&mhdp->start_lock);
-	if (mhdp->hw_state == MHDP_HW_LOADING && timeout-- > 0) {
-		spin_unlock(&mhdp->start_lock);
-		msleep(100);
-		goto wait_loading;
-	} else if (mhdp->hw_state == MHDP_HW_READY) {
+	ret = wait_event_timeout(fw_load_wq, mhdp->hw_state == MHDP_HW_READY,
+				 timeout);
+	if (ret == 0)
+		dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n",
+			__func__);
+	else
 		stop_fw = true;
-		timeout = 1; /* We were successful even if counter reached 0 */
-	}
+
+	spin_lock(&mhdp->start_lock);
 	mhdp->hw_state = MHDP_HW_STOPPED;
 	spin_unlock(&mhdp->start_lock);
 
-	if (timeout == 0)
-		dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n",
-			__func__);
 
 	if (stop_fw) {
 		ret = cdns_mhdp_set_firmware_active(mhdp, false);
