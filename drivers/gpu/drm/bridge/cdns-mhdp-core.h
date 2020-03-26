@@ -24,35 +24,36 @@ struct device;
 struct phy;
 
 /* Register offsets */
-#define CDNS_APB_CFG				0x00000
-#define CDNS_APB_CTRL				(CDNS_APB_CFG + 0x00)
+#define CDNS_APB_CTRL				0x00000
 #define CDNS_CPU_STALL				BIT(3)
 
-#define CDNS_MAILBOX_FULL			(CDNS_APB_CFG + 0x08)
-#define CDNS_MAILBOX_EMPTY			(CDNS_APB_CFG + 0x0c)
-#define CDNS_MAILBOX_TX_DATA			(CDNS_APB_CFG + 0x10)
-#define CDNS_MAILBOX_RX_DATA			(CDNS_APB_CFG + 0x14)
-#define CDNS_KEEP_ALIVE				(CDNS_APB_CFG + 0x18)
+#define CDNS_MAILBOX_FULL			0x00008
+#define CDNS_MAILBOX_EMPTY			0x0000c
+#define CDNS_MAILBOX_TX_DATA			0x00010
+#define CDNS_MAILBOX_RX_DATA			0x00014
+#define CDNS_KEEP_ALIVE				0x00018
 #define CDNS_KEEP_ALIVE_MASK			GENMASK(7, 0)
 
-#define CDNS_MB_INT_MASK			(CDNS_APB_CFG + 0x34)
-#define CDNS_MB_INT_STATUS			(CDNS_APB_CFG + 0x38)
+#define CDNS_MB_INT_MASK			0x00034
+#define CDNS_MB_INT_STATUS			0x00038
 
-#define CDNS_SW_CLK_L				(CDNS_APB_CFG + 0x3c)
-#define CDNS_SW_CLK_H				(CDNS_APB_CFG + 0x40)
-#define CDNS_SW_EVENT0				(CDNS_APB_CFG + 0x44)
+#define CDNS_SW_CLK_L				0x0003c
+#define CDNS_SW_CLK_H				0x00040
+
+#define CDNS_SW_EVENT0				0x00044
 #define CDNS_DPTX_HPD				BIT(0)
 
-#define CDNS_SW_EVENT1				(CDNS_APB_CFG + 0x48)
-#define CDNS_SW_EVENT2				(CDNS_APB_CFG + 0x4c)
-#define CDNS_SW_EVENT3				(CDNS_APB_CFG + 0x50)
+#define CDNS_SW_EVENT1				0x00048
+#define CDNS_SW_EVENT2				0x0004c
+#define CDNS_SW_EVENT3				0x00050
 
-#define CDNS_APB_INT_MASK			(CDNS_APB_CFG + 0x6C)
+#define CDNS_APB_INT_MASK			0x0006C
 #define CDNS_APB_INT_MASK_MAILBOX_INT		BIT(0)
 #define CDNS_APB_INT_MASK_SW_EVENT_INT		BIT(1)
-#define CDNS_APB_INT_STATUS			(CDNS_APB_CFG + 0x70)
 
-#define CDNS_DPTX_CAR				(CDNS_APB_CFG + 0x904)
+#define CDNS_APB_INT_STATUS			0x00070
+
+#define CDNS_DPTX_CAR				0x00904
 #define CDNS_VIF_CLK_EN				BIT(0)
 #define CDNS_VIF_CLK_RSTN			BIT(1)
 
@@ -84,8 +85,7 @@ struct phy;
 						CDNS_PHY_LANE3_SKEW(3))
 #define CDNS_PHY_10BIT_EN			BIT(21)
 
-#define CDNS_DPTX_FRAMER			0x02200
-#define CDNS_DP_FRAMER_GLOBAL_CONFIG		(CDNS_DPTX_FRAMER + 0x00)
+#define CDNS_DP_FRAMER_GLOBAL_CONFIG		0x02200
 #define CDNS_DP_NUM_LANES(x)			((x) - 1)
 #define CDNS_DP_MST_EN				BIT(2)
 #define CDNS_DP_FRAMER_EN			BIT(3)
@@ -94,10 +94,23 @@ struct phy;
 #define CDNS_DP_DISABLE_PHY_RST			BIT(6)
 #define CDNS_DP_WR_FAILING_EDGE_VSYNC		BIT(7)
 
-#define CDNS_DP_FRAMER_TU			(CDNS_DPTX_FRAMER + 0x08)
+#define CDNS_DP_FRAMER_TU			0x02208
 #define CDNS_DP_FRAMER_TU_SIZE(x)		(((x) & GENMASK(6, 0)) << 8)
 #define CDNS_DP_FRAMER_TU_VS(x)			((x) & GENMASK(5, 0))
 #define CDNS_DP_FRAMER_TU_CNT_RST_EN		BIT(15)
+
+#define CDNS_DP_MTPH_CONTROL			0x02264
+#define CDNS_DP_MTPH_ECF_EN			BIT(0)
+#define CDNS_DP_MTPH_ACT_EN			BIT(1)
+#define CDNS_DP_MTPH_LVP_EN			BIT(2)
+
+#define CDNS_DP_MTPH_STATUS			0x0226C
+#define CDNS_DP_MTPH_ACT_STATUS			BIT(0)
+
+#define CDNS_DP_LANE_EN				0x02300
+#define CDNS_DP_LANE_EN_LANES(x)		GENMASK((x) - 1, 0)
+
+#define CDNS_DP_ENHNCD				0x02304
 
 #define CDNS_DPTX_STREAM(s)			(0x03000 + (s) * 0x80)
 #define CDNS_DP_MSA_HORIZONTAL_0(s)		(CDNS_DPTX_STREAM(s) + 0x00)
@@ -135,6 +148,15 @@ struct phy;
 #define CDNS_DP_V1_VTOTAL(x)			(x)
 #define CDNS_DP_V1_VTOTAL_EVEN			BIT(16)
 
+#define CDNS_DP_MST_SLOT_ALLOCATE(s)		(CDNS_DPTX_STREAM(s) + 0x44)
+#define CDNS_DP_S_ALLOC_START_SLOT(x)		(x)
+#define CDNS_DP_S_ALLOC_END_SLOT(x)		((x) << 8)
+
+#define CDNS_DP_RATE_GOVERNING(s)		(CDNS_DPTX_STREAM(s) + 0x48)
+#define CDNS_DP_RG_TARG_AV_SLOTS_Y(x)		(x)
+#define CDNS_DP_RG_TARG_AV_SLOTS_X(x)		((x) << 4)
+#define CDNS_DP_RG_ENABLE			BIT(10)
+
 #define CDNS_DP_FRAMER_PXL_REPR(s)		(CDNS_DPTX_STREAM(s) + 0x4c)
 #define CDNS_DP_FRAMER_6_BPC			BIT(0)
 #define CDNS_DP_FRAMER_8_BPC			BIT(1)
@@ -166,32 +188,6 @@ struct phy;
 
 #define CDNS_DP_BYTE_COUNT(s)			(CDNS_DPTX_STREAM(s) + 0x7c)
 #define CDNS_DP_BYTE_COUNT_BYTES_IN_CHUNK_SHIFT	16
-
-#define CDNS_DP_MST_STREAM_CONFIG(s)		(CDNS_DPTX_STREAM(s) + 0x14)
-#define CDNS_DP_MST_STRM_CFG_STREAM_EN		BIT(0)
-#define CDNS_DP_MST_STRM_CFG_NO_VIDEO		BIT(1)
-
-#define CDNS_DP_MST_SLOT_ALLOCATE(s)		(CDNS_DPTX_STREAM(s) + 0x44)
-#define CDNS_DP_S_ALLOC_START_SLOT(x)		(x)
-#define CDNS_DP_S_ALLOC_END_SLOT(x)		((x) << 8)
-
-#define CDNS_DP_RATE_GOVERNING(s)		(CDNS_DPTX_STREAM(s) + 0x48)
-#define CDNS_DP_RG_TARG_AV_SLOTS_Y(x)		(x)
-#define CDNS_DP_RG_TARG_AV_SLOTS_X(x)		((x) << 4)
-#define CDNS_DP_RG_ENABLE			BIT(10)
-
-#define CDNS_DP_MTPH_CONTROL			0x2264
-#define CDNS_DP_MTPH_ECF_EN			BIT(0)
-#define CDNS_DP_MTPH_ACT_EN			BIT(1)
-#define CDNS_DP_MTPH_LVP_EN			BIT(2)
-
-#define CDNS_DP_MTPH_STATUS			0x226C
-#define CDNS_DP_MTPH_ACT_STATUS			BIT(0)
-
-#define CDNS_DPTX_GLOBAL			0x02300
-#define CDNS_DP_LANE_EN				(CDNS_DPTX_GLOBAL + 0x00)
-#define CDNS_DP_LANE_EN_LANES(x)		GENMASK((x) - 1, 0)
-#define CDNS_DP_ENHNCD				(CDNS_DPTX_GLOBAL + 0x04)
 
 /* mailbox */
 #define MAILBOX_RETRY_US			1000
