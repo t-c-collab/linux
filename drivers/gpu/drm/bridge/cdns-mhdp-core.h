@@ -359,6 +359,7 @@ struct cdns_mhdp_device {
 	struct cdns_mhdp_sink sink;
 	struct cdns_mhdp_display_fmt display_fmt;
 	s8 stream_id;
+	u32 framer_reg_val;
 
 	bool link_up;
 	bool plugged;
