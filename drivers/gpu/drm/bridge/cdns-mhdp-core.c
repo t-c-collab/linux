@@ -37,18 +37,9 @@
 #include <asm/unaligned.h>
 
 #include "cdns-mhdp-core.h"
-
 #include "cdns-mhdp-j721e.h"
 
 DECLARE_WAIT_QUEUE_HEAD(wait_queue_fw_state);
-#ifdef CONFIG_DRM_CDNS_MHDP_J721E
-static const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
-	.init = cdns_mhdp_j721e_init,
-	.exit = cdns_mhdp_j721e_fini,
-	.enable = cdns_mhdp_j721e_enable,
-	.disable = cdns_mhdp_j721e_disable,
-};
-#endif
 
 static inline u32 get_unaligned_be24(const void *p)
 {
