@@ -958,6 +958,31 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	return connector_status_disconnected;
 }
 
+static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
+{
+	u32 bpp;
+
+	if (fmt->y_only)
+		return fmt->bpc;
+
+	switch (fmt->color_format) {
+	case DRM_COLOR_FORMAT_RGB444:
+	case DRM_COLOR_FORMAT_YCRCB444:
+		bpp = fmt->bpc * 3;
+		break;
+	case DRM_COLOR_FORMAT_YCRCB422:
+		bpp = fmt->bpc * 2;
+		break;
+	case DRM_COLOR_FORMAT_YCRCB420:
+		bpp = fmt->bpc * 3 / 2;
+		break;
+	default:
+		bpp = fmt->bpc * 3;
+		WARN_ON(1);
+	}
+	return bpp;
+}
+
 static
 bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 			    const struct drm_display_mode *mode,
@@ -1572,7 +1597,7 @@ static void mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
 	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,num-lanes",
 				       &lanes_prop);
 	if (ret)
-		mhdp->host.lanes_cnt = CDNS_LANE_4;
+		mhdp->host.lanes_cnt = 4;
 	else
 		mhdp->host.lanes_cnt = lanes_prop;
 
@@ -1693,103 +1718,7 @@ error:
 	return err;
 }
 
-u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
-{
-	u32 bpp;
-
-	if (fmt->y_only)
-		return fmt->bpc;
-
-	switch (fmt->color_format) {
-	case DRM_COLOR_FORMAT_RGB444:
-	case DRM_COLOR_FORMAT_YCRCB444:
-		bpp = fmt->bpc * 3;
-		break;
-	case DRM_COLOR_FORMAT_YCRCB422:
-		bpp = fmt->bpc * 2;
-		break;
-	case DRM_COLOR_FORMAT_YCRCB420:
-		bpp = fmt->bpc * 3 / 2;
-		break;
-	default:
-		bpp = fmt->bpc * 3;
-		WARN_ON(1);
-	}
-	return bpp;
-}
-
-static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
-{
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
-	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
-	struct drm_display_mode *mode;
-	int pxlclock;
-	u32 bpp, bpc, pxlfmt;
-
-	pxlfmt = mhdp->display_fmt.color_format;
-	bpc = mhdp->display_fmt.bpc;
-
-	mode = &bridge->encoder->crtc->state->mode;
-	pxlclock = mode->crtc_clock;
-
-	mhdp->stream_id = 0;
-
-	rate = mhdp->link.rate / 1000;
-
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
-
-	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
-				    mhdp->link.rate)) {
-		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
-			__func__, mode->name, mhdp->link.num_lanes,
-			mhdp->link.rate / 100);
-		return -EINVAL;
-	}
-
-	/* find optimal tu_size */
-	required_bandwidth = pxlclock * bpp / 8;
-	available_bandwidth = mhdp->link.num_lanes * rate;
-	do {
-		tu_size += 2;
-
-		vs_f = tu_size * required_bandwidth / available_bandwidth;
-		vs = vs_f / 1000;
-		vs_f = vs_f % 1000;
-		/* Downspreading is unused currently */
-	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
-		  tu_size - vs < 2) && tu_size < 64);
-
-	if (vs > 64) {
-		dev_err(mhdp->dev,
-			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
-			__func__, mode->name, mhdp->link.num_lanes,
-			mhdp->link.rate / 100);
-		return -EINVAL;
-	}
-
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
-			    CDNS_DP_FRAMER_TU_VS(vs) |
-			    CDNS_DP_FRAMER_TU_SIZE(tu_size) |
-			    CDNS_DP_FRAMER_TU_CNT_RST_EN);
-
-	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
-	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
-	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
-	line_thresh = (line_thresh >> 5) + 2;
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_LINE_THRESH(0),
-			    line_thresh & GENMASK(5, 0));
-
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_STREAM_CONFIG_2(0),
-			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
-						   0 : tu_size - vs));
-
-	cdns_mhdp_configure_video(bridge);
-
-	return 0;
-}
-
-void cdns_mhdp_configure_video(struct drm_bridge *bridge)
+static void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	unsigned int dp_framer_sp = 0, msa_horizontal_1,
@@ -1956,7 +1885,78 @@ void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
 
-void cdns_mhdp_enable(struct drm_bridge *bridge)
+static int cdns_mhdp_sst_enable(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
+	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
+	struct drm_display_mode *mode;
+	int pxlclock;
+	u32 bpp, bpc, pxlfmt;
+
+	pxlfmt = mhdp->display_fmt.color_format;
+	bpc = mhdp->display_fmt.bpc;
+
+	mode = &bridge->encoder->crtc->state->mode;
+	pxlclock = mode->crtc_clock;
+
+	mhdp->stream_id = 0;
+
+	rate = mhdp->link.rate / 1000;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate)) {
+		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
+		return -EINVAL;
+	}
+
+	/* find optimal tu_size */
+	required_bandwidth = pxlclock * bpp / 8;
+	available_bandwidth = mhdp->link.num_lanes * rate;
+	do {
+		tu_size += 2;
+
+		vs_f = tu_size * required_bandwidth / available_bandwidth;
+		vs = vs_f / 1000;
+		vs_f = vs_f % 1000;
+		/* Downspreading is unused currently */
+	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
+		  tu_size - vs < 2) && tu_size < 64);
+
+	if (vs > 64) {
+		dev_err(mhdp->dev,
+			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
+		return -EINVAL;
+	}
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
+			    CDNS_DP_FRAMER_TU_VS(vs) |
+			    CDNS_DP_FRAMER_TU_SIZE(tu_size) |
+			    CDNS_DP_FRAMER_TU_CNT_RST_EN);
+
+	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
+	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
+	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
+	line_thresh = (line_thresh >> 5) + 2;
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_LINE_THRESH(0),
+			    line_thresh & GENMASK(5, 0));
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_STREAM_CONFIG_2(0),
+			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
+						   0 : tu_size - vs));
+
+	cdns_mhdp_configure_video(bridge);
+
+	return 0;
+}
+
+static void cdns_mhdp_enable(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
