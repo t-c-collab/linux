@@ -746,6 +746,8 @@ static void mhdp_fw_cb(const struct firmware *fw, void *context)
 
 	dev_dbg(mhdp->dev, "firmware callback\n");
 
+	pm_runtime_get_sync(mhdp->dev);
+
 	ret = mhdp_fw_activate(fw, mhdp);
 
 	release_firmware(fw);
@@ -766,6 +768,8 @@ static void mhdp_fw_cb(const struct firmware *fw, void *context)
 	spin_unlock(&mhdp->start_lock);
 	if (bridge_attached)
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+
+	pm_runtime_put_sync(mhdp->dev);
 }
 
 static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
@@ -1589,6 +1593,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	if (mhdp->ops && mhdp->ops->disable)
 		mhdp->ops->disable(mhdp);
+
+	pm_runtime_put_sync(mhdp->dev);
 }
 
 static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
@@ -1946,6 +1952,8 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
+	pm_runtime_get_sync(mhdp->dev);
+
 	if (mhdp->ops && mhdp->ops->enable)
 		mhdp->ops->enable(mhdp);
 
@@ -2068,6 +2076,33 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.detach = cdns_mhdp_detach,
 };
 
+static int __maybe_unused cdns_mhdp_runtime_resume(struct device *dev)
+{
+	int ret;
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+
+	ret = clk_prepare_enable(mhdp->clk);
+	if (ret)
+		dev_err(mhdp->dev, "%s: enabling clk failed: %d\n", __func__,
+			ret);
+
+	return ret;
+}
+
+static int __maybe_unused cdns_mhdp_runtime_suspend(struct device *dev)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+
+	clk_disable_unprepare(mhdp->clk);
+
+	return 0;
+}
+
+#ifdef CONFIG_PM
+static UNIVERSAL_DEV_PM_OPS(cdns_mhdp_pm_ops, cdns_mhdp_runtime_suspend,
+			    cdns_mhdp_runtime_resume, NULL);
+#endif
+
 static int mhdp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2112,15 +2147,15 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	mhdp->ops = of_device_get_match_data(dev);
 
-	clk_prepare_enable(clk);
+	ret = clk_prepare_enable(clk);
+	if (ret) {
+		dev_err(mhdp->dev, "%s: enabling clk failed: %d\n", __func__,
+			ret);
+		return ret;
+	}
+
 
 	pm_runtime_enable(dev);
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0) {
-		dev_err(dev, "pm_runtime_get_sync failed\n");
-		pm_runtime_disable(dev);
-		goto clk_disable;
-	}
 
 	if (mhdp->ops && mhdp->ops->init) {
 		ret = mhdp->ops->init(mhdp);
@@ -2171,6 +2206,8 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	drm_bridge_add(&mhdp->bridge);
 
+	clk_disable_unprepare(mhdp->clk);
+
 	return 0;
 
 phy_exit:
@@ -2179,9 +2216,7 @@ plat_fini:
 	if (mhdp->ops && mhdp->ops->exit)
 		mhdp->ops->exit(mhdp);
 runtime_put:
-	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
-clk_disable:
 	clk_disable_unprepare(mhdp->clk);
 
 	return ret;
@@ -2221,10 +2256,7 @@ static int mhdp_remove(struct platform_device *pdev)
 	if (mhdp->ops && mhdp->ops->exit)
 		mhdp->ops->exit(mhdp);
 
-	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
-
-	clk_disable_unprepare(mhdp->clk);
 
 	return ret;
 }
@@ -2243,6 +2275,9 @@ static struct platform_driver mhdp_driver = {
 	.driver	= {
 		.name		= "cdns-mhdp",
 		.of_match_table	= of_match_ptr(mhdp_ids),
+#ifdef CONFIG_PM
+		.pm		= &cdns_mhdp_pm_ops,
+#endif
 	},
 	.probe	= mhdp_probe,
 	.remove	= mhdp_remove,
