@@ -11,9 +11,17 @@
 #ifndef CDNS_MHDP_CORE_H
 #define CDNS_MHDP_CORE_H
 
+#include <linux/bits.h>
+#include <linux/mutex.h>
+#include <linux/spinlock.h>
+
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_dp_helper.h>
+
+struct clk;
+struct device;
+struct phy;
 
 /* Register offsets */
 #define CDNS_APB_CFG				0x00000
@@ -245,10 +253,6 @@
 
 #define CDNS_KEEP_ALIVE_TIMEOUT			2000
 
-#define CDNS_LANE_1				1
-#define CDNS_LANE_2				2
-#define CDNS_LANE_4				4
-
 #define CDNS_VOLT_SWING(x)			((x) & GENMASK(1, 0))
 #define CDNS_FORCE_VOLT_SWING			BIT(2)
 
@@ -271,9 +275,6 @@
 #define CDNS_DP_TEST_COLOR_FORMAT_RAW_Y_ONLY	BIT(7)
 
 #define CDNS_MHDP_MAX_STREAMS   4
-
-#define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
-#define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
 
 #define DP_LINK_CAP_ENHANCED_FRAMING BIT(0)
 
@@ -319,10 +320,12 @@ struct cdns_mhdp_display_fmt {
  *        |                                     |
  *        '----------> MHDP_HW_STOPPED <--------'
  */
-enum mhdp_hw_state { MHDP_HW_INACTIVE = 0, /* HW not initialized */
-		     MHDP_HW_LOADING,	   /* HW initialization in progress */
-		     MHDP_HW_READY,	   /* HW ready, FW active*/
-		     MHDP_HW_STOPPED };	   /* Driver removal FW to be stopped */
+enum mhdp_hw_state {
+	MHDP_HW_INACTIVE = 0,	/* HW not initialized */
+	MHDP_HW_LOADING,	/* HW initialization in progress */
+	MHDP_HW_READY,		/* HW ready, FW active*/
+	MHDP_HW_STOPPED		/* Driver removal FW to be stopped */
+};
 
 struct cdns_mhdp_device;
 
@@ -373,8 +376,7 @@ struct cdns_mhdp_device {
 	enum mhdp_hw_state hw_state;
 };
 
-u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt);
-void cdns_mhdp_configure_video(struct drm_bridge *bridge);
-void cdns_mhdp_enable(struct drm_bridge *bridge);
+#define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
+#define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
 
 #endif
