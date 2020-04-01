@@ -332,6 +332,13 @@ struct mhdp_platform_ops {
 	void (*disable)(struct cdns_mhdp_device *mhdp);
 };
 
+struct cdns_mhdp_bridge_state {
+	u32 tu_size;
+	u32 vs;
+	u32 line_thresh;
+	struct drm_bridge_state *state;
+};
+
 struct cdns_mhdp_device {
 	void __iomem *regs;
 	void __iomem *j721e_regs;
@@ -353,6 +360,7 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;
+	struct cdns_mhdp_bridge_state *bridge_state;
 	struct cdns_mhdp_display_fmt display_fmt;
 	s8 stream_id;
 	u32 framer_reg_val;
