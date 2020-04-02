@@ -35,7 +35,7 @@ config DRM_CDNS_MHDP
 	help
 	  Support Cadence DPI to DP bridge. This is an internal
 	  bridge and is meant to be directly embedded in a SoC.
-	  It takes a DPI stream as input and output it encoded
+	  It takes a DPI stream as input and outputs it encoded
 	  in DP format.
 
 if DRM_CDNS_MHDP
