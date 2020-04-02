@@ -1567,6 +1567,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
+	int ret;
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
@@ -1700,7 +1701,13 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
 
 	/* Disable framer for link training */
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	err = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	if (err < 0) {
+		dev_err(mhdp->dev,
+			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
+			err);
+		return err;
+	}
 	resp &= ~CDNS_DP_FRAMER_EN;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 	mhdp->framer_reg_val = resp;
@@ -1935,6 +1942,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	const struct drm_display_mode *mode;
 	u32 resp;
+	int ret;
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
@@ -1942,7 +1950,11 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 		mhdp->ops->enable(mhdp);
 
 	/* Enable VIF clock for stream 0 */
-	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		return;
+	}
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
 
