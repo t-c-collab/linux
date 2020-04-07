@@ -1463,6 +1463,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 {
 	u32 reg32;
 	const u8 eq_tps = mhdp_eq_training_pattern_supported(mhdp);
+	int ret;
 
 	while (1) {
 		if (!mhdp_link_training_cr(mhdp)) {
@@ -1517,7 +1518,13 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			   mhdp->host.scrambler ? 0 :
 			   DP_LINK_SCRAMBLING_DISABLE);
 
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &reg32);
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &reg32);
+	if (ret < 0) {
+		dev_err(mhdp->dev,
+			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
+			ret);
+		return ret;
+	}
 	reg32 &= ~GENMASK(1, 0);
 	reg32 |= CDNS_DP_NUM_LANES(mhdp->link.num_lanes);
 	reg32 |= CDNS_DP_WR_FAILING_EDGE_VSYNC;
@@ -1679,7 +1686,14 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
 
 	/* Disable framer for link training */
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	err = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	if (err < 0) {
+		dev_err(mhdp->dev,
+			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
+			err);
+		return err;
+	}
+
 	resp &= ~CDNS_DP_FRAMER_EN;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
@@ -1724,6 +1738,7 @@ static void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 	u32 bpp, bpc, pxlfmt;
 	u32 framer;
 	u8 stream_id = mhdp->stream_id;
+	int ret;
 
 	mode = &bridge->encoder->crtc->state->mode;
 
@@ -1873,7 +1888,13 @@ static void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 				(mode->flags & DRM_MODE_FLAG_INTERLACE) ?
 				CDNS_DP_VB_ID_INTERLACED : 0);
 
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
+	if (ret < 0) {
+		dev_err(mhdp->dev,
+			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
+			ret);
+		return;
+	}
 	framer |= CDNS_DP_FRAMER_EN;
 	framer &= ~CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
@@ -1954,6 +1975,7 @@ static void cdns_mhdp_enable(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
+	int ret;
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
@@ -1961,7 +1983,12 @@ static void cdns_mhdp_enable(struct drm_bridge *bridge)
 		mhdp->ops->enable(mhdp);
 
 	/* Enable VIF clock for stream 0 */
-	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		return;
+	}
+
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
 
