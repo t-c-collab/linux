@@ -1809,6 +1809,8 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				ret = -EINVAL;
 				goto put_child;
 			}
+			phy_set_bus_width(cdns_phy->phys[node].phy,
+					  cdns_phy->phys[node].num_lanes);
 
 			cdns_phy->max_bit_rate = DEFAULT_MAX_BIT_RATE;
 			of_property_read_u32(child, "cdns,max-bit-rate",
@@ -1831,6 +1833,8 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				ret = -EINVAL;
 				goto put_child;
 			}
+			phy_set_link_rate(cdns_phy->phys[node].phy,
+					  cdns_phy->max_bit_rate);
 
 			/* DPTX registers */
 			regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
