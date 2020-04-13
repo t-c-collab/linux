@@ -1919,14 +1919,6 @@ static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 
 	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
 
-	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
-				    mhdp->link.rate)) {
-		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
-			__func__, mode->name, mhdp->link.num_lanes,
-			mhdp->link.rate / 100);
-		return -EINVAL;
-	}
-
 	/* find optimal tu_size */
 	required_bandwidth = pxlclock * bpp / 8;
 	available_bandwidth = mhdp->link.num_lanes * rate;
@@ -2033,9 +2025,31 @@ static void cdns_mhdp_detach(struct drm_bridge *bridge)
 	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
 }
 
+static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
+				  struct drm_bridge_state *bridge_state,
+				  struct drm_crtc_state *crtc_state,
+				  struct drm_connector_state *conn_state)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+
+	if (mhdp->link_up) {
+		if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+					    mhdp->link.rate)) {
+			dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
+				__func__, mode->name, mhdp->link.num_lanes,
+				mhdp->link.rate / 100);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_atomic_disable,
+	.atomic_check = cdns_mhdp_atomic_check,
 	.attach = cdns_mhdp_attach,
 	.detach = cdns_mhdp_detach,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
