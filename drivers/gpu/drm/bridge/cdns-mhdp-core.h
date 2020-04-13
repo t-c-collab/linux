@@ -325,6 +325,16 @@ struct mhdp_platform_ops {
 	void (*disable)(struct cdns_mhdp_device *mhdp);
 };
 
+struct cdns_mhdp_bridge_state {
+	struct drm_bridge_state base;
+	u32 tu_size;
+	u32 vs;
+	u32 line_thresh;
+};
+
+#define to_cdns_mhdp_bridge_state(s) \
+		container_of(s, struct cdns_mhdp_bridge_state, base)
+
 struct cdns_mhdp_device {
 	void __iomem *regs;
 	void __iomem *j721e_regs;

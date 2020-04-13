@@ -41,6 +41,7 @@
 #include "cdns-mhdp-j721e.h"
 
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
+static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
@@ -939,12 +940,17 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	ret = cdns_mhdp_get_hpd_status(mhdp);
 	if (ret > 0) {
 		mhdp->plugged = true;
+
+		if (!mhdp->link_up)
+			cdns_mhdp_link_up(mhdp);
+
 		return connector_status_connected;
 	}
 	if (ret < 0)
 		dev_err(mhdp->dev, "Failed to obtain HPD state\n");
 
 	mhdp->plugged = false;
+	mhdp->link_up = false;
 
 	return connector_status_disconnected;
 }
@@ -1559,8 +1565,6 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	resp |= CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
-	mhdp->link_up = false;
-
 	if (mhdp->plugged)
 		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
 
@@ -1888,13 +1892,151 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 }
 
 static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
-				const struct drm_display_mode *mode)
+				const struct drm_display_mode *mode,
+				struct drm_bridge_state *bridge_state)
 {
+	u32 vs, tu_size, line_thresh = 0;
+	struct cdns_mhdp_bridge_state *state;
+
+	state = to_cdns_mhdp_bridge_state(bridge_state);
+
+	vs = state->vs;
+	tu_size = state->tu_size;
+	line_thresh = state->line_thresh;
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
+			    CDNS_DP_FRAMER_TU_VS(vs) |
+			    CDNS_DP_FRAMER_TU_SIZE(tu_size) |
+			    CDNS_DP_FRAMER_TU_CNT_RST_EN);
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_LINE_THRESH(0),
+			    line_thresh & GENMASK(5, 0));
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_STREAM_CONFIG_2(0),
+			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
+						   0 : tu_size - vs));
+
+	cdns_mhdp_configure_video(mhdp, mode);
+
+	return 0;
+}
+
+static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
+				    struct drm_bridge_state *bridge_state)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	struct drm_atomic_state *state = bridge_state->base.state;
+	struct drm_crtc_state *crtc_state;
+	struct drm_connector *connector;
+	struct drm_connector_state *conn_state;
+	struct drm_bridge_state *new_state;
+	const struct drm_display_mode *mode;
+	u32 resp;
+	int ret;
+
+	dev_dbg(mhdp->dev, "bridge enable\n");
+
+	if (mhdp->ops && mhdp->ops->enable)
+		mhdp->ops->enable(mhdp);
+
+	/* Enable VIF clock for stream 0 */
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		return;
+	}
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
+
+	connector = drm_atomic_get_new_connector_for_encoder(state,
+							     bridge->encoder);
+	if (WARN_ON(!connector))
+		return;
+
+	conn_state = drm_atomic_get_new_connector_state(state, connector);
+	if (WARN_ON(!conn_state))
+		return;
+
+	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
+	if (WARN_ON(!crtc_state))
+		return;
+
+	mode = &crtc_state->adjusted_mode;
+
+	new_state = drm_atomic_get_new_bridge_state(state, bridge);
+	if (WARN_ON(!new_state))
+		return;
+
+	cdns_mhdp_sst_enable(mhdp, mode, new_state);
+}
+
+static void cdns_mhdp_detach(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	spin_lock(&mhdp->start_lock);
+
+	mhdp->bridge_attached = false;
+
+	spin_unlock(&mhdp->start_lock);
+
+	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
+}
+
+static struct drm_bridge_state *
+cdns_mhdp_bridge_atomic_duplicate_state(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_bridge_state *state;
+
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if (!state)
+		return NULL;
+
+	__drm_atomic_helper_bridge_duplicate_state(bridge, &state->base);
+
+	return &state->base;
+}
+
+static void
+cdns_mhdp_bridge_atomic_destroy_state(struct drm_bridge *bridge,
+				      struct drm_bridge_state *state)
+{
+	struct cdns_mhdp_bridge_state *cdns_mhdp_state;
+
+	cdns_mhdp_state = to_cdns_mhdp_bridge_state(state);
+
+	kfree(cdns_mhdp_state);
+}
+
+static struct drm_bridge_state *
+cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_bridge_state *cdns_mhdp_state;
+
+	cdns_mhdp_state = kzalloc(sizeof(*cdns_mhdp_state), GFP_KERNEL);
+
+	 __drm_atomic_helper_bridge_reset(bridge, &cdns_mhdp_state->base);
+
+	return &cdns_mhdp_state->base;
+}
+
+static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
+				  struct drm_bridge_state *bridge_state,
+				  struct drm_crtc_state *crtc_state,
+				  struct drm_connector_state *conn_state)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	struct cdns_mhdp_bridge_state *state;
+	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	int pxlclock;
 	u32 bpp, bpc, pxlfmt;
 
+	state = to_cdns_mhdp_bridge_state(bridge_state);
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
 
@@ -1925,7 +2067,7 @@ static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 		vs_f = vs_f % 1000;
 		/* Downspreading is unused currently */
 	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
-		  tu_size - vs < 2) && tu_size < 64);
+		 tu_size - vs < 2) && tu_size < 64);
 
 	if (vs > 64) {
 		dev_err(mhdp->dev,
@@ -1935,98 +2077,27 @@ static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 		return -EINVAL;
 	}
 
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
-			    CDNS_DP_FRAMER_TU_VS(vs) |
-			    CDNS_DP_FRAMER_TU_SIZE(tu_size) |
-			    CDNS_DP_FRAMER_TU_CNT_RST_EN);
-
 	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
 	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
 	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
 	line_thresh = (line_thresh >> 5) + 2;
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_LINE_THRESH(0),
-			    line_thresh & GENMASK(5, 0));
 
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_STREAM_CONFIG_2(0),
-			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
-						   0 : tu_size - vs));
-
-	cdns_mhdp_configure_video(mhdp, mode);
+	state->vs = vs;
+	state->tu_size = tu_size;
+	state->line_thresh = line_thresh;
 
 	return 0;
-}
-
-static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
-				    struct drm_bridge_state *bridge_state)
-{
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	struct drm_atomic_state *state = bridge_state->base.state;
-	struct drm_crtc_state *crtc_state;
-	struct drm_connector *connector;
-	struct drm_connector_state *conn_state;
-	const struct drm_display_mode *mode;
-	u32 resp;
-	int ret;
-
-	dev_dbg(mhdp->dev, "bridge enable\n");
-
-	if (mhdp->ops && mhdp->ops->enable)
-		mhdp->ops->enable(mhdp);
-
-	/* Enable VIF clock for stream 0 */
-	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
-	if (ret < 0) {
-		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
-		return;
-	}
-
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
-
-	if (!mhdp->link_up)
-		cdns_mhdp_link_up(mhdp);
-
-	connector = drm_atomic_get_new_connector_for_encoder(state,
-							     bridge->encoder);
-	if (WARN_ON(!connector))
-		return;
-
-	conn_state = drm_atomic_get_new_connector_state(state, connector);
-	if (WARN_ON(!conn_state))
-		return;
-
-	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
-	if (WARN_ON(!crtc_state))
-		return;
-
-	mode = &crtc_state->adjusted_mode;
-
-	cdns_mhdp_sst_enable(mhdp, mode);
-}
-
-static void cdns_mhdp_detach(struct drm_bridge *bridge)
-{
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-
-	dev_dbg(mhdp->dev, "%s\n", __func__);
-
-	spin_lock(&mhdp->start_lock);
-
-	mhdp->bridge_attached = false;
-
-	spin_unlock(&mhdp->start_lock);
-
-	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_atomic_disable,
+	.atomic_check = cdns_mhdp_atomic_check,
 	.attach = cdns_mhdp_attach,
 	.detach = cdns_mhdp_detach,
-	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
-	.atomic_reset = drm_atomic_helper_bridge_reset,
+	.atomic_duplicate_state = cdns_mhdp_bridge_atomic_duplicate_state,
+	.atomic_destroy_state = cdns_mhdp_bridge_atomic_destroy_state,
+	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 };
 
 static int mhdp_probe(struct platform_device *pdev)
