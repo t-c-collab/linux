@@ -291,25 +291,25 @@ struct cdns_mhdp_host {
 	u8 pre_emphasis;
 	u8 pattern_supp;
 	u8 lane_mapping;
-	u8 fast_link : 1;
-	u8 enhanced : 1;
-	u8 scrambler : 1;
-	u8 ssc : 1;
+	bool fast_link;
+	bool enhanced;
+	bool scrambler;
+	bool ssc;
 };
 
 struct cdns_mhdp_sink {
 	unsigned int link_rate;
 	u8 lanes_cnt;
 	u8 pattern_supp;
-	u8 fast_link : 1;
-	u8 enhanced : 1;
-	u8 ssc : 1;
+	bool fast_link;
+	bool enhanced;
+	bool ssc;
 };
 
 struct cdns_mhdp_display_fmt {
 	u32 color_format;
 	u32 bpc;
-	u8 y_only : 1;
+	bool y_only;
 };
 
 /*
@@ -357,8 +357,8 @@ struct cdns_mhdp_device {
 	struct cdns_mhdp_display_fmt display_fmt;
 	s8 stream_id;
 
-	u8 link_up : 1;
-	u8 plugged : 1;
+	bool link_up;
+	bool plugged;
 
 	/*
 	 * "start_lock" protects the access to bridge_attached and
@@ -369,9 +369,8 @@ struct cdns_mhdp_device {
 	 * setting needs to be protected when enabling the FW.
 	 */
 	spinlock_t start_lock;
-	u8 bridge_attached : 1;
+	bool bridge_attached;
 	enum mhdp_hw_state hw_state;
-	enum drm_bus_flags conn_bus_flags_defaults;
 };
 
 u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt);
