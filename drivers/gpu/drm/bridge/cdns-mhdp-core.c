@@ -17,10 +17,9 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/of_irq.h>
-#include <linux/platform_device.h>
 #include <linux/phy/phy.h>
 #include <linux/phy/phy-dp.h>
+#include <linux/platform_device.h>
 #include <linux/slab.h>
 
 #include <drm/drm_atomic_helper.h>
@@ -47,23 +46,14 @@ static const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
 };
 #endif
 
-static const struct of_device_id mhdp_ids[] = {
-	{ .compatible = "cdns,mhdp8546", },
-#ifdef CONFIG_DRM_CDNS_MHDP_J721E
-	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
-#endif
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(of, mhdp_ids);
-
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
-	int val, ret;
+	int ret, empty;
 
 	WARN_ON(!mutex_is_locked(&mhdp->mbox_mutex));
 
 	ret = readx_poll_timeout(readl, mhdp->regs + CDNS_MAILBOX_EMPTY,
-				 val, !val, MAILBOX_RETRY_US,
+				 empty, !empty, MAILBOX_RETRY_US,
 				 MAILBOX_TIMEOUT_US);
 	if (ret < 0)
 		return ret;
@@ -170,11 +160,6 @@ int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 {
 	u8 msg[4], resp[8];
 	int ret;
-
-	if (addr == 0) {
-		ret = -EINVAL;
-		goto err_reg_read;
-	}
 
 	put_unaligned_be32(addr, msg);
 
@@ -637,7 +622,7 @@ static unsigned int mhdp_max_link_rate(struct cdns_mhdp_device *mhdp)
 
 static u8 mhdp_max_num_lanes(struct cdns_mhdp_device *mhdp)
 {
-	return min_t(u8, mhdp->sink.lanes_cnt, mhdp->host.lanes_cnt);
+	return min(mhdp->sink.lanes_cnt, mhdp->host.lanes_cnt);
 }
 
 static u8 mhdp_eq_training_pattern_supported(struct cdns_mhdp_device *mhdp)
@@ -772,7 +757,7 @@ static void mhdp_fw_cb(const struct firmware *fw, void *context)
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
 }
 
-static int load_firmware(struct cdns_mhdp_device *mhdp)
+static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 {
 	int ret;
 
@@ -1057,9 +1042,9 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_fl
 	if (ret)
 		return ret;
 
-	conn->display_info.bus_flags = mhdp->conn_bus_flags_defaults;
+	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
 
-	if (!(strcmp(mhdp_ids->compatible, "ti,j721e-mhdp8546")))
+	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
 	/*
 	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
 	 * in the display controller. This is achieved for the time being
@@ -1328,24 +1313,23 @@ static void mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
 			     u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
 			     u8 *req_pre)
 {
-	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing),
-		 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
+	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
+	const u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
 	bool same_pre, same_volt;
 	unsigned int i;
+	u8 adjust;
 
 	*same_before_adjust = false;
 	*max_swing_reached = false;
 	*cr_done = drm_dp_clock_recovery_ok(after_cr, mhdp->link.num_lanes);
 
 	for (i = 0; i < mhdp->link.num_lanes; i++) {
-		u8 tmp;
+		adjust = drm_dp_get_adjust_request_voltage(after_cr, i);
+		req_volt[i] = min(adjust, max_volt);
 
-		tmp = drm_dp_get_adjust_request_voltage(after_cr, i);
-		req_volt[i] = min_t(u8, tmp, max_volt);
-
-		tmp = drm_dp_get_adjust_request_pre_emphasis(after_cr, i) >>
+		adjust = drm_dp_get_adjust_request_pre_emphasis(after_cr, i) >>
 		      DP_TRAIN_PRE_EMPHASIS_SHIFT;
-		req_pre[i] = min_t(u8, tmp, max_pre);
+		req_pre[i] = min(adjust, max_pre);
 
 		same_pre = (before_cr[i] & DP_TRAIN_PRE_EMPHASIS_MASK) ==
 			   req_pre[i] << DP_TRAIN_PRE_EMPHASIS_SHIFT;
@@ -1578,6 +1562,41 @@ static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
 	return 0;
 }
 
+static void mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
+{
+	int ret;
+	u32 lanes_prop;
+	unsigned int link_rate;
+
+	/* Read source capabilities, based on PHY's device tree properties. */
+	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,num-lanes",
+				       &lanes_prop);
+	if (ret)
+		mhdp->host.lanes_cnt = CDNS_LANE_4;
+	else
+		mhdp->host.lanes_cnt = lanes_prop;
+
+	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,max-bit-rate",
+				       &link_rate);
+	if (ret)
+		link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
+	else
+		/* PHY uses Mb/s, DRM uses tens of kb/s. */
+		link_rate *= 100;
+
+	mhdp->host.link_rate = link_rate;
+	mhdp->host.volt_swing = CDNS_VOLT_SWING(3);
+	mhdp->host.pre_emphasis = CDNS_PRE_EMPHASIS(3);
+	mhdp->host.pattern_supp = CDNS_SUPPORT_TPS(1) |
+				  CDNS_SUPPORT_TPS(2) | CDNS_SUPPORT_TPS(3) |
+				  CDNS_SUPPORT_TPS(4);
+	mhdp->host.lane_mapping = CDNS_LANE_MAPPING_NORMAL;
+	mhdp->host.fast_link = false;
+	mhdp->host.enhanced = true;
+	mhdp->host.scrambler = true;
+	mhdp->host.ssc = false;
+}
+
 static void mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
 				u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
@@ -1780,7 +1799,7 @@ void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 		dp_vertical_1;
 	struct drm_display_mode *mode;
 	u32 bpp, bpc, pxlfmt;
-	u32 tmp;
+	u32 framer;
 	u8 stream_id = mhdp->stream_id;
 
 	mode = &bridge->encoder->crtc->state->mode;
@@ -1931,10 +1950,10 @@ void cdns_mhdp_configure_video(struct drm_bridge *bridge)
 				(mode->flags & DRM_MODE_FLAG_INTERLACE) ?
 				CDNS_DP_VB_ID_INTERLACED : 0);
 
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &tmp);
-	tmp |= CDNS_DP_FRAMER_EN;
-	tmp &= ~CDNS_DP_NO_VIDEO_MODE;
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, tmp);
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
+	framer |= CDNS_DP_FRAMER_EN;
+	framer &= ~CDNS_DP_NO_VIDEO_MODE;
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
 
 void cdns_mhdp_enable(struct drm_bridge *bridge)
@@ -1983,70 +2002,63 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 
 static int mhdp_probe(struct platform_device *pdev)
 {
-	const struct of_device_id *match;
-	struct resource *regs;
+	struct device *dev = &pdev->dev;
 	struct cdns_mhdp_device *mhdp;
 	struct clk *clk;
 	int ret;
 	unsigned long rate;
 	int irq;
-	u32 lanes_prop;
-	unsigned int link_rate;
 
-	mhdp = devm_kzalloc(&pdev->dev, sizeof(struct cdns_mhdp_device),
+	mhdp = devm_kzalloc(dev, sizeof(struct cdns_mhdp_device),
 			    GFP_KERNEL);
 	if (!mhdp)
 		return -ENOMEM;
 
-	clk = devm_clk_get(&pdev->dev, NULL);
+	clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(clk)) {
-		dev_err(&pdev->dev, "couldn't get clk: %ld\n", PTR_ERR(clk));
+		dev_err(dev, "couldn't get clk: %ld\n", PTR_ERR(clk));
 		return PTR_ERR(clk);
 	}
 
 	mhdp->clk = clk;
-	mhdp->dev = &pdev->dev;
-	mhdp->conn_bus_flags_defaults = DRM_BUS_FLAG_DE_HIGH;
+	mhdp->dev = dev;
 	mutex_init(&mhdp->mbox_mutex);
 	spin_lock_init(&mhdp->start_lock);
-	dev_set_drvdata(&pdev->dev, mhdp);
 
 	drm_dp_aux_init(&mhdp->aux);
-	mhdp->aux.dev = &pdev->dev;
+	mhdp->aux.dev = dev;
 	mhdp->aux.transfer = mhdp_transfer;
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	mhdp->regs = devm_ioremap_resource(&pdev->dev, regs);
-	if (IS_ERR(mhdp->regs))
+	mhdp->regs = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(mhdp->regs)) {
+		dev_err(dev, "Failed to get memory resource\n");
 		return PTR_ERR(mhdp->regs);
+	}
 
-	mhdp->phy = devm_of_phy_get_by_index(&pdev->dev, pdev->dev.of_node, 0);
+	mhdp->phy = devm_of_phy_get_by_index(dev, pdev->dev.of_node, 0);
 	if (IS_ERR(mhdp->phy)) {
-		dev_err(&pdev->dev, "no PHY configured\n");
+		dev_err(dev, "no PHY configured\n");
 		return PTR_ERR(mhdp->phy);
 	}
 
 	platform_set_drvdata(pdev, mhdp);
 
+	mhdp->ops = of_device_get_match_data(dev);
+
 	clk_prepare_enable(clk);
 
-	match = of_match_device(mhdp_ids, &pdev->dev);
-	if (!match)
-		return -ENODEV;
-	mhdp->ops = (struct mhdp_platform_ops *)match->data;
-
-	pm_runtime_enable(&pdev->dev);
-	ret = pm_runtime_get_sync(&pdev->dev);
+	pm_runtime_enable(dev);
+	ret = pm_runtime_get_sync(dev);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "pm_runtime_get_sync failed\n");
-		pm_runtime_disable(&pdev->dev);
+		dev_err(dev, "pm_runtime_get_sync failed\n");
+		pm_runtime_disable(dev);
 		goto clk_disable;
 	}
 
 	if (mhdp->ops && mhdp->ops->init) {
 		ret = mhdp->ops->init(mhdp);
 		if (ret != 0) {
-			dev_err(&pdev->dev, "MHDP platform initialization failed: %d\n",
+			dev_err(dev, "MHDP platform initialization failed: %d\n",
 				ret);
 			goto runtime_put;
 		}
@@ -2056,7 +2068,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	writel(rate % 1000000, mhdp->regs + CDNS_SW_CLK_L);
 	writel(rate / 1000000, mhdp->regs + CDNS_SW_CLK_H);
 
-	dev_dbg(&pdev->dev, "func clk rate %lu Hz\n", rate);
+	dev_dbg(dev, "func clk rate %lu Hz\n", rate);
 
 	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
@@ -2065,38 +2077,12 @@ static int mhdp_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, mhdp_irq_handler,
 					IRQF_ONESHOT, "mhdp8546", mhdp);
 	if (ret) {
-		dev_err(&pdev->dev, "cannot install IRQ %d\n", irq);
+		dev_err(dev, "cannot install IRQ %d\n", irq);
 		ret = -EIO;
 		goto plat_fini;
 	}
-
-	/* Read source capabilities, based on PHY's device tree properties. */
-	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,num-lanes",
-				       &(lanes_prop));
-	if (ret)
-		mhdp->host.lanes_cnt = CDNS_LANE_4;
-	else
-		mhdp->host.lanes_cnt = lanes_prop;
-
-	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,max-bit-rate",
-				       &(link_rate));
-	if (ret)
-		link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
-	else
-		/* PHY uses Mb/s, DRM uses tens of kb/s. */
-		link_rate *= 100;
-
-	mhdp->host.link_rate = link_rate;
-	mhdp->host.volt_swing = CDNS_VOLT_SWING(3);
-	mhdp->host.pre_emphasis = CDNS_PRE_EMPHASIS(3);
-	mhdp->host.pattern_supp = CDNS_SUPPORT_TPS(1) |
-				  CDNS_SUPPORT_TPS(2) | CDNS_SUPPORT_TPS(3) |
-				  CDNS_SUPPORT_TPS(4);
-	mhdp->host.lane_mapping = CDNS_LANE_MAPPING_NORMAL;
-	mhdp->host.fast_link = false;
-	mhdp->host.enhanced = true;
-	mhdp->host.scrambler = true;
-	mhdp->host.ssc = false;
+	
+	mhdp_fill_host_caps(mhdp);
 
 	/* The only currently supported format */
 	mhdp->display_fmt.y_only = false;
@@ -2109,10 +2095,10 @@ static int mhdp_probe(struct platform_device *pdev)
 	ret = phy_init(mhdp->phy);
 	if (ret) {
 		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
-		goto runtime_put;
+		goto plat_fini;
 	}
 
-	ret = load_firmware(mhdp);
+	ret = mhdp_load_firmware(mhdp);
 	if (ret)
 		goto phy_exit;
 
@@ -2126,15 +2112,13 @@ plat_fini:
 	if (mhdp->ops && mhdp->ops->exit)
 		mhdp->ops->exit(mhdp);
 runtime_put:
-	pm_runtime_put_sync(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_put_sync(dev);
+	pm_runtime_disable(dev);
 clk_disable:
 	clk_disable_unprepare(mhdp->clk);
 
 	return ret;
 }
-
-MODULE_FIRMWARE(FW_NAME);
 
 static int mhdp_remove(struct platform_device *pdev)
 {
@@ -2182,6 +2166,15 @@ wait_loading:
 	return ret;
 }
 
+static const struct of_device_id mhdp_ids[] = {
+	{ .compatible = "cdns,mhdp8546", },
+#ifdef CONFIG_DRM_CDNS_MHDP_J721E
+	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
+#endif
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, mhdp_ids);
+
 static struct platform_driver mhdp_driver = {
 	.driver	= {
 		.name		= "cdns-mhdp",
@@ -2191,6 +2184,8 @@ static struct platform_driver mhdp_driver = {
 	.remove	= mhdp_remove,
 };
 module_platform_driver(mhdp_driver);
+
+MODULE_FIRMWARE(FW_NAME);
 
 MODULE_AUTHOR("Quentin Schulz <quentin.schulz@free-electrons.com>");
 MODULE_AUTHOR("Swapnil Jakhade <sjakhade@cadence.com>");
