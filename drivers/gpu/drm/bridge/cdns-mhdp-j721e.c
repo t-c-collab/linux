@@ -4,14 +4,10 @@
  *
  * Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
  * Author: Jyri Sarha <jsarha@ti.com
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
-#include <linux/device.h>
 #include <linux/io.h>
+#include <linux/platform_device.h>
 
 #include "cdns-mhdp-j721e.h"
 
@@ -44,24 +40,18 @@
 
 /* TODO turn DPTX_IPCFG fw_mem_clk_en at pm_runtime_suspend. */
 
-int cdns_mhdp_j721e_init(struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_j721e_init(struct cdns_mhdp_device *mhdp)
 {
 	struct platform_device *pdev = to_platform_device(mhdp->dev);
-	struct resource *regs;
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	mhdp->j721e_regs = devm_ioremap_resource(&pdev->dev, regs);
+	mhdp->j721e_regs = devm_platform_ioremap_resource(pdev, 1);
 	if (IS_ERR(mhdp->j721e_regs))
 		return PTR_ERR(mhdp->j721e_regs);
 
 	return 0;
 }
 
-void cdns_mhdp_j721e_fini(struct cdns_mhdp_device *mhdp)
-{
-}
-
-void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
+static void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
 {
 	/*
 	 * Eneble VIF_0 and select DPI2 as its input. DSS0 DPI0 is connected
@@ -72,8 +62,14 @@ void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
 	       mhdp->j721e_regs + DPTX_SRC_CFG);
 }
 
-void cdns_mhdp_j721e_disable(struct cdns_mhdp_device *mhdp)
+static void cdns_mhdp_j721e_disable(struct cdns_mhdp_device *mhdp)
 {
 	/* Put everything to defaults  */
 	writel(0, mhdp->j721e_regs + DPTX_DSC_CFG);
 }
+
+const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
+	.init = cdns_mhdp_j721e_init,
+	.enable = cdns_mhdp_j721e_enable,
+	.disable = cdns_mhdp_j721e_disable,
+};
