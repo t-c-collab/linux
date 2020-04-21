@@ -1588,16 +1588,11 @@ static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
 static void mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
 {
 	int ret;
-	u32 lanes_prop;
 	unsigned int link_rate;
 
-	/* Read source capabilities, based on PHY's device tree properties. */
-	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,num-lanes",
-				       &lanes_prop);
-	if (ret)
+	mhdp->host.lanes_cnt = phy_get_bus_width(mhdp->phy);
+	if (!mhdp->host.lanes_cnt)
 		mhdp->host.lanes_cnt = 4;
-	else
-		mhdp->host.lanes_cnt = lanes_prop;
 
 	ret = device_property_read_u32(&mhdp->phy->dev, "cdns,max-bit-rate",
 				       &link_rate);
