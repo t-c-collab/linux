@@ -704,11 +704,10 @@ static int mhdp_fw_activate(const struct firmware *fw,
 	 * MHDP_HW_STOPPED happens only due to driver removal when
 	 * bridge should already be detached.
 	 */
-	if (mhdp->bridge_attached) {
-		/* enable interrupts */
-		writel(0, mhdp->regs + CDNS_APB_INT_MASK);
-		writel(0, mhdp->regs + CDNS_MB_INT_MASK);
-	}
+	if (mhdp->bridge_attached)
+		/* enable SW event interrupts */
+		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
+		       mhdp->regs + CDNS_APB_INT_MASK);
 
 	spin_unlock(&mhdp->start_lock);
 
@@ -819,15 +818,11 @@ static void mhdp_check_link(struct cdns_mhdp_device *mhdp)
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
 {
 	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
-	u32 mbox_stat, apb_stat, sw_ev0, sw_ev1, sw_ev2, sw_ev3;
+	u32 apb_stat, sw_ev0;
 	bool bridge_attached;
 
 	apb_stat = readl(mhdp->regs + CDNS_APB_INT_STATUS);
-	mbox_stat = readl(mhdp->regs + CDNS_MB_INT_STATUS);
 	sw_ev0 = readl(mhdp->regs + CDNS_SW_EVENT0);
-	sw_ev1 = readl(mhdp->regs + CDNS_SW_EVENT1);
-	sw_ev2 = readl(mhdp->regs + CDNS_SW_EVENT2);
-	sw_ev3 = readl(mhdp->regs + CDNS_SW_EVENT3);
 
 	/*
 	 *  Calling drm_kms_helper_hotplug_event() when not attached
@@ -1088,11 +1083,10 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_fl
 
 	spin_unlock(&mhdp->start_lock);
 
-	if (hw_ready) {
-		/* enable interrupts */
-		writel(0, mhdp->regs + CDNS_APB_INT_MASK);
-		writel(0, mhdp->regs + CDNS_MB_INT_MASK);
-	}
+	if (hw_ready)
+		/* enable SW event interrupts */
+		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
+		       mhdp->regs + CDNS_APB_INT_MASK);
 
 	return 0;
 }
@@ -2030,7 +2024,6 @@ static void cdns_mhdp_detach(struct drm_bridge *bridge)
 	spin_unlock(&mhdp->start_lock);
 
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
-	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
@@ -2111,9 +2104,6 @@ static int mhdp_probe(struct platform_device *pdev)
 	writel(rate / 1000000, mhdp->regs + CDNS_SW_CLK_H);
 
 	dev_dbg(dev, "func clk rate %lu Hz\n", rate);
-
-	writel(~0, mhdp->regs + CDNS_MB_INT_MASK);
-	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
 
 	irq = platform_get_irq(pdev, 0);
 	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, mhdp_irq_handler,
