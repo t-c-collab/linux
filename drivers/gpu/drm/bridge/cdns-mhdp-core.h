@@ -216,7 +216,6 @@ struct phy;
 #define GENERAL_REGISTER_READ			0x07
 
 #define DPTX_SET_POWER_MNG			0x00
-#define DPTX_SET_HOST_CAPABILITIES		0x01
 #define DPTX_GET_EDID				0x02
 #define DPTX_READ_DPCD				0x03
 #define DPTX_WRITE_DPCD				0x04
@@ -224,14 +223,8 @@ struct phy;
 #define DPTX_WRITE_REGISTER			0x06
 #define DPTX_READ_REGISTER			0x07
 #define DPTX_WRITE_FIELD			0x08
-#define DPTX_TRAINING_CONTROL			0x09
 #define DPTX_READ_EVENT				0x0a
-#define DPTX_READ_LINK_STAT			0x0b
-#define DPTX_SET_VIDEO				0x0c
-#define DPTX_SET_AUDIO				0x0d
 #define DPTX_GET_LAST_AUX_STAUS			0x0e
-#define DPTX_SET_LINK_BREAK_POINT		0x0f
-#define DPTX_FORCE_LANES			0x10
 #define DPTX_HPD_STATE				0x11
 #define DPTX_ADJUST_LT				0x12
 
