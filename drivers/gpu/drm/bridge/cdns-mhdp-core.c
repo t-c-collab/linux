@@ -153,6 +153,29 @@ static int cdns_mhdp_mailbox_send(struct cdns_mhdp_device *mhdp, u8 module_id,
 }
 
 static
+int cdns_mhdp_mailbox_send_receive(struct cdns_mhdp_device *mhdp,
+                                   u8 module_id, u8 opcode,
+                                   u8 *tx_msg, u16 tx_size,
+                                   u8 *rx_msg, u16 rx_size)
+{
+	int ret;
+
+	ret = cdns_mhdp_mailbox_send(mhdp, module_id, opcode, tx_size, tx_msg);
+	if (ret)
+		return ret;
+
+	ret = cdns_mhdp_mailbox_validate_receive(mhdp, module_id, opcode, rx_size);
+	if (ret)
+		return ret;
+
+	ret = cdns_mhdp_mailbox_read_receive(mhdp, rx_msg, rx_size);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static
 int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 {
 	u8 msg[4], resp[8];
@@ -162,19 +185,10 @@ int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 
 	mutex_lock(&mhdp->mbox_mutex);
 
-	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_GENERAL,
-				     GENERAL_REGISTER_READ,
-				     sizeof(msg), msg);
-	if (ret)
-		goto err_reg_read;
-
-	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_GENERAL,
-						 GENERAL_REGISTER_READ,
-						 sizeof(resp));
-	if (ret)
-		goto err_reg_read;
-
-	ret = cdns_mhdp_mailbox_read_receive(mhdp, resp, sizeof(resp));
+	ret = cdns_mhdp_mailbox_send_receive(mhdp, MB_MODULE_ID_GENERAL,
+	                                     GENERAL_REGISTER_READ,
+	                                     msg, sizeof(msg),
+	                                     resp, sizeof(resp));
 	if (ret)
 		goto err_reg_read;
 
@@ -284,17 +298,9 @@ int cdns_mhdp_dpcd_write(struct cdns_mhdp_device *mhdp, u32 addr, u8 value)
 
 	mutex_lock(&mhdp->mbox_mutex);
 
-	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
-				     DPTX_WRITE_DPCD, sizeof(msg), msg);
-	if (ret)
-		goto err_dpcd_write;
-
-	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
-						 DPTX_WRITE_DPCD, sizeof(reg));
-	if (ret)
-		goto err_dpcd_write;
-
-	ret = cdns_mhdp_mailbox_read_receive(mhdp, reg, sizeof(reg));
+	ret = cdns_mhdp_mailbox_send_receive(mhdp, MB_MODULE_ID_DP_TX,
+	                                     DPTX_WRITE_DPCD, msg, sizeof(msg),
+	                                     reg, sizeof(reg));
 	if (ret)
 		goto err_dpcd_write;
 
@@ -356,18 +362,9 @@ int cdns_mhdp_get_hpd_status(struct cdns_mhdp_device *mhdp)
 
 	mutex_lock(&mhdp->mbox_mutex);
 
-	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
-				     DPTX_HPD_STATE, 0, NULL);
-	if (ret)
-		goto err_get_hpd;
-
-	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
-						 DPTX_HPD_STATE,
-						 sizeof(status));
-	if (ret)
-		goto err_get_hpd;
-
-	ret = cdns_mhdp_mailbox_read_receive(mhdp, &status, sizeof(status));
+	ret = cdns_mhdp_mailbox_send_receive(mhdp, MB_MODULE_ID_DP_TX,
+	                                     DPTX_HPD_STATE, NULL, 0,
+	                                     &status, sizeof(status));
 	if (ret)
 		goto err_get_hpd;
 
@@ -437,20 +434,12 @@ int cdns_mhdp_read_event(struct cdns_mhdp_device *mhdp)
 
 	mutex_lock(&mhdp->mbox_mutex);
 
-	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
-				     DPTX_READ_EVENT, 0, NULL);
+	ret = cdns_mhdp_mailbox_send_receive(mhdp, MB_MODULE_ID_DP_TX,
+	                                     DPTX_READ_EVENT, NULL, 0,
+	                                     &event, sizeof(event));
 	if (ret)
 		goto out;
 
-	ret = cdns_mhdp_mailbox_validate_receive(mhdp,
-						 MB_MODULE_ID_DP_TX,
-						 DPTX_READ_EVENT,
-						 sizeof(event));
-	if (ret < 0)
-		goto out;
-
-	ret = cdns_mhdp_mailbox_read_receive(mhdp, &event,
-					     sizeof(event));
 out:
 	mutex_unlock(&mhdp->mbox_mutex);
 
