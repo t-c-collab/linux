@@ -173,8 +173,8 @@ static void tidss_crtc_atomic_flush(struct drm_crtc *crtc,
 		crtc->name, drm_atomic_crtc_needs_modeset(crtc->state),
 		crtc->state->enable, crtc->state->event);
 
-	/* There is nothing to do if CRTC is not going to be enabled. */
-	if (!crtc->state->enable)
+	/* There is nothing to do if CRTC is not going to be active. */
+	if (!crtc->state->active)
 		return;
 
 	/*
