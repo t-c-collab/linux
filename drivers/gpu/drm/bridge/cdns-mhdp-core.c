@@ -42,6 +42,7 @@
 
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
+static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
@@ -694,10 +695,12 @@ static int mhdp_fw_activate(const struct firmware *fw,
 	 * MHDP_HW_STOPPED happens only due to driver removal when
 	 * bridge should already be detached.
 	 */
-	if (mhdp->bridge_attached)
+	if (mhdp->bridge_attached) {
 		/* enable SW event interrupts */
+		printk("mhdp_fw_activate: enable interrupts\n");
 		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
 		       mhdp->regs + CDNS_APB_INT_MASK);
+	}
 
 	spin_unlock(&mhdp->start_lock);
 
@@ -761,13 +764,11 @@ static void mhdp_check_link(struct cdns_mhdp_device *mhdp)
 {
 	struct drm_connector *conn = &mhdp->connector;
 	u8 status[DP_LINK_STATUS_SIZE];
-	bool hpd_state;
+	bool hpd_state, hpd_pulse;
 	int hpd_event;
 	int ret;
 
-	/* Nothing to check if there is no link */
-	if (!mhdp->link_up)
-		return;
+	WARN_ON(!conn);
 
 	hpd_event = cdns_mhdp_read_event(mhdp);
 
@@ -779,6 +780,23 @@ static void mhdp_check_link(struct cdns_mhdp_device *mhdp)
 	}
 
 	hpd_state = !!(hpd_event & DPTX_READ_EVENT_HPD_STATE);
+	hpd_pulse = !!(hpd_event & DPTX_READ_EVENT_HPD_PULSE);
+	printk("hpd state %d, pulse %d\n", hpd_state, hpd_pulse);
+
+	if (hpd_state != mhdp->plugged) {
+		printk("CONN %d -> %d\n", mhdp->plugged, hpd_state);
+
+		mhdp->plugged = hpd_state;
+
+		if (hpd_state) {
+			if (mhdp->link_up)
+				printk("XXX link already up???\n");
+			cdns_mhdp_link_up(mhdp);
+		} else {
+			cdns_mhdp_link_down(mhdp);
+		}
+	}
+
 
 	/* No point the check the link if HPD is down (cable is unplugged) */
 	if (!hpd_state)
@@ -799,6 +817,7 @@ static void mhdp_check_link(struct cdns_mhdp_device *mhdp)
 	    !drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) ||
 	    !drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes))
 		/* Link is broken, indicate it with the link status property */
+		WARN_ON(!conn->state);
 		drm_connector_set_link_status_property(conn,
 						       DRM_MODE_LINK_STATUS_BAD);
 
@@ -825,6 +844,8 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	spin_unlock(&mhdp->start_lock);
 
 	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
+		printk("HPD IRQ\n");
+
 		mhdp_check_link(mhdp);
 
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
@@ -876,6 +897,19 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int num_modes;
 
+	printk("get_modes, link %d, plug %d\n", mhdp->link_up, mhdp->plugged);
+
+	if (!mhdp->plugged)
+		return 0;
+
+	if (!mhdp->link_up) {
+		int ret;
+
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret)
+			return 0;
+	}
+
 	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
 	if (!edid) {
 		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
@@ -913,7 +947,6 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 {
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
 	bool hw_ready;
-	int ret;
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
@@ -926,22 +959,9 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 	if (!hw_ready || WARN_ON(!mhdp->bridge_attached))
 		return connector_status_disconnected;
 
-	ret = cdns_mhdp_get_hpd_status(mhdp);
-	if (ret > 0) {
-		mhdp->plugged = true;
+	printk("detect: %d\n", mhdp->plugged);
 
-		if (!mhdp->link_up)
-			cdns_mhdp_link_up(mhdp);
-
-		return connector_status_connected;
-	}
-	if (ret < 0)
-		dev_err(mhdp->dev, "Failed to obtain HPD state\n");
-
-	mhdp->plugged = false;
-	mhdp->link_up = false;
-
-	return connector_status_disconnected;
+	return mhdp->plugged ? connector_status_connected : connector_status_disconnected;
 }
 
 static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
@@ -1078,10 +1098,12 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_fl
 
 	spin_unlock(&mhdp->start_lock);
 
-	if (hw_ready)
+	if (hw_ready) {
 		/* enable SW event interrupts */
+		printk("cdns_mhdp_attach: enable interrupts\n");
 		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
 		       mhdp->regs + CDNS_APB_INT_MASK);
+	}
 
 	return 0;
 }
@@ -1547,6 +1569,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
 
+	printk("cdns_mhdp_atomic_disable\n");
+
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
@@ -1554,8 +1578,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	resp |= CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
-	if (mhdp->plugged)
-		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
+	cdns_mhdp_link_down(mhdp);
 
 	/* Disable VIF clock for stream 0 */
 	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
@@ -1638,6 +1661,11 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	unsigned int addr;
 	int err;
 
+	printk("cdns_mhdp_link_up (link %d, plugged %d)\n", mhdp->link_up, mhdp->plugged);
+
+	if (!mhdp->plugged)
+		return -ENODEV;
+
 	drm_dp_dpcd_readb(&mhdp->aux, DP_TRAINING_AUX_RD_INTERVAL,
 			  &ext_cap_chk);
 
@@ -1706,6 +1734,22 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	return 0;
 error:
 	return err;
+}
+
+static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
+{
+	printk("cdns_mhdp_link_down (link %d, plugged %d)\n", mhdp->link_up, mhdp->plugged);
+
+	if (!mhdp->link_up) {
+		printk("WARN: link not up when disabling\n");
+		return;
+	}
+
+	if (mhdp->plugged)
+		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
+
+	mhdp->link_up = false;
+
 }
 
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
@@ -1922,7 +1966,20 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	u32 resp;
 	int ret;
 
+	printk("cdns_mhdp_atomic_enable, link %d, plug %d\n", mhdp->link_up, mhdp->plugged);
+
 	dev_dbg(mhdp->dev, "bridge enable\n");
+
+	if (!mhdp->plugged)
+		return;
+
+	if (!mhdp->link_up) {
+		int ret;
+
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret)
+			return;
+	}
 
 	if (mhdp->ops && mhdp->ops->enable)
 		mhdp->ops->enable(mhdp);
@@ -2023,6 +2080,21 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	int pxlclock;
 	u32 bpp, bpc, pxlfmt;
+
+	//printk("cdns_mhdp_atomic_check, link %d, plug %d\n", mhdp->link_up, mhdp->plugged);
+	//printk("check, CRTC: enabled: %d, active %d\n", crtc_state->enable, crtc_state->active);
+
+	/* accept anything if we're not plugged */
+	if (!mhdp->plugged)
+		return 0;
+
+	if (!mhdp->link_up) {
+		int ret;
+
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret)
+			return ret;
+	}
 
 	state = to_cdns_mhdp_bridge_state(bridge_state);
 	pxlfmt = mhdp->display_fmt.color_format;
