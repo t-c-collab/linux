@@ -860,6 +860,7 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 			}
 		}
 		else if(ret == 0){
+			mhdp->plugged = false;
 			cdns_mhdp_link_down(mhdp);
 		}
 		else if(ret < 0) {
@@ -2057,6 +2058,8 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 	struct cdns_mhdp_bridge_state *cdns_mhdp_state;
 
 	cdns_mhdp_state = kzalloc(sizeof(*cdns_mhdp_state), GFP_KERNEL);
+	if (!cdns_mhdp_state)
+		return NULL;
 
 	 __drm_atomic_helper_bridge_reset(bridge, &cdns_mhdp_state->base);
 
