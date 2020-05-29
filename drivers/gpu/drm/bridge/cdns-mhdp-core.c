@@ -1545,6 +1545,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 	reg32 &= ~GENMASK(1, 0);
 	reg32 |= CDNS_DP_NUM_LANES(mhdp->link.num_lanes);
 	reg32 |= CDNS_DP_WR_FAILING_EDGE_VSYNC;
+	reg32 |= CDNS_DP_FRAMER_EN;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, reg32);
 
 	/* Reset PHY config */
