@@ -769,28 +769,55 @@ static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
+static void mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 {
-	struct drm_connector *conn = &mhdp->connector;
-	bool hpd_state;
-	int hpd_event;
-	u32 max_bw, framer, req_bw;
-	bool bridge_enabled;
-	int ret;
+	int hpd_event, hpd_status;
 
 	hpd_event = cdns_mhdp_read_event(mhdp);
 
-	/* Geting event bits failed, bail out */
+	/* Getting event bits failed, bail out */
 	if (hpd_event < 0) {
 		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
 			 __func__, hpd_event);
 		return;
 	}
 
-	hpd_state = !!(hpd_event & DPTX_READ_EVENT_HPD_STATE);
+	hpd_status = cdns_mhdp_get_hpd_status(mhdp);
+	if (hpd_status < 0) {
+		dev_warn(mhdp->dev, "%s: get hpd status failed: %d\n",
+			 __func__, hpd_status);
+		return;
+	}
 
-	if (hpd_state) {
+	if ((hpd_event == (DPTX_READ_EVENT_HPD_STATE |
+	    DPTX_READ_EVENT_HPD_TO_HIGH)) && hpd_status == 1) {
 		mhdp->plugged = true;
+		*hpd_pulse = false;
+	} else if ((hpd_event == DPTX_READ_EVENT_HPD_TO_LOW) &&
+		   (hpd_status == 0)) {
+		mhdp->plugged = false;
+		*hpd_pulse = false;
+	} else if (hpd_event == (DPTX_READ_EVENT_HPD_STATE |
+		   DPTX_READ_EVENT_HPD_PULSE)) {
+		mhdp->plugged = hpd_status;
+		*hpd_pulse = true;
+	}
+}
+
+static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
+{
+	struct drm_connector *conn = &mhdp->connector;
+	bool hpd_pulse;
+	u32 max_bw, framer, req_bw;
+	bool bridge_enabled;
+	int ret;
+
+	mhdp_detect_hpd(mhdp, &hpd_pulse);
+
+	if (mhdp->plugged) {
+		if (hpd_pulse)
+			return;
+
 		mutex_lock(&mhdp->link_up_mutex);
 		if (!mhdp->link_up) {
 			ret = cdns_mhdp_link_up(mhdp);
@@ -823,8 +850,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG,
 					    framer);
 		}
-	} else if (!hpd_state) {
-		mhdp->plugged = false;
+	} else {
 		cdns_mhdp_link_down(mhdp);
 	}
 }
