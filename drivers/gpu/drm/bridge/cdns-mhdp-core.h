@@ -330,6 +330,8 @@ struct cdns_mhdp_bridge_state {
 	u32 tu_size;
 	u32 vs;
 	u32 line_thresh;
+	u32 current_mode_req_bw;
+	char current_mode_name[DRM_DISPLAY_MODE_LEN];
 };
 
 #define to_cdns_mhdp_bridge_state(s) \
@@ -377,7 +379,6 @@ struct cdns_mhdp_device {
 	spinlock_t start_lock;
 	bool bridge_attached;
 	bool bridge_enabled;
-	u32 current_mode_req_bw;
 	enum mhdp_hw_state hw_state;
 };
 

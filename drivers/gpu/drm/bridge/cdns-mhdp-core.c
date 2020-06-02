@@ -811,6 +811,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	u32 max_bw, framer, req_bw;
 	bool bridge_enabled;
 	int ret;
+	struct drm_bridge_state *state;
+	struct cdns_mhdp_bridge_state *cdns_bridge_state;
 
 	mhdp_detect_hpd(mhdp, &hpd_pulse);
 
@@ -831,15 +833,26 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 		mutex_lock(&mhdp->mode_mutex);
 		bridge_enabled = mhdp->bridge_enabled;
-		req_bw = mhdp->current_mode_req_bw;
 		mutex_unlock(&mhdp->mode_mutex);
 
 		if (bridge_enabled) {
+			state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
+			if (!state)
+				return;
+
+			cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
+			if (!cdns_bridge_state)
+				return;
+
+			req_bw = cdns_bridge_state->current_mode_req_bw;
 			max_bw = mhdp->link.num_lanes * mhdp->link.rate;
+
 			if (req_bw > max_bw) {
-				dev_err(mhdp->dev, "Not enough BW for (%u lanes at %u Mbps)\n",
+				dev_err(mhdp->dev, "Not enough BW for %s (%u lanes at %u Mbps)\n",
+					cdns_bridge_state->current_mode_name,
 					mhdp->link.num_lanes,
 					mhdp->link.rate / 100);
+				dev_err(mhdp->dev, "req_bw: %u max_bw: %u\n", req_bw, max_bw);
 				return;
 			}
 			ret = cdns_mhdp_reg_read(mhdp,
@@ -1618,7 +1631,6 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 		mhdp->ops->disable(mhdp);
 
 	mutex_lock(&mhdp->mode_mutex);
-	mhdp->current_mode_req_bw = 0;
 	mhdp->bridge_enabled = false;
 	mutex_unlock(&mhdp->mode_mutex);
 }
@@ -1987,7 +1999,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	struct drm_bridge_state *new_state;
 	const struct drm_display_mode *mode;
-	u32 resp, bpp;
+	u32 resp;
 	int ret;
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
@@ -2037,10 +2049,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	cdns_mhdp_sst_enable(mhdp, mode, new_state);
 
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
-
 	mutex_lock(&mhdp->mode_mutex);
-	mhdp->current_mode_req_bw = mode->clock * bpp / 8;
 	mhdp->bridge_enabled = true;
 	mutex_unlock(&mhdp->mode_mutex);
 }
@@ -2173,6 +2182,8 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	state->vs = vs;
 	state->tu_size = tu_size;
 	state->line_thresh = line_thresh;
+	state->current_mode_req_bw = mode->clock * bpp / 8;
+	strcpy(state->current_mode_name, mode->name);
 
 	return 0;
 }
