@@ -374,6 +374,8 @@ int cdns_mhdp_get_hpd_status(struct cdns_mhdp_device *mhdp)
 
 	mutex_unlock(&mhdp->mbox_mutex);
 
+	dev_dbg(mhdp->dev, "%s: %d\n", __func__, status);
+
 	return status;
 
 err_get_hpd:
@@ -457,6 +459,12 @@ out:
 
 	if (ret < 0)
 		return ret;
+
+	dev_dbg(mhdp->dev, "%s: %s%s%s%s\n", __func__,
+	        (event & DPTX_READ_EVENT_HPD_TO_HIGH) ? "TO_HIGH " : "",
+	        (event & DPTX_READ_EVENT_HPD_TO_LOW) ? "TO_LOW " : "",
+	        (event & DPTX_READ_EVENT_HPD_PULSE) ? "PULSE " : "",
+	        (event & DPTX_READ_EVENT_HPD_STATE) ? "HPD_STATE " : "");
 
 	return event;
 }
