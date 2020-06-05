@@ -6,7 +6,7 @@
  *
  * Author: Quentin Schulz <quentin.schulz@free-electrons.com>
  */
-
+#define DEBUG
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -809,11 +809,11 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	struct drm_connector *conn = &mhdp->connector;
 	bool hpd_pulse;
 	u32 max_bw, framer, req_bw;
-	bool bridge_enabled;
 	int ret;
 	struct drm_bridge_state *state;
 	struct cdns_mhdp_bridge_state *cdns_bridge_state;
 
+	dev_dbg(mhdp->dev, "%s\n", __func__);
 	mhdp_detect_hpd(mhdp, &hpd_pulse);
 
 	if (mhdp->plugged) {
@@ -826,23 +826,21 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			if (ret < 0) {
 				drm_connector_set_link_status_property(conn,
 								       DRM_MODE_LINK_STATUS_BAD);
+				mutex_unlock(&mhdp->link_up_mutex);
 				return;
 			}
 		}
 		mutex_unlock(&mhdp->link_up_mutex);
 
 		mutex_lock(&mhdp->mode_mutex);
-		bridge_enabled = mhdp->bridge_enabled;
-		mutex_unlock(&mhdp->mode_mutex);
-
-		if (bridge_enabled) {
+		if (mhdp->bridge_enabled) {
 			state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
 			if (!state)
-				return;
+				goto err;
 
 			cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
 			if (!cdns_bridge_state)
-				return;
+				goto err;
 
 			req_bw = cdns_bridge_state->current_mode_req_bw;
 			max_bw = mhdp->link.num_lanes * mhdp->link.rate;
@@ -852,8 +850,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 					cdns_bridge_state->current_mode_name,
 					mhdp->link.num_lanes,
 					mhdp->link.rate / 100);
-				dev_err(mhdp->dev, "req_bw: %u max_bw: %u\n", req_bw, max_bw);
-				return;
+				dev_err(mhdp->dev, "Req BW: %u Max BW: %u\n", req_bw, max_bw);
+				goto err;
 			}
 			ret = cdns_mhdp_reg_read(mhdp,
 						 CDNS_DP_FRAMER_GLOBAL_CONFIG,
@@ -865,6 +863,9 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		}
 	} else
 		cdns_mhdp_link_down(mhdp);
+err:
+	if (mutex_is_locked(&mhdp->mode_mutex))
+		mutex_unlock(&mhdp->mode_mutex);
 }
 
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
@@ -939,14 +940,17 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	int num_modes;
 	int ret;
 
+	dev_dbg(mhdp->dev, "%s\n", __func__);
 	if (!mhdp->plugged)
 		return 0;
 
 	mutex_lock(&mhdp->link_up_mutex);
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_up_mutex);
 			return 0;
+		}
 	}
 	mutex_unlock(&mhdp->link_up_mutex);
 
@@ -1046,9 +1050,8 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 	req_bw = mode->clock * bpp / 8;
 	max_bw = lanes * rate;
 	if (req_bw > max_bw) {
-		dev_dbg(mhdp->dev, "%s: %s (%u * %u/8 =) %u > %u (= %u * %u)\n",
-			__func__, mode->name, mode->clock, bpp, req_bw,
-			max_bw, lanes, rate);
+		dev_err(mhdp->dev, "Unsupported Mode: %s\n", mode->name); 
+		dev_err(mhdp->dev, "Req BW: %u  Available Max BW: %u\n", req_bw, max_bw);
 
 		return false;
 	}
@@ -1492,8 +1495,8 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 	} while (fail_counter_short < 5 && fail_counter_cr_long < 10);
 
 err:
-	dev_dbg(mhdp->dev, "CR phase failed for %d lanes and %d rate\n",
-		mhdp->link.num_lanes, mhdp->link.rate);
+	dev_dbg(mhdp->dev, "CR phase failed for %d lanes and %d Mbps\n",
+		mhdp->link.num_lanes, mhdp->link.rate / 100);
 
 	return false;
 }
@@ -1538,7 +1541,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 				continue;
 			}
 
-			dev_dbg(mhdp->dev,
+			dev_err(mhdp->dev,
 				"Link training failed during CR phase\n");
 			goto err;
 		}
@@ -1563,11 +1566,13 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			continue;
 		}
 
-		dev_dbg(mhdp->dev, "Link training failed during EQ phase\n");
+		dev_err(mhdp->dev, "Link training failed during EQ phase\n");
 		goto err;
 	}
 
-	dev_dbg(mhdp->dev, "Link training successful\n");
+	dev_dbg(mhdp->dev, "Link training successful with %d lanes %d Mbps\n",
+	        mhdp->link.num_lanes,
+		mhdp->link.rate / 100);
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   mhdp->host.scrambler ? 0 :
@@ -1614,6 +1619,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
+	mutex_lock(&mhdp->mode_mutex);
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
 	resp &= ~CDNS_DP_FRAMER_EN;
 	resp |= CDNS_DP_NO_VIDEO_MODE;
@@ -1629,7 +1635,6 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	if (mhdp->ops && mhdp->ops->disable)
 		mhdp->ops->disable(mhdp);
 
-	mutex_lock(&mhdp->mode_mutex);
 	mhdp->bridge_enabled = false;
 	mutex_unlock(&mhdp->mode_mutex);
 }
@@ -2009,8 +2014,10 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	mutex_lock(&mhdp->link_up_mutex);
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_up_mutex);
 			return;
+		}
 	}
 	mutex_unlock(&mhdp->link_up_mutex);
 
@@ -2121,14 +2128,17 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	u32 bpp, bpc, pxlfmt;
 	int ret;
 
+	dev_dbg(mhdp->dev, "%s\n", __func__);
 	if (!mhdp->plugged)
 		return 0;
 
 	mutex_lock(&mhdp->link_up_mutex);
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0)
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_up_mutex);
 			return ret;
+		}
 	}
 	mutex_unlock(&mhdp->link_up_mutex);
 
