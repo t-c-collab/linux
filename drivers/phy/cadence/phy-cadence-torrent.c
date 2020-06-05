@@ -183,8 +183,6 @@ static const struct reg_field phy_pma_pll_raw_ctrl =
 static const struct reg_field phy_reset_ctrl =
 				REG_FIELD(PHY_RESET, 8, 8);
 
-static const struct of_device_id cdns_torrent_phy_of_match[];
-
 struct cdns_torrent_inst {
 	struct phy *phy;
 	u32 mlane;
@@ -203,6 +201,7 @@ struct cdns_torrent_phy {
 	unsigned long ref_clk_rate;
 	struct cdns_torrent_inst phys[MAX_NUM_LANES];
 	int nsubnodes;
+	const struct cdns_torrent_data *init_data;
 	struct regmap *regmap;
 	struct regmap *regmap_common_cdb;
 	struct regmap *regmap_phy_pcs_common_cdb;
@@ -1706,28 +1705,25 @@ static int cdns_regmap_init_torrent_dp(struct cdns_torrent_phy *cdns_phy,
 
 static int cdns_torrent_phy_probe(struct platform_device *pdev)
 {
-	struct resource *regs;
 	struct cdns_torrent_phy *cdns_phy;
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
-	const struct of_device_id *match;
-	struct cdns_torrent_data *data;
+	const struct cdns_torrent_data *data;
 	struct device_node *child;
 	int ret, subnodes, node = 0, i;
-
-	/* Get init data for this PHY */
-	match = of_match_device(cdns_torrent_phy_of_match, dev);
-	if (!match)
-		return -EINVAL;
-
-	data = (struct cdns_torrent_data *)match->data;
 
 	cdns_phy = devm_kzalloc(dev, sizeof(*cdns_phy), GFP_KERNEL);
 	if (!cdns_phy)
 		return -ENOMEM;
 
+	/* Get init data for this PHY */
+	data = of_device_get_match_data(dev);
+	if (!data)
+		return -EINVAL;
+
 	dev_set_drvdata(dev, cdns_phy);
 	cdns_phy->dev = dev;
+	cdns_phy->init_data = data;
 
 	cdns_phy->phy_rst = devm_reset_control_get_exclusive_by_index(dev, 0);
 	if (IS_ERR(cdns_phy->phy_rst)) {
@@ -1742,17 +1738,13 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		return PTR_ERR(cdns_phy->clk);
 	}
 
-	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	cdns_phy->sd_base = devm_ioremap_resource(&pdev->dev, regs);
+	cdns_phy->sd_base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(cdns_phy->sd_base))
 		return PTR_ERR(cdns_phy->sd_base);
 
 	subnodes = of_get_available_child_count(dev->of_node);
 	if (subnodes == 0) {
 		dev_err(dev, "No available link subnodes found\n");
-		return -EINVAL;
-	} else if (subnodes != 1) {
-		dev_err(dev, "Driver supports only one link subnode.\n");
 		return -EINVAL;
 	}
 
@@ -1771,14 +1763,6 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		if (of_property_read_u32(child, "reg",
 					 &cdns_phy->phys[node].mlane)) {
 			dev_err(dev, "%s: No \"reg\"-property.\n",
-				child->full_name);
-			ret = -EINVAL;
-			goto put_child;
-		}
-
-		if (cdns_phy->phys[node].mlane != 0) {
-			dev_err(dev,
-				"%s: Driver supports only lane-0 as master lane.\n",
 				child->full_name);
 			ret = -EINVAL;
 			goto put_child;
@@ -1833,9 +1817,8 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 			}
 
 			/* DPTX registers */
-			regs = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-			cdns_phy->base = devm_ioremap_resource(&pdev->dev,
-							       regs);
+			cdns_phy->base = devm_platform_ioremap_resource(pdev,
+									1);
 			if (IS_ERR(cdns_phy->base)) {
 				ret = PTR_ERR(cdns_phy->base);
 				goto put_child;
@@ -1852,11 +1835,8 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				 cdns_phy->phys[node].num_lanes,
 				 cdns_phy->max_bit_rate / 1000,
 				 cdns_phy->max_bit_rate % 1000);
-		} else {
-			dev_err(dev, "Driver supports only PHY_TYPE_DP\n");
-			ret = -ENOTSUPP;
-			goto put_child;
 		}
+
 		cdns_phy->phys[node].phy = gphy;
 		phy_set_drvdata(gphy, &cdns_phy->phys[node]);
 
