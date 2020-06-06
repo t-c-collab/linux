@@ -1584,7 +1584,24 @@ static struct regmap *cdns_regmap_init(struct device *dev, void __iomem *base,
 	return devm_regmap_init(dev, NULL, ctx, config);
 }
 
-static int cdns_regfield_init(struct cdns_torrent_phy *cdns_phy)
+static int cdns_torrent_dp_regfield_init(struct cdns_torrent_phy *cdns_phy)
+{
+	struct device *dev = cdns_phy->dev;
+	struct regmap_field *field;
+	struct regmap *regmap;
+
+	regmap = cdns_phy->regmap_dptx_phy_reg;
+	field = devm_regmap_field_alloc(dev, regmap, phy_reset_ctrl);
+	if (IS_ERR(field)) {
+		dev_err(dev, "PHY_RESET reg field init failed\n");
+		return PTR_ERR(field);
+	}
+	cdns_phy->phy_reset_ctrl = field;
+
+	return 0;
+}
+
+static int cdns_torrent_regfield_init(struct cdns_torrent_phy *cdns_phy)
 {
 	struct device *dev = cdns_phy->dev;
 	struct regmap_field *field;
@@ -1614,27 +1631,44 @@ static int cdns_regfield_init(struct cdns_torrent_phy *cdns_phy)
 	}
 	cdns_phy->phy_pma_pll_raw_ctrl = field;
 
-	regmap = cdns_phy->regmap_dptx_phy_reg;
-	field = devm_regmap_field_alloc(dev, regmap, phy_reset_ctrl);
-	if (IS_ERR(field)) {
-		dev_err(dev, "PHY_RESET reg field init failed\n");
-		return PTR_ERR(field);
-	}
-	cdns_phy->phy_reset_ctrl = field;
-
 	return 0;
 }
 
-static int cdns_regmap_init_torrent_dp(struct cdns_torrent_phy *cdns_phy,
-				       void __iomem *sd_base,
-				       void __iomem *base,
-				       u8 block_offset_shift,
-				       u8 reg_offset_shift)
+static int cdns_torrent_dp_regmap_init(struct cdns_torrent_phy *cdns_phy)
 {
 	struct device *dev = cdns_phy->dev;
 	struct regmap *regmap;
 	u32 block_offset;
+	u8 block_offset_shift, reg_offset_shift;
+	void __iomem *base = cdns_phy->base;
+
+	block_offset_shift = cdns_phy->init_data->block_offset_shift;
+	reg_offset_shift = cdns_phy->init_data->reg_offset_shift;
+
+	block_offset = TORRENT_DPTX_PHY_OFFSET;
+	regmap = cdns_regmap_init(dev, base, block_offset,
+				  reg_offset_shift,
+				  &cdns_torrent_dptx_phy_config);
+	if (IS_ERR(regmap)) {
+		dev_err(dev, "Failed to init DPTX PHY regmap\n");
+		return PTR_ERR(regmap);
+	}
+	cdns_phy->regmap_dptx_phy_reg = regmap;
+
+	return 0;
+}
+
+static int cdns_torrent_regmap_init(struct cdns_torrent_phy *cdns_phy)
+{
+	struct device *dev = cdns_phy->dev;
+	struct regmap *regmap;
+	u32 block_offset;
+	u8 block_offset_shift, reg_offset_shift;
+	void __iomem *sd_base = cdns_phy->sd_base;
 	int i;
+
+	block_offset_shift = cdns_phy->init_data->block_offset_shift;
+	reg_offset_shift = cdns_phy->init_data->reg_offset_shift;
 
 	for (i = 0; i < MAX_NUM_LANES; i++) {
 		block_offset = TORRENT_TX_LANE_CDB_OFFSET(i, block_offset_shift,
@@ -1690,16 +1724,6 @@ static int cdns_regmap_init_torrent_dp(struct cdns_torrent_phy *cdns_phy,
 	}
 	cdns_phy->regmap_phy_pma_common_cdb = regmap;
 
-	block_offset = TORRENT_DPTX_PHY_OFFSET;
-	regmap = cdns_regmap_init(dev, base, block_offset,
-				  reg_offset_shift,
-				  &cdns_torrent_dptx_phy_config);
-	if (IS_ERR(regmap)) {
-		dev_err(dev, "Failed to init DPTX PHY regmap\n");
-		return PTR_ERR(regmap);
-	}
-	cdns_phy->regmap_dptx_phy_reg = regmap;
-
 	return 0;
 }
 
@@ -1708,22 +1732,26 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 	struct cdns_torrent_phy *cdns_phy;
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
-	const struct cdns_torrent_data *data;
 	struct device_node *child;
 	int ret, subnodes, node = 0, i;
+
+	subnodes = of_get_available_child_count(dev->of_node);
+	if (subnodes == 0) {
+		dev_err(dev, "No available link subnodes found\n");
+		return -EINVAL;
+	}
 
 	cdns_phy = devm_kzalloc(dev, sizeof(*cdns_phy), GFP_KERNEL);
 	if (!cdns_phy)
 		return -ENOMEM;
 
 	/* Get init data for this PHY */
-	data = of_device_get_match_data(dev);
-	if (!data)
+	cdns_phy->init_data = of_device_get_match_data(dev);
+	if (!cdns_phy->init_data)
 		return -EINVAL;
 
 	dev_set_drvdata(dev, cdns_phy);
 	cdns_phy->dev = dev;
-	cdns_phy->init_data = data;
 
 	cdns_phy->phy_rst = devm_reset_control_get_exclusive_by_index(dev, 0);
 	if (IS_ERR(cdns_phy->phy_rst)) {
@@ -1742,11 +1770,13 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(cdns_phy->sd_base))
 		return PTR_ERR(cdns_phy->sd_base);
 
-	subnodes = of_get_available_child_count(dev->of_node);
-	if (subnodes == 0) {
-		dev_err(dev, "No available link subnodes found\n");
-		return -EINVAL;
-	}
+	ret = cdns_torrent_regmap_init(cdns_phy);
+	if (ret)
+		return ret;
+
+	ret = cdns_torrent_regfield_init(cdns_phy);
+	if (ret)
+		return ret;
 
 	for_each_available_child_of_node(dev->of_node, child) {
 		struct phy *gphy;
@@ -1831,6 +1861,14 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 				goto put_child;
 			}
 
+			ret = cdns_torrent_dp_regmap_init(cdns_phy);
+			if (ret)
+				goto put_child;
+
+			ret = cdns_torrent_dp_regfield_init(cdns_phy);
+			if (ret)
+				goto put_child;
+
 			dev_info(dev, "%d lanes, max bit rate %d.%03d Gbps\n",
 				 cdns_phy->phys[node].num_lanes,
 				 cdns_phy->max_bit_rate / 1000,
@@ -1843,17 +1881,6 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 		node++;
 	}
 	cdns_phy->nsubnodes = node;
-
-	ret = cdns_regmap_init_torrent_dp(cdns_phy, cdns_phy->sd_base,
-					  cdns_phy->base,
-					  data->block_offset_shift,
-					  data->reg_offset_shift);
-	if (ret)
-		goto put_lnk_rst;
-
-	ret = cdns_regfield_init(cdns_phy);
-	if (ret)
-		goto put_lnk_rst;
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
 	if (IS_ERR(phy_provider)) {
