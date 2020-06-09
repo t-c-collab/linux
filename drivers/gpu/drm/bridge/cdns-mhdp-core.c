@@ -846,7 +846,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 					cdns_bridge_state->current_mode_name,
 					mhdp->link.num_lanes,
 					mhdp->link.rate / 100);
-				dev_err(mhdp->dev, "req_bw: %u max_bw: %u\n", req_bw, max_bw);
+				dev_err(mhdp->dev, "Req BW: %u Max BW: %u\n",
+					req_bw, max_bw);
 				goto err;
 			}
 			ret = cdns_mhdp_reg_read(mhdp,
@@ -1046,9 +1047,9 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 	req_bw = mode->clock * bpp / 8;
 	max_bw = lanes * rate;
 	if (req_bw > max_bw) {
-		dev_dbg(mhdp->dev, "%s: %s (%u * %u/8 =) %u > %u (= %u * %u)\n",
-			__func__, mode->name, mode->clock, bpp, req_bw,
-			max_bw, lanes, rate);
+		dev_dbg(mhdp->dev, "Unsupported Mode: %s\n", mode->name);
+		dev_dbg(mhdp->dev, "Req BW: %u  Available Max BW:%u\n",
+			req_bw, max_bw);
 
 		return false;
 	}
@@ -1304,7 +1305,7 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	u8 link_status[DP_LINK_STATUS_SIZE];
 	u32 reg32;
 	union phy_configure_opts phy_cfg;
-	int ret;
+	int ret, i;
 	bool r;
 
 	dev_dbg(mhdp->dev, "Starting EQ phase\n");
@@ -1354,8 +1355,12 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	} while (fail_counter_short < 5);
 
 err:
-	dev_dbg(mhdp->dev, "EQ phase failed for %d lanes and %d rate\n",
-		mhdp->link.num_lanes, mhdp->link.rate);
+	dev_dbg(mhdp->dev, "EQ phase failed for %d lanes and %d Mbps\n",
+		mhdp->link.num_lanes, mhdp->link.rate / 100);
+	for (i = 0; i < mhdp->link.num_lanes; i++)
+		dev_dbg(mhdp->dev, "Lane %d : VS %u  PE %u\n",
+			i, phy_cfg.dp.voltage[i],
+			phy_cfg.dp.pre[i]);
 
 	return false;
 }
@@ -1427,7 +1432,7 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 	u8 link_status[DP_LINK_STATUS_SIZE];
 	bool cr_done;
 	union phy_configure_opts phy_cfg;
-	int ret;
+	int ret, i;
 
 	dev_dbg(mhdp->dev, "Starting CR phase\n");
 
@@ -1492,8 +1497,12 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 	} while (fail_counter_short < 5 && fail_counter_cr_long < 10);
 
 err:
-	dev_dbg(mhdp->dev, "CR phase failed for %d lanes and %d rate\n",
-		mhdp->link.num_lanes, mhdp->link.rate);
+	dev_dbg(mhdp->dev, "CR phase failed for %d lanes and %d Mbps\n",
+		mhdp->link.num_lanes, mhdp->link.rate / 100);
+	for (i = 0; i < mhdp->link.num_lanes; i++)
+		dev_dbg(mhdp->dev, "Lane %d : VS %u  PE %u\n",
+			i, phy_cfg.dp.voltage[i],
+			phy_cfg.dp.pre[i]);
 
 	return false;
 }
@@ -1538,7 +1547,7 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 				continue;
 			}
 
-			dev_dbg(mhdp->dev,
+			dev_err(mhdp->dev,
 				"Link training failed during CR phase\n");
 			goto err;
 		}
@@ -1563,11 +1572,13 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			continue;
 		}
 
-		dev_dbg(mhdp->dev, "Link training failed during EQ phase\n");
+		dev_err(mhdp->dev, "Link training failed during EQ phase\n");
 		goto err;
 	}
 
-	dev_dbg(mhdp->dev, "Link training successful\n");
+	dev_dbg(mhdp->dev, "Link training successful with following parameters:\n");
+	dev_dbg(mhdp->dev, "Number of lanes: %d\n", mhdp->link.num_lanes);
+	dev_dbg(mhdp->dev, "Link Rate: %d Mbps\n", mhdp->link.rate / 100);
 
 	drm_dp_dpcd_writeb(&mhdp->aux, DP_TRAINING_PATTERN_SET,
 			   mhdp->host.scrambler ? 0 :
