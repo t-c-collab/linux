@@ -915,7 +915,8 @@ static ssize_t mhdp_transfer(struct drm_dp_aux *aux,
 			if (!ret)
 				continue;
 
-			DRM_DEV_ERROR(mhdp->dev, "Failed to write DPCD\n");
+			DRM_DEV_ERROR(mhdp->dev, "Failed to write DPCD addr %u\n",
+			              msg->address + i);
 
 			return ret;
 		}
@@ -923,7 +924,8 @@ static ssize_t mhdp_transfer(struct drm_dp_aux *aux,
 		ret = cdns_mhdp_dpcd_read(mhdp, msg->address,
 					  msg->buffer, msg->size);
 		if (ret) {
-			DRM_DEV_ERROR(mhdp->dev, "Failed to read DPCD\n");
+			DRM_DEV_ERROR(mhdp->dev, "Failed to read DPCD addr %u\n",
+			              msg->address);
 
 			return ret;
 		}
