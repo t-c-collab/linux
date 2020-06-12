@@ -939,20 +939,9 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
 	struct edid *edid;
 	int num_modes;
-	int ret;
 
 	if (!mhdp->plugged)
 		return 0;
-
-	mutex_lock(&mhdp->link_up_mutex);
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
-			return 0;
-		}
-	}
-	mutex_unlock(&mhdp->link_up_mutex);
 
 	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
 	if (!edid) {
@@ -1640,8 +1629,6 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	resp |= CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
-	cdns_mhdp_link_down(mhdp);
-
 	/* Disable VIF clock for stream 0 */
 	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
@@ -2028,16 +2015,6 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (!mhdp->plugged)
 		return;
 
-	mutex_lock(&mhdp->link_up_mutex);
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
-			return;
-		}
-	}
-	mutex_unlock(&mhdp->link_up_mutex);
-
 	if (mhdp->ops && mhdp->ops->enable)
 		mhdp->ops->enable(mhdp);
 
@@ -2141,20 +2118,9 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	int pxlclock;
 	u32 bpp, bpc, pxlfmt;
-	int ret;
 
 	if (!mhdp->plugged)
 		return 0;
-
-	mutex_lock(&mhdp->link_up_mutex);
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
-			return ret;
-		}
-	}
-	mutex_unlock(&mhdp->link_up_mutex);
 
 	state = to_cdns_mhdp_bridge_state(bridge_state);
 	pxlfmt = mhdp->display_fmt.color_format;
