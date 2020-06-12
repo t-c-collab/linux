@@ -1746,7 +1746,6 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 
 	dev_dbg(mhdp->dev, "Set sink device power state via DPCD\n");
 	cdns_mhdp_link_power_up(&mhdp->aux, &mhdp->link);
-	mdelay(100);
 
 	mhdp_fill_sink_caps(mhdp, dpcd);
 
