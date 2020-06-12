@@ -777,9 +777,11 @@ static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static void mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
+static bool mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 {
 	int hpd_event, hpd_status;
+
+	*hpd_pulse = false;
 
 	hpd_event = cdns_mhdp_read_event(mhdp);
 
@@ -787,29 +789,30 @@ static void mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 	if (hpd_event < 0) {
 		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
 			 __func__, hpd_event);
-		return;
+		return false;
 	}
 
 	hpd_status = cdns_mhdp_get_hpd_status(mhdp);
 	if (hpd_status < 0) {
 		dev_warn(mhdp->dev, "%s: get hpd status failed: %d\n",
 			 __func__, hpd_status);
-		return;
+		return false;
 	}
 
-	if ((hpd_event == (DPTX_READ_EVENT_HPD_STATE |
-	    DPTX_READ_EVENT_HPD_TO_HIGH)) && hpd_status == 1) {
-		mhdp->plugged = true;
-		*hpd_pulse = false;
-	} else if ((hpd_event == DPTX_READ_EVENT_HPD_TO_LOW) &&
-		   (hpd_status == 0)) {
-		mhdp->plugged = false;
-		*hpd_pulse = false;
-	} else if (hpd_event == (DPTX_READ_EVENT_HPD_STATE |
-		   DPTX_READ_EVENT_HPD_PULSE)) {
-		mhdp->plugged = hpd_status;
+	if ((hpd_event == (DPTX_READ_EVENT_HPD_STATE | DPTX_READ_EVENT_HPD_TO_HIGH)) &&
+	     hpd_status == 1)
+		return true;
+
+	if ((hpd_event == DPTX_READ_EVENT_HPD_TO_LOW) &&
+		   (hpd_status == 0))
+		return false;
+
+	if (hpd_event == (DPTX_READ_EVENT_HPD_STATE | DPTX_READ_EVENT_HPD_PULSE)) {
 		*hpd_pulse = true;
+		return !!hpd_status;
 	}
+
+	return false;
 }
 
 static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
@@ -820,7 +823,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	struct drm_bridge_state *state;
 	struct cdns_mhdp_bridge_state *cdns_bridge_state;
 
-	mhdp_detect_hpd(mhdp, &hpd_pulse);
+	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
 
 	if (!mhdp->plugged) {
 		cdns_mhdp_link_down(mhdp);
