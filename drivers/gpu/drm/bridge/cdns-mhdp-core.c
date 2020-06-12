@@ -822,56 +822,56 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	mhdp_detect_hpd(mhdp, &hpd_pulse);
 
-	if (mhdp->plugged) {
-		if (hpd_pulse)
+	if (!mhdp->plugged) {
+		cdns_mhdp_link_down(mhdp);
+		return;
+	}
+
+	if (hpd_pulse)
+		return;
+
+	mutex_lock(&mhdp->link_up_mutex);
+	if (!mhdp->link_up) {
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_up_mutex);
 			return;
-
-		mutex_lock(&mhdp->link_up_mutex);
-		if (!mhdp->link_up) {
-			ret = cdns_mhdp_link_up(mhdp);
-			if (ret < 0) {
-				mutex_unlock(&mhdp->link_up_mutex);
-				return;
-			}
 		}
-		mutex_unlock(&mhdp->link_up_mutex);
+	}
+	mutex_unlock(&mhdp->link_up_mutex);
 
-		mutex_lock(&mhdp->mode_mutex);
-		if (mhdp->bridge_enabled) {
-			state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
-			if (!state)
-				goto err;
+	mutex_lock(&mhdp->mode_mutex);
+	if (mhdp->bridge_enabled) {
+		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
+		if (!state)
+			goto err;
 
-			cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
-			if (!cdns_bridge_state)
-				goto err;
+		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
+		if (!cdns_bridge_state)
+			goto err;
 
-			req_bw = cdns_bridge_state->current_mode_req_bw;
-			max_bw = mhdp->link.num_lanes * mhdp->link.rate;
+		req_bw = cdns_bridge_state->current_mode_req_bw;
+		max_bw = mhdp->link.num_lanes * mhdp->link.rate;
 
-			if (req_bw > max_bw) {
-				dev_err(mhdp->dev, "Not enough BW for %s (%u lanes at %u Mbps)\n",
-					cdns_bridge_state->current_mode_name,
-					mhdp->link.num_lanes,
-					mhdp->link.rate / 100);
-				dev_err(mhdp->dev, "Req BW: %u Max BW: %u\n",
-					req_bw, max_bw);
-				goto err;
-			}
-			ret = cdns_mhdp_reg_read(mhdp,
-						 CDNS_DP_FRAMER_GLOBAL_CONFIG,
-						 &framer);
-			framer |= CDNS_DP_FRAMER_EN;
-			framer &= ~CDNS_DP_NO_VIDEO_MODE;
-			cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG,
-					    framer);
+		if (req_bw > max_bw) {
+			dev_err(mhdp->dev, "Not enough BW for %s (%u lanes at %u Mbps)\n",
+				cdns_bridge_state->current_mode_name,
+				mhdp->link.num_lanes,
+				mhdp->link.rate / 100);
+			dev_err(mhdp->dev, "Req BW: %u Max BW: %u\n",
+				req_bw, max_bw);
+			goto err;
 		}
+		ret = cdns_mhdp_reg_read(mhdp,
+					 CDNS_DP_FRAMER_GLOBAL_CONFIG,
+					 &framer);
+		framer |= CDNS_DP_FRAMER_EN;
+		framer &= ~CDNS_DP_NO_VIDEO_MODE;
+		cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG,
+				    framer);
+	}
 err:
 	mutex_unlock(&mhdp->mode_mutex);
-	return;
-	} else {
-		cdns_mhdp_link_down(mhdp);
-	}
 }
 
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
