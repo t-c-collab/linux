@@ -799,20 +799,10 @@ static bool mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 		return false;
 	}
 
-	if ((hpd_event == (DPTX_READ_EVENT_HPD_STATE | DPTX_READ_EVENT_HPD_TO_HIGH)) &&
-	     hpd_status == 1)
-		return true;
-
-	if ((hpd_event == DPTX_READ_EVENT_HPD_TO_LOW) &&
-		   (hpd_status == 0))
-		return false;
-
-	if (hpd_event == (DPTX_READ_EVENT_HPD_STATE | DPTX_READ_EVENT_HPD_PULSE)) {
+	if (hpd_event & DPTX_READ_EVENT_HPD_PULSE)
 		*hpd_pulse = true;
-		return !!hpd_status;
-	}
 
-	return false;
+	return !!hpd_status;
 }
 
 static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
