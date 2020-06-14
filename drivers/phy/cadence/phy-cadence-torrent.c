@@ -102,6 +102,14 @@
 #define CMN_PLL0_LOCK_REFCNT_START      0x009CU
 #define CMN_PLL0_LOCK_PLLCNT_START	0x009EU
 #define CMN_PLL0_LOCK_PLLCNT_THR        0x009FU
+#define CMN_PLL0_INTDIV_M1		0x00A0U
+#define CMN_PLL0_FRACDIVH_M1		0x00A2U
+#define CMN_PLL0_HIGH_THR_M1		0x00A3U
+#define CMN_PLL0_DSM_DIAG_M1		0x00A4U
+#define CMN_PLL0_SS_CTRL1_M1		0x00A8U
+#define CMN_PLL0_SS_CTRL2_M1		0x00A9U
+#define CMN_PLL0_SS_CTRL3_M1		0x00AAU
+#define CMN_PLL0_SS_CTRL4_M1		0x00ABU
 #define CMN_PLL1_VCOCAL_TCTRL		0x00C2U
 #define CMN_PLL1_VCOCAL_INIT_TMR	0x00C4U
 #define CMN_PLL1_VCOCAL_ITER_TMR	0x00C5U
@@ -134,8 +142,10 @@
 #define CMN_PDIAG_PLL0_CP_PADJ_M0	0x01A4U
 #define CMN_PDIAG_PLL0_CP_IADJ_M0	0x01A5U
 #define CMN_PDIAG_PLL0_FILT_PADJ_M0	0x01A6U
+#define CMN_PDIAG_PLL0_CTRL_M1		0x01B0U
 #define CMN_PDIAG_PLL0_CP_PADJ_M1	0x01B4U
 #define CMN_PDIAG_PLL0_CP_IADJ_M1	0x01B5U
+#define CMN_PDIAG_PLL0_FILT_PADJ_M1	0x01B6U
 #define CMN_PDIAG_PLL1_CTRL_M0		0x01C0U
 #define CMN_PDIAG_PLL1_CLK_SEL_M0	0x01C1U
 #define CMN_PDIAG_PLL1_CP_PADJ_M0	0x01C4U
@@ -2075,25 +2085,94 @@ static int cdns_torrent_phy_remove(struct platform_device *pdev)
 	return 0;
 }
 
-struct cdns_reg_pairs cdns_pcie_cmn_regs_no_ssc[] = {
+/* Single link PCIe, 100 MHz Ref clk, internal SSC */
+struct cdns_reg_pairs single_pcie_100_int_ssc_cmn_regs[] = {
+	{0x0004, CMN_PLL0_DSM_DIAG_M0},
+	{0x0004, CMN_PLL0_DSM_DIAG_M1},
+	{0x0004, CMN_PLL1_DSM_DIAG_M0},
+	{0x0509, CMN_PDIAG_PLL0_CP_PADJ_M0},
+	{0x0509, CMN_PDIAG_PLL0_CP_PADJ_M1},
+	{0x0509, CMN_PDIAG_PLL1_CP_PADJ_M0},
+	{0x0F00, CMN_PDIAG_PLL0_CP_IADJ_M0},
+	{0x0F00, CMN_PDIAG_PLL0_CP_IADJ_M1},
+	{0x0F00, CMN_PDIAG_PLL1_CP_IADJ_M0},
+	{0x0F08, CMN_PDIAG_PLL0_FILT_PADJ_M0},
+	{0x0F08, CMN_PDIAG_PLL0_FILT_PADJ_M1},
+	{0x0F08, CMN_PDIAG_PLL1_FILT_PADJ_M0},
+	{0x0064, CMN_PLL0_INTDIV_M0},
+	{0x0050, CMN_PLL0_INTDIV_M1},
+	{0x0050, CMN_PLL1_INTDIV_M0},
+	{0x0002, CMN_PLL0_FRACDIVH_M0},
+	{0x0002, CMN_PLL0_FRACDIVH_M1},
+	{0x0002, CMN_PLL1_FRACDIVH_M0},
+	{0x0044, CMN_PLL0_HIGH_THR_M0},
+	{0x0036, CMN_PLL0_HIGH_THR_M1},
+	{0x0036, CMN_PLL1_HIGH_THR_M0},
+	{0x0002, CMN_PDIAG_PLL0_CTRL_M0},
+	{0x0002, CMN_PDIAG_PLL0_CTRL_M1},
+	{0x0002, CMN_PDIAG_PLL1_CTRL_M0},
+	{0x0001, CMN_PLL0_SS_CTRL1_M0},
+	{0x0001, CMN_PLL0_SS_CTRL1_M1},
+	{0x0001, CMN_PLL1_SS_CTRL1_M0},
+	{0x011B, CMN_PLL0_SS_CTRL2_M0},
+	{0x011B, CMN_PLL0_SS_CTRL2_M1},
+	{0x011B, CMN_PLL1_SS_CTRL2_M0},
+	{0x006E, CMN_PLL0_SS_CTRL3_M0},
+	{0x0058, CMN_PLL0_SS_CTRL3_M1},
+	{0x0058, CMN_PLL1_SS_CTRL3_M0},
+	{0x000E, CMN_PLL0_SS_CTRL4_M0},
+	{0x0012, CMN_PLL0_SS_CTRL4_M1},
+	{0x0012, CMN_PLL1_SS_CTRL4_M0},
+	{0x0C5E, CMN_PLL0_VCOCAL_REFTIM_START},
+	{0x0C5E, CMN_PLL1_VCOCAL_REFTIM_START},
+	{0x0C56, CMN_PLL0_VCOCAL_PLLCNT_START},
+	{0x0C56, CMN_PLL1_VCOCAL_PLLCNT_START},
 	{0x0003, CMN_PLL0_VCOCAL_TCTRL},
-	{0x0003, CMN_PLL1_VCOCAL_TCTRL}
+	{0x0003, CMN_PLL1_VCOCAL_TCTRL},
+	{0x00C7, CMN_PLL0_LOCK_REFCNT_START},
+	{0x00C7, CMN_PLL1_LOCK_REFCNT_START},
+	{0x00C7, CMN_PLL0_LOCK_PLLCNT_START},
+	{0x00C7, CMN_PLL1_LOCK_PLLCNT_START},
+	{0x0005, CMN_PLL0_LOCK_PLLCNT_THR},
+	{0x0005, CMN_PLL1_LOCK_PLLCNT_THR}
 };
 
-struct cdns_reg_pairs cdns_pcie_rx_ln_regs_no_ssc[] = {
+struct cdns_reg_pairs single_pcie_100_int_ssc_rx_ln_regs[] = {
 	{0x0019, RX_REE_TAP1_CLIP},
 	{0x0019, RX_REE_TAP2TON_CLIP},
 	{0x0001, RX_DIAG_ACYA}
 };
 
-struct cdns_torrent_vals pcie_cmn_vals_no_ssc = {
-	.reg_pairs = cdns_pcie_cmn_regs_no_ssc,
-	.num_regs = ARRAY_SIZE(cdns_pcie_cmn_regs_no_ssc),
+struct cdns_torrent_vals single_pcie_100_int_ssc_cmn_vals = {
+	.reg_pairs = single_pcie_100_int_ssc_cmn_regs,
+	.num_regs = ARRAY_SIZE(single_pcie_100_int_ssc_cmn_regs),
 };
 
-struct cdns_torrent_vals pcie_rx_ln_vals_no_ssc = {
-	.reg_pairs = cdns_pcie_rx_ln_regs_no_ssc,
-	.num_regs = ARRAY_SIZE(cdns_pcie_rx_ln_regs_no_ssc),
+struct cdns_torrent_vals single_pcie_100_int_ssc_rx_ln_vals = {
+	.reg_pairs = single_pcie_100_int_ssc_rx_ln_regs,
+	.num_regs = ARRAY_SIZE(single_pcie_100_int_ssc_rx_ln_regs),
+};
+
+/* Single link PCIe, 100 MHz Ref clk, no SSC & external SSC */
+struct cdns_reg_pairs single_pcie_100_ext_no_ssc_cmn_regs[] = {
+	{0x0003, CMN_PLL0_VCOCAL_TCTRL},
+	{0x0003, CMN_PLL1_VCOCAL_TCTRL}
+};
+
+struct cdns_reg_pairs single_pcie_100_ext_no_ssc_rx_ln_regs[] = {
+	{0x0019, RX_REE_TAP1_CLIP},
+	{0x0019, RX_REE_TAP2TON_CLIP},
+	{0x0001, RX_DIAG_ACYA}
+};
+
+struct cdns_torrent_vals single_pcie_100_ext_no_ssc_cmn_vals = {
+	.reg_pairs = single_pcie_100_ext_no_ssc_cmn_regs,
+	.num_regs = ARRAY_SIZE(single_pcie_100_ext_no_ssc_cmn_regs),
+};
+
+struct cdns_torrent_vals single_pcie_100_ext_no_ssc_rx_ln_vals = {
+	.reg_pairs = single_pcie_100_ext_no_ssc_rx_ln_regs,
+	.num_regs = ARRAY_SIZE(single_pcie_100_ext_no_ssc_rx_ln_regs),
 };
 
 static const struct cdns_torrent_data cdns_map_torrent = {
@@ -2101,17 +2180,23 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 	.reg_offset_shift = 0x2,
 	.cmn_vals = {
 		[TYPE_PCIE] = {
-			[NO_SSC] = &pcie_cmn_vals_no_ssc,
+			[NO_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
+			[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
+			[INTERNAL_SSC] = &single_pcie_100_int_ssc_cmn_vals,
 		},
 	},
 	.tx_ln_vals = {
 		[TYPE_PCIE] = {
 			[NO_SSC] = NULL,
+			[EXTERNAL_SSC] = NULL,
+			[INTERNAL_SSC] = NULL,
 		},
 	},
 	.rx_ln_vals = {
 		[TYPE_PCIE] = {
-			[NO_SSC] = &pcie_rx_ln_vals_no_ssc,
+			[NO_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
+			[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
+			[INTERNAL_SSC] = &single_pcie_100_int_ssc_rx_ln_vals,
 		},
 	},
 };
@@ -2121,17 +2206,23 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 	.reg_offset_shift = 0x1,
 	.cmn_vals = {
 		[TYPE_PCIE] = {
-			[NO_SSC] = &pcie_cmn_vals_no_ssc,
+			[NO_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
+			[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
+			[INTERNAL_SSC] = &single_pcie_100_int_ssc_cmn_vals,
 		},
 	},
 	.tx_ln_vals = {
 		[TYPE_PCIE] = {
 			[NO_SSC] = NULL,
+			[EXTERNAL_SSC] = NULL,
+			[INTERNAL_SSC] = NULL,
 		},
 	},
 	.rx_ln_vals = {
 		[TYPE_PCIE] = {
-			[NO_SSC] = &pcie_rx_ln_vals_no_ssc,
+			[NO_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
+			[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
+			[INTERNAL_SSC] = &single_pcie_100_int_ssc_rx_ln_vals,
 		},
 	},
 };
