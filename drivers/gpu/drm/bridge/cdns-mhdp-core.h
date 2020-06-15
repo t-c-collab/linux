@@ -349,10 +349,9 @@ struct cdns_mhdp_device {
 
 	/* This is to protect mailbox communications with the firmware */
 	struct mutex mbox_mutex;
-	/* Proctect the current mode required bandwidth*/
-	struct mutex mode_mutex;
-	/* Proctect the link_up flag*/
-	struct mutex link_up_mutex;
+
+	/* Lock for link operations (link training, video enable/disable) */
+	struct mutex link_mutex;
 
 	struct drm_connector connector;
 	struct drm_bridge bridge;

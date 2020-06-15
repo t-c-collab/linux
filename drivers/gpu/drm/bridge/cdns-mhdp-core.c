@@ -777,94 +777,76 @@ static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static bool mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
+static void mhdp_handle_hpd_event(struct cdns_mhdp_device *mhdp)
 {
-	int hpd_event, hpd_status;
-
-	*hpd_pulse = false;
+	int ret;
+	int hpd_status, hpd_event;
+	bool plugged;
 
 	hpd_event = cdns_mhdp_read_event(mhdp);
-
-	/* Getting event bits failed, bail out */
 	if (hpd_event < 0) {
-		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
+		dev_warn(mhdp->dev, "%s: get hpd event failed: %d\n",
 			 __func__, hpd_event);
-		return false;
+		return;
 	}
 
 	hpd_status = cdns_mhdp_get_hpd_status(mhdp);
 	if (hpd_status < 0) {
 		dev_warn(mhdp->dev, "%s: get hpd status failed: %d\n",
 			 __func__, hpd_status);
-		return false;
+		return;
 	}
 
-	if (hpd_event & DPTX_READ_EVENT_HPD_PULSE)
-		*hpd_pulse = true;
+	plugged = !!hpd_status;
 
-	return !!hpd_status;
-}
+	mutex_lock(&mhdp->link_mutex);
 
-static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
-{
-	bool hpd_pulse;
-	u32 max_bw, framer, req_bw;
-	int ret;
-	struct drm_bridge_state *state;
-	struct cdns_mhdp_bridge_state *cdns_bridge_state;
-
-	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
-
-	if (!mhdp->plugged) {
+	/* If not connected, nothing else to do */
+	if (!plugged) {
+		mhdp->plugged = false;
 		cdns_mhdp_link_down(mhdp);
+		mutex_unlock(&mhdp->link_mutex);
 		return;
 	}
 
-	if (hpd_pulse)
-		return;
+	/*
+	 * If we get a HPD pulse event, and we were and still are connected,
+	 * check the link status. If link status is ok, there's nothing to do
+	 * as we don't handle DP interrupts. If link status is bad, continue
+	 * with full link setup.
+	 */
+	if (plugged == mhdp->plugged && (hpd_event & DPTX_READ_EVENT_HPD_PULSE)) {
+		u8 status[DP_LINK_STATUS_SIZE];
 
-	mutex_lock(&mhdp->link_up_mutex);
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
+		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+
+		printk("0x0202 LANE0_1_STATUS:            0x%02x\n", status[0]);
+		printk("0x0203 LANE2_3_STATUS             0x%02x\n", status[1]);
+		printk("0x0204 LANE_ALIGN_STATUS_UPDATED: 0x%02x\n", status[2]);
+		printk("0x0205 SINK_STATUS:               0x%02x\n", status[3]);
+		printk("0x0206 ADJUST_REQUEST_LANE0_1:    0x%02x\n", status[4]);
+		printk("0x0207 ADJUST_REQUEST_LANE2_3:    0x%02x\n", status[5]);
+
+		if (ret > 0 &&
+		    drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
+		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes)) {
+			mutex_unlock(&mhdp->link_mutex);
 			return;
 		}
+
+		dev_err(mhdp->dev, "HPD_IRQ: link not ok\n");
 	}
-	mutex_unlock(&mhdp->link_up_mutex);
 
-	mutex_lock(&mhdp->mode_mutex);
-	if (mhdp->bridge_enabled) {
-		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
-		if (!state)
-			goto err;
+	mhdp->plugged = true;
 
-		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
-		if (!cdns_bridge_state)
-			goto err;
-
-		req_bw = cdns_bridge_state->current_mode_req_bw;
-		max_bw = mhdp->link.num_lanes * mhdp->link.rate;
-
-		if (req_bw > max_bw) {
-			dev_err(mhdp->dev, "Not enough BW for %s (%u lanes at %u Mbps)\n",
-				cdns_bridge_state->current_mode_name,
-				mhdp->link.num_lanes,
-				mhdp->link.rate / 100);
-			dev_err(mhdp->dev, "Req BW: %u Max BW: %u\n",
-				req_bw, max_bw);
-			goto err;
-		}
-		ret = cdns_mhdp_reg_read(mhdp,
-					 CDNS_DP_FRAMER_GLOBAL_CONFIG,
-					 &framer);
-		framer |= CDNS_DP_FRAMER_EN;
-		framer &= ~CDNS_DP_NO_VIDEO_MODE;
-		cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG,
-				    framer);
+	/* Link up */
+	ret = cdns_mhdp_link_up(mhdp);
+	if (ret < 0) {
+		mutex_unlock(&mhdp->link_mutex);
+		return;
 	}
-err:
-	mutex_unlock(&mhdp->mode_mutex);
+
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
@@ -887,7 +869,7 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	spin_unlock(&mhdp->start_lock);
 
 	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
-		mhdp_update_link_status(mhdp);
+		mhdp_handle_hpd_event(mhdp);
 
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
 	}
@@ -1524,7 +1506,6 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 {
 	u32 reg32;
 	const u8 eq_tps = mhdp_eq_training_pattern_supported(mhdp);
-	int ret;
 
 	while (1) {
 		if (!mhdp_link_training_cr(mhdp)) {
@@ -1580,17 +1561,15 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			   mhdp->host.scrambler ? 0 :
 			   DP_LINK_SCRAMBLING_DISABLE);
 
-	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &reg32);
-	if (ret < 0) {
-		dev_err(mhdp->dev,
-			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
-			ret);
-		return ret;
-	}
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &reg32);
 	reg32 &= ~GENMASK(1, 0);
 	reg32 |= CDNS_DP_NUM_LANES(mhdp->link.num_lanes);
 	reg32 |= CDNS_DP_WR_FAILING_EDGE_VSYNC;
 	reg32 |= CDNS_DP_FRAMER_EN;
+	if (mhdp->bridge_enabled)
+		reg32 &= ~CDNS_DP_NO_VIDEO_MODE;
+	else
+		reg32 |= CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, reg32);
 
 	/* Reset PHY config */
@@ -1621,11 +1600,12 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
-	mutex_lock(&mhdp->mode_mutex);
+	mutex_lock(&mhdp->link_mutex);
 
 	mhdp->bridge_enabled = false;
+
+	/* Disable framer video */
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
-	resp &= ~CDNS_DP_FRAMER_EN;
 	resp |= CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
@@ -1637,7 +1617,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	if (mhdp->ops && mhdp->ops->disable)
 		mhdp->ops->disable(mhdp);
 
-	mutex_unlock(&mhdp->mode_mutex);
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
@@ -1744,14 +1724,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
 
 	/* Disable framer for link training */
-	err = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
-	if (err < 0) {
-		dev_err(mhdp->dev,
-			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
-			err);
-		return err;
-	}
-
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
 	resp &= ~CDNS_DP_FRAMER_EN;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
@@ -1786,10 +1759,17 @@ error:
 
 static int cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 {
+	u32 resp;
+
 	dev_dbg(mhdp->dev, "cdns_mhdp_link_down\n");
 
 	if (mhdp->plugged)
 		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
+
+	/* Disable framer */
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	resp &= ~CDNS_DP_FRAMER_EN;
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
 	mhdp->link_up = false;
 
@@ -1807,7 +1787,6 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 	u32 bpp, bpc, pxlfmt;
 	u32 framer;
 	u8 stream_id = mhdp->stream_id;
-	int ret;
 
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
@@ -1955,14 +1934,8 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 				(mode->flags & DRM_MODE_FLAG_INTERLACE) ?
 				CDNS_DP_VB_ID_INTERLACED : 0);
 
-	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
-	if (ret < 0) {
-		dev_err(mhdp->dev,
-			"Failed to read CDNS_DP_FRAMER_GLOBAL_CONFIG %d\n",
-			ret);
-		return;
-	}
-	framer |= CDNS_DP_FRAMER_EN;
+	/* Enable framer video */
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
 	framer &= ~CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
@@ -2012,8 +1985,10 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
+	mutex_lock(&mhdp->link_mutex);
+
 	if (!mhdp->plugged)
-		return;
+		goto exit;
 
 	if (mhdp->ops && mhdp->ops->enable)
 		mhdp->ops->enable(mhdp);
@@ -2022,7 +1997,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
 	if (ret < 0) {
 		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
-		return;
+		goto exit;
 	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
@@ -2031,25 +2006,29 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
 	if (WARN_ON(!connector))
-		return;
+		goto exit;
 
 	conn_state = drm_atomic_get_new_connector_state(state, connector);
 	if (WARN_ON(!conn_state))
-		return;
+		goto exit;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
 	if (WARN_ON(!crtc_state))
-		return;
+		goto exit;
 
 	mode = &crtc_state->adjusted_mode;
 
 	new_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_state))
-		return;
+		goto exit;
 
 	cdns_mhdp_sst_enable(mhdp, mode, new_state);
 
 	mhdp->bridge_enabled = true;
+
+exit:
+	/* TODO resource handling on error cases */
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
@@ -2210,8 +2189,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	mhdp->clk = clk;
 	mhdp->dev = dev;
 	mutex_init(&mhdp->mbox_mutex);
-	mutex_init(&mhdp->mode_mutex);
-	mutex_init(&mhdp->link_up_mutex);
+	mutex_init(&mhdp->link_mutex);
 	spin_lock_init(&mhdp->start_lock);
 
 	drm_dp_aux_init(&mhdp->aux);
