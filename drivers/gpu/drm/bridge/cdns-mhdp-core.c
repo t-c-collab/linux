@@ -634,6 +634,41 @@ static bool mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 	return (mhdp->host.ssc) && (mhdp->sink.ssc);
 }
 
+static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
+{
+	u32 ver_l, ver_h, fw_ver;
+	u32 lib_l_addr, lib_h_addr, lib_ver;
+
+	ver_l = readl(mhdp->regs + CDNS_VER_L);
+	ver_h = readl(mhdp->regs + CDNS_VER_H);
+
+	fw_ver = (ver_h << 8) | ver_l;
+
+	lib_l_addr = readl(mhdp->regs + CDNS_LIB_L_ADDR);
+	lib_h_addr = readl(mhdp->regs + CDNS_LIB_H_ADDR);
+
+	lib_ver = (lib_h_addr << 8) | lib_l_addr;
+
+	if (lib_ver < 33984) {
+		if (fw_ver == 26098)
+			dev_dbg(mhdp->dev, "FW version = v1.2.15\n");
+		else if (lib_ver == 0 && fw_ver == 0)
+			dev_dbg(mhdp->dev, "FW version = v1.2.17\n");
+		else
+			goto fw_error;
+	} else {
+		dev_dbg(mhdp->dev, "FW version: v%d.%d.%d\n", fw_ver / 10000,
+			(fw_ver / 100) % 100,
+			(fw_ver % 10000) % 100);
+	}
+
+	return 0;
+
+fw_error:
+	dev_err(mhdp->dev, "Unsupported FW version\n");
+	return -1;
+}
+
 static int mhdp_fw_activate(const struct firmware *fw,
 			    struct cdns_mhdp_device *mhdp)
 {
@@ -678,6 +713,10 @@ static int mhdp_fw_activate(const struct firmware *fw,
 			"device didn't give any life sign: reg %d\n", reg);
 		goto error;
 	}
+
+	ret = mhdp_check_fw_version(mhdp);
+	if (ret)
+		goto error;
 
 	/* Init events to 0 as it's not cleared by FW at boot but on read */
 	readl(mhdp->regs + CDNS_SW_EVENT0);
