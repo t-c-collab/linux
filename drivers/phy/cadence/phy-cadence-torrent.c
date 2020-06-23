@@ -1602,10 +1602,12 @@ static int cdns_torrent_phy_on(struct phy *phy)
 	int ret;
 	u32 read_val;
 
-	/* Take the PHY out of reset */
-	ret = reset_control_deassert(cdns_phy->phy_rst);
-	if (ret)
-		return ret;
+	if (cdns_phy->nsubnodes == 1) {
+		/* Take the PHY out of reset */
+		ret = reset_control_deassert(cdns_phy->phy_rst);
+		if (ret)
+			return ret;
+	}
 
 	/* Take the PHY lane group out of reset */
 	reset_control_deassert(inst->lnk_rst);
@@ -1834,6 +1836,9 @@ static int cdns_torrent_phy_init(struct phy *phy)
 		return -EINVAL;
 	}
 
+	if (cdns_phy->nsubnodes > 1)
+		return 0;
+
 	if (phy_type == TYPE_DP)
 		return cdns_torrent_dp_init(phy);
 
@@ -1877,6 +1882,7 @@ static int cdns_torrent_phy_init(struct phy *phy)
 static int phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 {
 	int i, j, node, mlane, num_lanes;
+	int ret;
 	u32 num_regs;
 	struct cdns_reg_pairs *reg_pairs;
 	struct cdns_torrent_vals *link_cmn_vals, *xcvr_diag_vals;
@@ -1980,6 +1986,11 @@ static int phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 			}
 		}
 	}
+
+	/* Take the PHY out of reset */
+	ret = reset_control_deassert(cdns_phy->phy_rst);
+	if (ret)
+		return ret;
 
 	return 0;
 }
