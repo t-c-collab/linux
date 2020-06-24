@@ -1728,6 +1728,8 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	unsigned int addr;
 	int err;
 
+	WARN_ON(!mutex_is_locked(&mhdp->link_mutex));
+
 	drm_dp_dpcd_readb(&mhdp->aux, DP_TRAINING_AUX_RD_INTERVAL,
 			  &ext_cap_chk);
 
@@ -1800,6 +1802,8 @@ error:
 
 static int cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 {
+	WARN_ON(!mutex_is_locked(&mhdp->link_mutex));
+
 	if (mhdp->plugged)
 		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
 
