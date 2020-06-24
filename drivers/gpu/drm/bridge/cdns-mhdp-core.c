@@ -638,6 +638,7 @@ static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 {
 	u32 ver_l, ver_h, fw_ver;
 	u32 lib_l_addr, lib_h_addr, lib_ver;
+	u32 major_num, minor_num, revision;
 
 	ver_l = readl(mhdp->regs + CDNS_VER_L);
 	ver_h = readl(mhdp->regs + CDNS_VER_H);
@@ -650,23 +651,27 @@ static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 	lib_ver = (lib_h_addr << 8) | lib_l_addr;
 
 	if (lib_ver < 33984) {
+		major_num = 1;
+		minor_num = 2;
 		if (fw_ver == 26098)
-			dev_dbg(mhdp->dev, "FW version = v1.2.15\n");
+			revision = 15;
 		else if (lib_ver == 0 && fw_ver == 0)
-			dev_dbg(mhdp->dev, "FW version = v1.2.17\n");
+			revision = 17;
 		else
 			goto fw_error;
 	} else {
-		dev_dbg(mhdp->dev, "FW version: v%d.%d.%d\n", fw_ver / 10000,
-			(fw_ver / 100) % 100,
-			(fw_ver % 10000) % 100);
+		major_num = fw_ver / 10000;
+		minor_num = (fw_ver / 100) % 100;
+		revision = (fw_ver % 10000) % 100;
 	}
 
+	dev_dbg(mhdp->dev, "FW version: v%u.%u.%u\n", major_num, minor_num,
+		revision);
 	return 0;
 
 fw_error:
 	dev_err(mhdp->dev, "Unsupported FW version\n");
-	return -1;
+	return -ENODEV;
 }
 
 static int mhdp_fw_activate(const struct firmware *fw,
