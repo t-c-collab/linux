@@ -988,28 +988,13 @@ static int cdns_mhdp_detect(struct drm_connector *conn,
 			    bool force)
 {
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
-	bool hw_ready;
-	int ret;
 
-	dev_dbg(mhdp->dev, "%s\n", __func__);
+	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
 
-	spin_lock(&mhdp->start_lock);
-
-	hw_ready = mhdp->hw_state == MHDP_HW_READY;
-
-	spin_unlock(&mhdp->start_lock);
-
-	if (!hw_ready || WARN_ON(!mhdp->bridge_attached))
-		return connector_status_disconnected;
-
-	ret = cdns_mhdp_get_hpd_status(mhdp);
-	if (ret > 0) {
+	if (mhdp->plugged)
 		return connector_status_connected;
-	}
-	if (ret < 0)
-		dev_err(mhdp->dev, "Failed to obtain HPD state\n");
-
-	return connector_status_disconnected;
+	else
+		return connector_status_disconnected;
 }
 
 static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
