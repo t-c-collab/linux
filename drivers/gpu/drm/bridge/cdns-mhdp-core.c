@@ -815,7 +815,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
 
-	mutex_lock(&mhdp->link_up_mutex);
+	mutex_lock(&mhdp->link_mutex);
+
 	if (!mhdp->plugged) {
 		cdns_mhdp_link_down(mhdp);
 		goto err;
@@ -860,7 +861,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 				    framer);
 	}
 err:
-	mutex_unlock(&mhdp->link_up_mutex);
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static irqreturn_t mhdp_irq_handler(int irq, void *data)
@@ -942,15 +943,16 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	if (!mhdp->plugged)
 		return 0;
 
-	mutex_lock(&mhdp->link_up_mutex);
+	mutex_lock(&mhdp->link_mutex);
+
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
 		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
+			mutex_unlock(&mhdp->link_mutex);
 			return 0;
 		}
 	}
-	mutex_unlock(&mhdp->link_up_mutex);
+	mutex_unlock(&mhdp->link_mutex);
 
 	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
 	if (!edid) {
@@ -1633,7 +1635,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
-	mutex_lock(&mhdp->link_up_mutex);
+	mutex_lock(&mhdp->link_mutex);
 
 	mhdp->bridge_enabled = false;
 	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
@@ -1651,7 +1653,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	if (mhdp->ops && mhdp->ops->disable)
 		mhdp->ops->disable(mhdp);
 
-	mutex_unlock(&mhdp->link_up_mutex);
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
@@ -2025,13 +2027,12 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (!mhdp->plugged)
 		return;
 
-	mutex_lock(&mhdp->link_up_mutex);
+	mutex_lock(&mhdp->link_mutex);
+
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
-			return;
-		}
+		if (ret < 0)
+			goto err_enable;
 	}
 
 	if (mhdp->ops && mhdp->ops->enable)
@@ -2041,7 +2042,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
 	if (ret < 0) {
 		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
-		return;
+		goto err_enable;
 	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
@@ -2050,26 +2051,28 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
 	if (WARN_ON(!connector))
-		return;
+		goto err_enable;
 
 	conn_state = drm_atomic_get_new_connector_state(state, connector);
 	if (WARN_ON(!conn_state))
-		return;
+		goto err_enable;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
 	if (WARN_ON(!crtc_state))
-		return;
+		goto err_enable;
 
 	mode = &crtc_state->adjusted_mode;
 
 	new_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_state))
-		return;
+		goto err_enable;
 
 	cdns_mhdp_sst_enable(mhdp, mode, new_state);
 
 	mhdp->bridge_enabled = true;
-	mutex_unlock(&mhdp->link_up_mutex);
+
+err_enable:
+	mutex_unlock(&mhdp->link_mutex);
 }
 
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
@@ -2143,13 +2146,12 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	if (!mhdp->plugged)
 		return 0;
 
-	mutex_lock(&mhdp->link_up_mutex);
+	mutex_lock(&mhdp->link_mutex);
+
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_up_mutex);
-			return ret;
-		}
+		if (ret < 0)
+			goto err_check;
 	}
 
 	state = to_cdns_mhdp_bridge_state(bridge_state);
@@ -2169,8 +2171,8 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
 			__func__, mode->name, mhdp->link.num_lanes,
 			mhdp->link.rate / 100);
-		mutex_unlock(&mhdp->link_up_mutex);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_check;
 	}
 
 	/* find optimal tu_size */
@@ -2191,8 +2193,8 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
 			__func__, mode->name, mhdp->link.num_lanes,
 			mhdp->link.rate / 100);
-		mutex_unlock(&mhdp->link_up_mutex);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_check;
 	}
 
 	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
@@ -2206,8 +2208,12 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	state->current_mode_req_bw = mode->clock * bpp / 8;
 	strcpy(state->current_mode_name, mode->name);
 
-	mutex_unlock(&mhdp->link_up_mutex);
+	mutex_unlock(&mhdp->link_mutex);
 	return 0;
+
+err_check:
+	mutex_unlock(&mhdp->link_mutex);
+	return ret;
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
@@ -2243,7 +2249,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	mhdp->clk = clk;
 	mhdp->dev = dev;
 	mutex_init(&mhdp->mbox_mutex);
-	mutex_init(&mhdp->link_up_mutex);
+	mutex_init(&mhdp->link_mutex);
 	spin_lock_init(&mhdp->start_lock);
 
 	drm_dp_aux_init(&mhdp->aux);
