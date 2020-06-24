@@ -349,7 +349,14 @@ struct cdns_mhdp_device {
 
 	/* This is to protect mailbox communications with the firmware */
 	struct mutex mbox_mutex;
-	/* Proctect the link_up flag*/
+
+	/* "link_mutex" protects the access to all the link parameters
+	 * including the link training process. Link training will be
+	 * invoked both from threaded interrupt handler and from atomic
+	 * callbacks when link_up is not set. So this mutex protects
+	 * flags such as link_up, bridge_enabled, link.num_lanes,
+	 * link.rate etc.
+	 */
 	struct mutex link_mutex;
 
 	struct drm_connector connector;
