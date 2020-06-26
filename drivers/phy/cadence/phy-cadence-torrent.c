@@ -2247,22 +2247,23 @@ static int cdns_torrent_phy_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/* PCIe and SGMII/QSGMII link configuration */
+/* PCIe and SGMII/QSGMII Unique SSC link configuration */
 struct cdns_reg_pairs pcie_sgmii_link_cmn_regs[] = {
 	{0x0601, CMN_PDIAG_PLL0_CLK_SEL_M0},
-	{0x0400, CMN_PDIAG_PLL1_CLK_SEL_M0}
+	{0x0400, CMN_PDIAG_PLL0_CLK_SEL_M1}
+	{0x0601, CMN_PDIAG_PLL1_CLK_SEL_M0},
 };
 
 struct cdns_reg_pairs pcie_sgmii_xcvr_diag_ln_regs[] = {
-	{0x0100, XCVR_DIAG_HSCLK_SEL},
+	{0x0000, XCVR_DIAG_HSCLK_SEL},
 	{0x0001, XCVR_DIAG_HSCLK_DIV},
-	{0x0812, XCVR_DIAG_PLLDRC_CTRL}
+	{0x0012, XCVR_DIAG_PLLDRC_CTRL}
 };
 
 struct cdns_reg_pairs sgmii_pcie_xcvr_diag_ln_regs[] = {
-	{0x0000, XCVR_DIAG_HSCLK_SEL},
+	{0x0011, XCVR_DIAG_HSCLK_SEL},
 	{0x0003, XCVR_DIAG_HSCLK_DIV},
-	{0x0013, XCVR_DIAG_PLLDRC_CTRL}
+	{0x009B, XCVR_DIAG_PLLDRC_CTRL}
 };
 
 struct cdns_torrent_vals pcie_sgmii_link_cmn_vals = {
