@@ -216,7 +216,7 @@ static const struct reg_field phy_reset_ctrl =
 				REG_FIELD(PHY_RESET, 8, 8);
 
 enum cdns_torrent_phy_type {
-	TYPE_SINGLE,
+	TYPE_NONE,
 	TYPE_DP,
 	TYPE_PCIE,
 	TYPE_SGMII,
@@ -1819,7 +1819,7 @@ static int cdns_torrent_phy_init(struct phy *phy)
 	if (phy_type == TYPE_DP)
 		return cdns_torrent_dp_init(phy);
 
-	cmn_vals = init_data->cmn_vals[phy_type][TYPE_SINGLE][ssc];
+	cmn_vals = init_data->cmn_vals[phy_type][TYPE_NONE][ssc];
 	if (cmn_vals) {
 		cmn_reg_pairs = cmn_vals->reg_pairs;
 		num_cmn_regs = cmn_vals->num_regs;
@@ -1829,7 +1829,7 @@ static int cdns_torrent_phy_init(struct phy *phy)
 				     cmn_reg_pairs[i].val);
 	}
 
-	tx_ln_vals = init_data->tx_ln_vals[phy_type][TYPE_SINGLE][ssc];
+	tx_ln_vals = init_data->tx_ln_vals[phy_type][TYPE_NONE][ssc];
 	if (tx_ln_vals) {
 		tx_ln_reg_pairs = tx_ln_vals->reg_pairs;
 		num_tx_ln_regs = tx_ln_vals->num_regs;
@@ -1841,7 +1841,7 @@ static int cdns_torrent_phy_init(struct phy *phy)
 		}
 	}
 
-	rx_ln_vals = init_data->rx_ln_vals[phy_type][TYPE_SINGLE][ssc];
+	rx_ln_vals = init_data->rx_ln_vals[phy_type][TYPE_NONE][ssc];
 	if (rx_ln_vals) {
 		rx_ln_reg_pairs = rx_ln_vals->reg_pairs;
 		num_rx_ln_regs = rx_ln_vals->num_regs;
@@ -2512,7 +2512,7 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 	},
 	.cmn_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
 				[INTERNAL_SSC] = &single_pcie_100_int_ssc_cmn_vals,
@@ -2537,7 +2537,7 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 	},
 	.tx_ln_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = NULL,
 				[EXTERNAL_SSC] = NULL,
 				[INTERNAL_SSC] = NULL,
@@ -2562,7 +2562,7 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 	},
 	.rx_ln_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
 				[INTERNAL_SSC] = &single_pcie_100_int_ssc_rx_ln_vals,
@@ -2632,7 +2632,7 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 	},
 	.cmn_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_cmn_vals,
 				[INTERNAL_SSC] = &single_pcie_100_int_ssc_cmn_vals,
@@ -2657,7 +2657,7 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 	},
 	.tx_ln_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = NULL,
 				[EXTERNAL_SSC] = NULL,
 				[INTERNAL_SSC] = NULL,
@@ -2682,7 +2682,7 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 	},
 	.rx_ln_vals = {
 		[TYPE_PCIE] = {
-			[TYPE_SINGLE] = {
+			[TYPE_NONE] = {
 				[NO_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &single_pcie_100_ext_no_ssc_rx_ln_vals,
 				[INTERNAL_SSC] = &single_pcie_100_int_ssc_rx_ln_vals,
