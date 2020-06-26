@@ -1856,20 +1856,21 @@ static int cdns_torrent_phy_init(struct phy *phy)
 	return 0;
 }
 
-static int phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
+static
+int cdns_torrent_phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 {
-	int i, j, node, mlane, num_lanes;
-	int ret;
-	u32 num_regs;
-	struct cdns_reg_pairs *reg_pairs;
-	struct cdns_torrent_vals *link_cmn_vals, *xcvr_diag_vals;
-	struct cdns_torrent_vals *cmn_vals, *tx_ln_vals, *rx_ln_vals;
-	struct regmap *regmap;
-	enum cdns_torrent_phy_type phy_t1, phy_t2, tmp_phy_type;
-	enum cdns_torrent_ssc_mode ssc;
-	u8 num_subn_t1;
 	const struct cdns_torrent_data *init_data = cdns_phy->init_data;
+	struct cdns_torrent_vals *cmn_vals, *tx_ln_vals, *rx_ln_vals;
+	struct cdns_torrent_vals *link_cmn_vals, *xcvr_diag_vals;
+	enum cdns_torrent_phy_type phy_t1, phy_t2, tmp_phy_type;
+	int i, j, node, mlane, num_lanes, ret;
+	struct cdns_reg_pairs *reg_pairs;
+	enum cdns_torrent_ssc_mode ssc;
+	struct regmap *regmap;
+	u8 num_subn_t1;
+	u32 num_regs;
 
+#if 0
 	/**
 	 * Get the two PHY_TYPE_* values for which PHY is to be configured
 	 * in phy_t1 and phy_t2 variables. Also, get the count of subnodes
@@ -1886,13 +1887,22 @@ static int phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 	}
 
 	regmap_field_write(cdns_phy->phy_pll_cfg, 0x0002);
+#endif
+
+	if (cdns_phy->nsubnodes != 2)
+		return -EINVAL;
+
+	phy_t1 = cdns_phy->phys[0].phy_type;
+	phy_t2 = cdns_phy->phys[1].phy_type;
+
+	regmap_field_write(cdns_phy->phy_pll_cfg, 0x0003);
 
 	/**
 	 * First configure the PHY for phy_t1. Get the array values as
 	 * [phy_t1][phy_t2][ssc].
 	 */
 	for (node = 0; node < cdns_phy->nsubnodes; node++) {
-		if (node == num_subn_t1) {
+		if (node == 1) {
 			/**
 			 * Check if all subnodes with phy_t1 are configured.
 			 * If yes, then configure the PHY for phy_t2. Get
@@ -2054,6 +2064,9 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 	for_each_available_child_of_node(dev->of_node, child) {
 		struct phy *gphy;
 
+		if (!(of_node_name_eq(child, "link")))
+			continue;
+
 		cdns_phy->phys[node].lnk_rst =
 				of_reset_control_array_get_exclusive(child);
 		if (IS_ERR(cdns_phy->phys[node].lnk_rst)) {
@@ -2193,7 +2206,7 @@ static int cdns_torrent_phy_probe(struct platform_device *pdev)
 	}
 
 	if (cdns_phy->nsubnodes > 1) {
-		ret = phy_configure_multilink(cdns_phy);
+		ret = cdns_torrent_phy_configure_multilink(cdns_phy);
 		if (ret)
 			goto put_lnk_rst;
 	}
