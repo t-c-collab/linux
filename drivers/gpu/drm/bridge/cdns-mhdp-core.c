@@ -812,6 +812,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	int ret;
 	struct drm_bridge_state *state;
 	struct cdns_mhdp_bridge_state *cdns_bridge_state;
+	struct drm_connector *conn = &mhdp->connector;
 
 	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
 
@@ -827,8 +828,12 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0)
-			goto err;
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_mutex);
+			drm_connector_set_link_status_property(conn,
+							       DRM_MODE_LINK_STATUS_BAD);
+			return;
+		}
 	}
 
 	if (mhdp->bridge_enabled) {
@@ -852,9 +857,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 				req_bw, max_bw);
 			goto err;
 		}
-		ret = cdns_mhdp_reg_read(mhdp,
-					 CDNS_DP_FRAMER_GLOBAL_CONFIG,
-					 &framer);
+		cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
 		framer |= CDNS_DP_FRAMER_EN;
 		framer &= ~CDNS_DP_NO_VIDEO_MODE;
 		cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG,
