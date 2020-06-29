@@ -1999,6 +1999,8 @@ static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	tu_size = state->tu_size;
 	line_thresh = state->line_thresh;
 
+	mhdp->stream_id = 0;
+
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_TU,
 			    CDNS_DP_FRAMER_TU_VS(vs) |
 			    CDNS_DP_FRAMER_TU_SIZE(tu_size) |
@@ -2166,8 +2168,6 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	bpc = mhdp->display_fmt.bpc;
 
 	pxlclock = mode->crtc_clock;
-
-	mhdp->stream_id = 0;
 
 	rate = mhdp->link.rate / 1000;
 
