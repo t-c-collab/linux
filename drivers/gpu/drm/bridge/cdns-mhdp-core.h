@@ -34,6 +34,11 @@ struct phy;
 #define CDNS_KEEP_ALIVE				0x00018
 #define CDNS_KEEP_ALIVE_MASK			GENMASK(7, 0)
 
+#define CDNS_VER_L				0x0001C
+#define CDNS_VER_H				0x00020
+#define CDNS_LIB_L_ADDR				0x00024
+#define CDNS_LIB_H_ADDR				0x00028
+
 #define CDNS_MB_INT_MASK			0x00034
 #define CDNS_MB_INT_STATUS			0x00038
 

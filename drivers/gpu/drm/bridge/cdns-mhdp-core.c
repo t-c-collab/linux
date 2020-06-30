@@ -648,6 +648,52 @@ static bool mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 	return (mhdp->host.ssc) && (mhdp->sink.ssc);
 }
 
+static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
+{
+	u32 ver_l, ver_h, fw_ver;
+	u32 lib_l_addr, lib_h_addr, lib_ver;
+	u32 major_num, minor_num, revision;
+
+	ver_l = readl(mhdp->regs + CDNS_VER_L);
+	ver_h = readl(mhdp->regs + CDNS_VER_H);
+
+	fw_ver = (ver_h << 8) | ver_l;
+
+	lib_l_addr = readl(mhdp->regs + CDNS_LIB_L_ADDR);
+	lib_h_addr = readl(mhdp->regs + CDNS_LIB_H_ADDR);
+
+	lib_ver = (lib_h_addr << 8) | lib_l_addr;
+
+	if (lib_ver < 33984) {
+		/**
+		 * Older FW versions with major number 1, used to store FW
+		 * version information by storing repository revision number
+		 * in registers. This is for identifying these FW versions.
+		 */
+		major_num = 1;
+		minor_num = 2;
+		if (fw_ver == 26098)
+			revision = 15;
+		else if (lib_ver == 0 && fw_ver == 0)
+			revision = 17;
+		else
+			goto fw_error;
+	} else {
+		/* To identify newer FW versions with major number 2 onwards. */
+		major_num = fw_ver / 10000;
+		minor_num = (fw_ver / 100) % 100;
+		revision = (fw_ver % 10000) % 100;
+	}
+
+	dev_dbg(mhdp->dev, "FW version: v%u.%u.%u\n", major_num, minor_num,
+		revision);
+	return 0;
+
+fw_error:
+	dev_err(mhdp->dev, "Unsupported FW version\n");
+	return -ENODEV;
+}
+
 static int mhdp_fw_activate(const struct firmware *fw,
 			    struct cdns_mhdp_device *mhdp)
 {
@@ -692,6 +738,10 @@ static int mhdp_fw_activate(const struct firmware *fw,
 			"device didn't give any life sign: reg %d\n", reg);
 		goto error;
 	}
+
+	ret = mhdp_check_fw_version(mhdp);
+	if (ret)
+		goto error;
 
 	/* Init events to 0 as it's not cleared by FW at boot but on read */
 	readl(mhdp->regs + CDNS_SW_EVENT0);
