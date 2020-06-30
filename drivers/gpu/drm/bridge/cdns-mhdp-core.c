@@ -651,6 +651,11 @@ static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 	lib_ver = (lib_h_addr << 8) | lib_l_addr;
 
 	if (lib_ver < 33984) {
+		/**
+		 * Older FW versions with major number 1, used to store FW
+		 * version information by storing repository revision number
+		 * in registers. This is for identifying these FW versions.
+		 */
 		major_num = 1;
 		minor_num = 2;
 		if (fw_ver == 26098)
@@ -660,6 +665,7 @@ static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 		else
 			goto fw_error;
 	} else {
+		/* To identify newer FW versions with major number 2 onwards. */
 		major_num = fw_ver / 10000;
 		minor_num = (fw_ver / 100) % 100;
 		revision = (fw_ver % 10000) % 100;
