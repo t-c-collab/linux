@@ -1820,6 +1820,13 @@ static int cdns_torrent_phy_init(struct phy *phy)
 	if (phy_type == TYPE_DP)
 		return cdns_torrent_dp_init(phy);
 
+	/**
+	 * Spread spectrum generation is not required or supported
+	 * for SGMII/QSGMII
+	 */
+	if (phy_type == TYPE_SGMII || phy_type == TYPE_QSGMII)
+		ssc = NO_SSC;
+
 	/* PHY configuration specific registers for single link */
 	link_cmn_vals = init_data->link_cmn_vals[phy_type][TYPE_NONE][ssc];
 	if (link_cmn_vals) {
@@ -2531,6 +2538,28 @@ struct cdns_torrent_vals qsgmii_100_int_ssc_cmn_vals = {
 	.num_regs = ARRAY_SIZE(qsgmii_100_int_ssc_cmn_regs),
 };
 
+/* Single SGMII/QSGMII link configuration */
+struct cdns_reg_pairs sl_sgmii_link_cmn_regs[] = {
+	{0x0000, PHY_PLL_CFG},
+	{0x0601, CMN_PDIAG_PLL0_CLK_SEL_M0}
+};
+
+struct cdns_reg_pairs sl_sgmii_xcvr_diag_ln_regs[] = {
+	{0x0000, XCVR_DIAG_HSCLK_SEL},
+	{0x0003, XCVR_DIAG_HSCLK_DIV},
+	{0x0013, XCVR_DIAG_PLLDRC_CTRL}
+};
+
+struct cdns_torrent_vals sl_sgmii_link_cmn_vals = {
+	.reg_pairs = sl_sgmii_link_cmn_regs,
+	.num_regs = ARRAY_SIZE(sl_sgmii_link_cmn_regs),
+};
+
+struct cdns_torrent_vals sl_sgmii_xcvr_diag_ln_vals = {
+	.reg_pairs = sl_sgmii_xcvr_diag_ln_regs,
+	.num_regs = ARRAY_SIZE(sl_sgmii_xcvr_diag_ln_regs),
+};
+
 /* Multi link PCIe, 100 MHz Ref clk, internal SSC */
 struct cdns_reg_pairs pcie_100_int_ssc_cmn_regs[] = {
 	{0x0004, CMN_PLL0_DSM_DIAG_M0},
@@ -2689,6 +2718,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_link_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &pcie_sgmii_link_cmn_vals,
 				[EXTERNAL_SSC] = &pcie_sgmii_link_cmn_vals,
@@ -2696,6 +2728,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_link_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &pcie_sgmii_link_cmn_vals,
 				[EXTERNAL_SSC] = &pcie_sgmii_link_cmn_vals,
@@ -2722,6 +2757,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_xcvr_diag_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
@@ -2729,6 +2767,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_xcvr_diag_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
@@ -2755,6 +2796,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_cmn_vals,
@@ -2762,6 +2806,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_cmn_vals,
@@ -2788,6 +2835,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
@@ -2795,6 +2845,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
@@ -2821,6 +2874,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
@@ -2828,6 +2884,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
@@ -2859,6 +2918,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_link_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &pcie_sgmii_link_cmn_vals,
 				[EXTERNAL_SSC] = &pcie_sgmii_link_cmn_vals,
@@ -2866,6 +2928,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_link_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &pcie_sgmii_link_cmn_vals,
 				[EXTERNAL_SSC] = &pcie_sgmii_link_cmn_vals,
@@ -2892,6 +2957,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_xcvr_diag_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
@@ -2899,6 +2967,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sl_sgmii_xcvr_diag_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_pcie_xcvr_diag_ln_vals,
@@ -2925,6 +2996,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_cmn_vals,
@@ -2932,6 +3006,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_cmn_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_cmn_vals,
@@ -2958,6 +3035,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_tx_ln_vals,
@@ -2965,6 +3045,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_tx_ln_vals,
@@ -2991,6 +3074,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_SGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_rx_ln_vals,
@@ -2998,6 +3084,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[TYPE_QSGMII] = {
+			[TYPE_NONE] = {
+				[NO_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
 				[EXTERNAL_SSC] = &qsgmii_100_no_ssc_rx_ln_vals,
