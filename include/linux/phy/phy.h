@@ -115,10 +115,12 @@ struct phy_ops {
 /**
  * struct phy_attrs - represents phy attributes
  * @bus_width: Data path width implemented by PHY
+ * @max_link_rate: Maximum link rate supported by PHY (in Mbps)
  * @mode: PHY mode
  */
 struct phy_attrs {
 	u32			bus_width;
+	u32			max_link_rate;
 	enum phy_mode		mode;
 };
 
@@ -230,6 +232,37 @@ static inline int phy_get_bus_width(struct phy *phy)
 static inline void phy_set_bus_width(struct phy *phy, int bus_width)
 {
 	phy->attrs.bus_width = bus_width;
+}
+
+/**
+ * phy_get_attrs() - get the values for PHY attributes.
+ * @phy: the phy for which to get the attributes
+ * @attrs: current PHY attributes that will be returned
+ *
+ * Intended to be used by phy consumers to get the current PHY attributes
+ * stored in struct phy_attrs.
+ */
+static inline void phy_get_attrs(struct phy *phy, struct phy_attrs *attrs)
+{
+	mutex_lock(&phy->mutex);
+	memcpy(attrs, &phy->attrs, sizeof(struct phy_attrs));
+	mutex_unlock(&phy->mutex);
+}
+
+/**
+ * phy_set_attrs() - set PHY attributes with new values.
+ * @phy: the phy for which to set the attributes
+ * @attrs: the &struct phy_attrs containing new PHY attributes to be set
+ *
+ * This can be used by PHY providers or PHY consumers to set the PHY
+ * attributes. The locking is used to protect updating attributes when
+ * PHY consumer is doing some PHY ops.
+ */
+static inline void phy_set_attrs(struct phy *phy, const struct phy_attrs *attrs)
+{
+	mutex_lock(&phy->mutex);
+	memcpy(&phy->attrs, attrs, sizeof(struct phy_attrs));
+	mutex_unlock(&phy->mutex);
 }
 struct phy *phy_get(struct device *dev, const char *string);
 struct phy *phy_optional_get(struct device *dev, const char *string);
@@ -385,6 +418,16 @@ static inline int phy_get_bus_width(struct phy *phy)
 }
 
 static inline void phy_set_bus_width(struct phy *phy, int bus_width)
+{
+	return;
+}
+
+static inline void phy_get_attrs(struct phy *phy, struct phy_attrs *attrs)
+{
+	return;
+}
+
+static inline void phy_set_attrs(struct phy *phy, const struct phy_attrs *attrs)
 {
 	return;
 }
