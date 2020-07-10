@@ -869,6 +869,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	struct cdns_mhdp_bridge_state *cdns_bridge_state;
 	struct drm_connector *conn = &mhdp->connector;
 	struct drm_display_mode *current_mode;
+	bool old_plugged = mhdp->plugged;
+	u8 status[DP_LINK_STATUS_SIZE];
 
 	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
 
@@ -879,8 +881,29 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		goto err;
 	}
 
-	if (hpd_pulse)
-		goto err;
+	/*
+	 * If we get a HPD pulse event and we were and still are connected,
+	 * check the link status. If link status is ok, there's nothing to do
+	 * as we don't handle DP interrupts. If link status is bad, continue
+	 * with full link setup.
+	 */
+	if (hpd_pulse && old_plugged == mhdp->plugged) {
+		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+
+		/*
+		 * If everything looks fine, just return, as we don't handle
+		 * DP IRQs.
+		 */
+		if (ret > 0 &&
+		    drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
+		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes)) {
+			mutex_unlock(&mhdp->link_mutex);
+			return;
+		}
+
+		/* If link is bad, mark link as down so that we do a new LT */
+		mhdp->link_up = false;
+	}
 
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
