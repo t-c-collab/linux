@@ -925,6 +925,8 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			goto err;
 
 		current_mode = cdns_bridge_state->current_mode;
+		if (!current_mode)
+			goto err;
 
 		ret = mhdp_validate_mode_params(mhdp, current_mode, state);
 		if (ret < 0)
