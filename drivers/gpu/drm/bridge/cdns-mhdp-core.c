@@ -977,7 +977,7 @@ static ssize_t mhdp_transfer(struct drm_dp_aux *aux,
 
 	if (msg->request != DP_AUX_NATIVE_WRITE &&
 	    msg->request != DP_AUX_NATIVE_READ)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	if (msg->request == DP_AUX_NATIVE_WRITE) {
 		const u8 *buf = msg->buffer;
@@ -1859,7 +1859,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 
 	if (mhdp->host.fast_link & mhdp->sink.fast_link) {
 		dev_err(mhdp->dev, "fastlink not supported\n");
-		err = -ENOTSUPP;
+		err = -EOPNOTSUPP;
 		goto error;
 	} else {
 		const u32 interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] &
