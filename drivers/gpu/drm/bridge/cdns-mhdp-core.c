@@ -41,7 +41,6 @@
 #include "cdns-mhdp-j721e.h"
 
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
-static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
@@ -867,212 +866,6 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 	return msg->size;
 }
 
-static int cdns_mhdp_get_modes(struct drm_connector *connector)
-{
-	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
-	struct edid *edid;
-	int num_modes;
-	int ret;
-
-	if (!mhdp->plugged)
-		return 0;
-
-	mutex_lock(&mhdp->link_mutex);
-
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_mutex);
-			return 0;
-		}
-	}
-	mutex_unlock(&mhdp->link_mutex);
-
-	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
-	if (!edid) {
-		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
-
-		return 0;
-	}
-
-	drm_connector_update_edid_property(connector, edid);
-	num_modes = drm_add_edid_modes(connector, edid);
-	kfree(edid);
-
-	/*
-	 * HACK: Warn about unsupported display formats until we deal
-	 *       with them correctly.
-	 */
-	if (connector->display_info.color_formats &&
-	    !(connector->display_info.color_formats &
-	      mhdp->display_fmt.color_format))
-		dev_warn(mhdp->dev,
-			 "%s: No supported color_format found (0x%08x)\n",
-			__func__, connector->display_info.color_formats);
-
-	if (connector->display_info.bpc &&
-	    connector->display_info.bpc < mhdp->display_fmt.bpc)
-		dev_warn(mhdp->dev, "%s: Display bpc only %d < %d\n",
-			 __func__, connector->display_info.bpc,
-			 mhdp->display_fmt.bpc);
-
-	return num_modes;
-}
-
-static int cdns_mhdp_detect(struct drm_connector *conn,
-			    struct drm_modeset_acquire_ctx *ctx,
-			    bool force)
-{
-	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
-
-	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
-
-	if (mhdp->plugged)
-		return connector_status_connected;
-	else
-		return connector_status_disconnected;
-}
-
-static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
-{
-	u32 bpp;
-
-	if (fmt->y_only)
-		return fmt->bpc;
-
-	switch (fmt->color_format) {
-	case DRM_COLOR_FORMAT_RGB444:
-	case DRM_COLOR_FORMAT_YCRCB444:
-		bpp = fmt->bpc * 3;
-		break;
-	case DRM_COLOR_FORMAT_YCRCB422:
-		bpp = fmt->bpc * 2;
-		break;
-	case DRM_COLOR_FORMAT_YCRCB420:
-		bpp = fmt->bpc * 3 / 2;
-		break;
-	default:
-		bpp = fmt->bpc * 3;
-		WARN_ON(1);
-	}
-	return bpp;
-}
-
-static
-bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
-			    const struct drm_display_mode *mode,
-			    int lanes, int rate)
-{
-	u32 max_bw, req_bw, bpp;
-
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
-	req_bw = mode->clock * bpp / 8;
-	max_bw = lanes * rate;
-	if (req_bw > max_bw) {
-		dev_dbg(mhdp->dev,
-			"Unsupported Mode: %s, Req BW: %u, Available Max BW:%u\n",
-			mode->name, req_bw, max_bw);
-
-		return false;
-	}
-
-	return true;
-}
-
-static
-enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
-					  struct drm_display_mode *mode)
-{
-	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
-
-	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
-				    mhdp->link.rate))
-		return MODE_CLOCK_HIGH;
-
-	return MODE_OK;
-}
-
-static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
-	.detect_ctx = cdns_mhdp_detect,
-	.get_modes = cdns_mhdp_get_modes,
-	.mode_valid = cdns_mhdp_mode_valid,
-};
-
-static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
-	.fill_modes = drm_helper_probe_single_connector_modes,
-	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
-	.reset = drm_atomic_helper_connector_reset,
-	.destroy = drm_connector_cleanup,
-};
-
-static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_flags flags)
-{
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
-	struct drm_connector *conn = &mhdp->connector;
-	bool hw_ready;
-	int ret;
-
-	dev_dbg(mhdp->dev, "%s\n", __func__);
-
-	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
-		DRM_ERROR("Fix bridge driver to make connector optional!");
-		return -EINVAL;
-	}
-
-	if (&mhdp->bridge != bridge)
-		return -ENODEV;
-
-	conn->polled = DRM_CONNECTOR_POLL_HPD;
-
-	ret = drm_connector_init(bridge->dev, conn, &cdns_mhdp_conn_funcs,
-				 DRM_MODE_CONNECTOR_DisplayPort);
-	if (ret) {
-		dev_err(mhdp->dev, "failed to init connector\n");
-		return ret;
-	}
-
-	drm_connector_helper_add(conn, &cdns_mhdp_conn_helper_funcs);
-
-	ret = drm_display_info_set_bus_formats(&conn->display_info,
-					       &bus_format, 1);
-	if (ret)
-		return ret;
-
-	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
-
-	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
-	/*
-	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
-	 * in the display controller. This is achieved for the time being
-	 * by defining SAMPLE_NEGEDGE here.
-	 */
-		conn->display_info.bus_flags |=
-					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
-					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
-
-	ret = drm_connector_attach_encoder(conn, bridge->encoder);
-	if (ret) {
-		dev_err(mhdp->dev, "failed to attach connector to encoder\n");
-		return ret;
-	}
-
-	spin_lock(&mhdp->start_lock);
-
-	mhdp->bridge_attached = true;
-	hw_ready = mhdp->hw_state == MHDP_HW_READY;
-
-	spin_unlock(&mhdp->start_lock);
-
-	if (hw_ready)
-		/* enable SW event interrupts */
-		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
-		       mhdp->regs + CDNS_APB_INT_MASK);
-
-	return 0;
-}
-
 static int cdns_mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
@@ -1718,6 +1511,212 @@ static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
 
 	mhdp->link_up = false;
+}
+
+static int cdns_mhdp_get_modes(struct drm_connector *connector)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
+	struct edid *edid;
+	int num_modes;
+	int ret;
+
+	if (!mhdp->plugged)
+		return 0;
+
+	mutex_lock(&mhdp->link_mutex);
+
+	if (!mhdp->link_up) {
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_mutex);
+			return 0;
+		}
+	}
+	mutex_unlock(&mhdp->link_mutex);
+
+	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
+	if (!edid) {
+		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
+
+		return 0;
+	}
+
+	drm_connector_update_edid_property(connector, edid);
+	num_modes = drm_add_edid_modes(connector, edid);
+	kfree(edid);
+
+	/*
+	 * HACK: Warn about unsupported display formats until we deal
+	 *       with them correctly.
+	 */
+	if (connector->display_info.color_formats &&
+	    !(connector->display_info.color_formats &
+	      mhdp->display_fmt.color_format))
+		dev_warn(mhdp->dev,
+			 "%s: No supported color_format found (0x%08x)\n",
+			__func__, connector->display_info.color_formats);
+
+	if (connector->display_info.bpc &&
+	    connector->display_info.bpc < mhdp->display_fmt.bpc)
+		dev_warn(mhdp->dev, "%s: Display bpc only %d < %d\n",
+			 __func__, connector->display_info.bpc,
+			 mhdp->display_fmt.bpc);
+
+	return num_modes;
+}
+
+static int cdns_mhdp_detect(struct drm_connector *conn,
+			    struct drm_modeset_acquire_ctx *ctx,
+			    bool force)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
+
+	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
+
+	if (mhdp->plugged)
+		return connector_status_connected;
+	else
+		return connector_status_disconnected;
+}
+
+static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
+{
+	u32 bpp;
+
+	if (fmt->y_only)
+		return fmt->bpc;
+
+	switch (fmt->color_format) {
+	case DRM_COLOR_FORMAT_RGB444:
+	case DRM_COLOR_FORMAT_YCRCB444:
+		bpp = fmt->bpc * 3;
+		break;
+	case DRM_COLOR_FORMAT_YCRCB422:
+		bpp = fmt->bpc * 2;
+		break;
+	case DRM_COLOR_FORMAT_YCRCB420:
+		bpp = fmt->bpc * 3 / 2;
+		break;
+	default:
+		bpp = fmt->bpc * 3;
+		WARN_ON(1);
+	}
+	return bpp;
+}
+
+static
+bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
+			    const struct drm_display_mode *mode,
+			    int lanes, int rate)
+{
+	u32 max_bw, req_bw, bpp;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	req_bw = mode->clock * bpp / 8;
+	max_bw = lanes * rate;
+	if (req_bw > max_bw) {
+		dev_dbg(mhdp->dev,
+			"Unsupported Mode: %s, Req BW: %u, Available Max BW:%u\n",
+			mode->name, req_bw, max_bw);
+
+		return false;
+	}
+
+	return true;
+}
+
+static
+enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
+					  struct drm_display_mode *mode)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
+
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate))
+		return MODE_CLOCK_HIGH;
+
+	return MODE_OK;
+}
+
+static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
+	.detect_ctx = cdns_mhdp_detect,
+	.get_modes = cdns_mhdp_get_modes,
+	.mode_valid = cdns_mhdp_mode_valid,
+};
+
+static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
+	.fill_modes = drm_helper_probe_single_connector_modes,
+	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
+	.reset = drm_atomic_helper_connector_reset,
+	.destroy = drm_connector_cleanup,
+};
+
+static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_flags flags)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
+	struct drm_connector *conn = &mhdp->connector;
+	bool hw_ready;
+	int ret;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
+		DRM_ERROR("Fix bridge driver to make connector optional!");
+		return -EINVAL;
+	}
+
+	if (&mhdp->bridge != bridge)
+		return -ENODEV;
+
+	conn->polled = DRM_CONNECTOR_POLL_HPD;
+
+	ret = drm_connector_init(bridge->dev, conn, &cdns_mhdp_conn_funcs,
+				 DRM_MODE_CONNECTOR_DisplayPort);
+	if (ret) {
+		dev_err(mhdp->dev, "failed to init connector\n");
+		return ret;
+	}
+
+	drm_connector_helper_add(conn, &cdns_mhdp_conn_helper_funcs);
+
+	ret = drm_display_info_set_bus_formats(&conn->display_info,
+					       &bus_format, 1);
+	if (ret)
+		return ret;
+
+	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
+
+	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
+	/*
+	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
+	 * in the display controller. This is achieved for the time being
+	 * by defining SAMPLE_NEGEDGE here.
+	 */
+		conn->display_info.bus_flags |=
+					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
+					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
+
+	ret = drm_connector_attach_encoder(conn, bridge->encoder);
+	if (ret) {
+		dev_err(mhdp->dev, "failed to attach connector to encoder\n");
+		return ret;
+	}
+
+	spin_lock(&mhdp->start_lock);
+
+	mhdp->bridge_attached = true;
+	hw_ready = mhdp->hw_state == MHDP_HW_READY;
+
+	spin_unlock(&mhdp->start_lock);
+
+	if (hw_ready)
+		/* enable SW event interrupts */
+		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
+		       mhdp->regs + CDNS_APB_INT_MASK);
+
+	return 0;
 }
 
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
