@@ -42,13 +42,13 @@
 
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
-static int cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp);
+static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp);
 static int mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 				     const struct drm_display_mode *mode,
 				     struct drm_bridge_state *bridge_state);
-static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
-				const struct drm_display_mode *mode,
-				struct drm_bridge_state *bridge_state);
+static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
+				 const struct drm_display_mode *mode,
+				 struct drm_bridge_state *bridge_state);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
@@ -1881,7 +1881,7 @@ error:
 	return err;
 }
 
-static int cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
+static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 {
 	WARN_ON(!mutex_is_locked(&mhdp->link_mutex));
 
@@ -1889,8 +1889,6 @@ static int cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 		cdns_mhdp_link_power_down(&mhdp->aux, &mhdp->link);
 
 	mhdp->link_up = false;
-
-	return 0;
 }
 
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
@@ -2064,9 +2062,9 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
 
-static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
-				const struct drm_display_mode *mode,
-				struct drm_bridge_state *bridge_state)
+static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
+				 const struct drm_display_mode *mode,
+				 struct drm_bridge_state *bridge_state)
 {
 	u32 vs, tu_size, line_thresh = 0;
 	struct cdns_mhdp_bridge_state *state;
@@ -2092,8 +2090,6 @@ static int cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 						   0 : tu_size - vs));
 
 	cdns_mhdp_configure_video(mhdp, mode);
-
-	return 0;
 }
 
 static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
