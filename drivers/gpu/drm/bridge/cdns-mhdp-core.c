@@ -42,13 +42,6 @@
 
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
-static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp);
-static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
-					  const struct drm_display_mode *mode,
-					  struct drm_bridge_state *bridge_state);
-static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
-				 const struct drm_display_mode *mode,
-				 struct drm_bridge_state *bridge_state);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
@@ -833,142 +826,6 @@ static int cdns_mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
-{
-	int hpd_event, hpd_status;
-
-	*hpd_pulse = false;
-
-	hpd_event = cdns_mhdp_read_event(mhdp);
-
-	/* Getting event bits failed, bail out */
-	if (hpd_event < 0) {
-		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
-			 __func__, hpd_event);
-		return false;
-	}
-
-	hpd_status = cdns_mhdp_get_hpd_status(mhdp);
-	if (hpd_status < 0) {
-		dev_warn(mhdp->dev, "%s: get hpd status failed: %d\n",
-			 __func__, hpd_status);
-		return false;
-	}
-
-	if (hpd_event & DPTX_READ_EVENT_HPD_PULSE)
-		*hpd_pulse = true;
-
-	return !!hpd_status;
-}
-
-static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
-{
-	bool hpd_pulse;
-	int ret;
-	struct drm_bridge_state *state;
-	struct cdns_mhdp_bridge_state *cdns_bridge_state;
-	struct drm_connector *conn = &mhdp->connector;
-	struct drm_display_mode *current_mode;
-	bool old_plugged = mhdp->plugged;
-	u8 status[DP_LINK_STATUS_SIZE];
-
-	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
-
-	mutex_lock(&mhdp->link_mutex);
-
-	if (!mhdp->plugged) {
-		cdns_mhdp_link_down(mhdp);
-		goto err;
-	}
-
-	/*
-	 * If we get a HPD pulse event and we were and still are connected,
-	 * check the link status. If link status is ok, there's nothing to do
-	 * as we don't handle DP interrupts. If link status is bad, continue
-	 * with full link setup.
-	 */
-	if (hpd_pulse && old_plugged == mhdp->plugged) {
-		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
-
-		/*
-		 * If everything looks fine, just return, as we don't handle
-		 * DP IRQs.
-		 */
-		if (ret > 0 &&
-		    drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
-		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes)) {
-			mutex_unlock(&mhdp->link_mutex);
-			return;
-		}
-
-		/* If link is bad, mark link as down so that we do a new LT */
-		mhdp->link_up = false;
-	}
-
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_mutex);
-			drm_connector_set_link_status_property(conn,
-							       DRM_MODE_LINK_STATUS_BAD);
-			return;
-		}
-	}
-
-	if (mhdp->bridge_enabled) {
-		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
-		if (!state)
-			goto err;
-
-		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
-		if (!cdns_bridge_state)
-			goto err;
-
-		current_mode = cdns_bridge_state->current_mode;
-		if (!current_mode)
-			goto err;
-
-		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
-		if (ret < 0)
-			goto err;
-
-		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
-			current_mode->name);
-
-		cdns_mhdp_sst_enable(mhdp, current_mode, state);
-	}
-err:
-	mutex_unlock(&mhdp->link_mutex);
-}
-
-static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
-{
-	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
-	u32 apb_stat, sw_ev0;
-	bool bridge_attached;
-
-	apb_stat = readl(mhdp->regs + CDNS_APB_INT_STATUS);
-	sw_ev0 = readl(mhdp->regs + CDNS_SW_EVENT0);
-
-	/*
-	 *  Calling drm_kms_helper_hotplug_event() when not attached
-	 *  to drm device causes an oops because the drm_bridge->dev
-	 *  is NULL. See cdns_mhdp_fw_cb() comments for details about the
-	 *  problems related drm_kms_helper_hotplug_event() call.
-	 */
-	spin_lock(&mhdp->start_lock);
-	bridge_attached = mhdp->bridge_attached;
-	spin_unlock(&mhdp->start_lock);
-
-	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
-		cdns_mhdp_update_link_status(mhdp);
-
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
-	}
-
-	return IRQ_HANDLED;
-}
-
 static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 				  struct drm_dp_aux_msg *msg)
 {
@@ -1705,35 +1562,6 @@ err:
 	return -EIO;
 }
 
-static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
-				     struct drm_bridge_state *bridge_state)
-{
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	u32 resp;
-
-	dev_dbg(mhdp->dev, "%s\n", __func__);
-
-	mutex_lock(&mhdp->link_mutex);
-
-	mhdp->bridge_enabled = false;
-	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
-	resp &= ~CDNS_DP_FRAMER_EN;
-	resp |= CDNS_DP_NO_VIDEO_MODE;
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
-
-	cdns_mhdp_link_down(mhdp);
-
-	/* Disable VIF clock for stream 0 */
-	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
-
-	if (mhdp->ops && mhdp->ops->disable)
-		mhdp->ops->disable(mhdp);
-
-	mutex_unlock(&mhdp->link_mutex);
-}
-
 static u32 cdns_mhdp_get_training_interval_us(struct cdns_mhdp_device *mhdp,
 					      u32 interval)
 {
@@ -2164,6 +1992,35 @@ err_enable:
 	mutex_unlock(&mhdp->link_mutex);
 }
 
+static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
+				     struct drm_bridge_state *bridge_state)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	u32 resp;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	mutex_lock(&mhdp->link_mutex);
+
+	mhdp->bridge_enabled = false;
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	resp &= ~CDNS_DP_FRAMER_EN;
+	resp |= CDNS_DP_NO_VIDEO_MODE;
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
+
+	cdns_mhdp_link_down(mhdp);
+
+	/* Disable VIF clock for stream 0 */
+	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
+
+	if (mhdp->ops && mhdp->ops->disable)
+		mhdp->ops->disable(mhdp);
+
+	mutex_unlock(&mhdp->link_mutex);
+}
+
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
@@ -2321,6 +2178,142 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_destroy_state = cdns_mhdp_bridge_atomic_destroy_state,
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 };
+
+static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
+{
+	int hpd_event, hpd_status;
+
+	*hpd_pulse = false;
+
+	hpd_event = cdns_mhdp_read_event(mhdp);
+
+	/* Getting event bits failed, bail out */
+	if (hpd_event < 0) {
+		dev_warn(mhdp->dev, "%s: read event failed: %d\n",
+			 __func__, hpd_event);
+		return false;
+	}
+
+	hpd_status = cdns_mhdp_get_hpd_status(mhdp);
+	if (hpd_status < 0) {
+		dev_warn(mhdp->dev, "%s: get hpd status failed: %d\n",
+			 __func__, hpd_status);
+		return false;
+	}
+
+	if (hpd_event & DPTX_READ_EVENT_HPD_PULSE)
+		*hpd_pulse = true;
+
+	return !!hpd_status;
+}
+
+static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
+{
+	bool hpd_pulse;
+	int ret;
+	struct drm_bridge_state *state;
+	struct cdns_mhdp_bridge_state *cdns_bridge_state;
+	struct drm_connector *conn = &mhdp->connector;
+	struct drm_display_mode *current_mode;
+	bool old_plugged = mhdp->plugged;
+	u8 status[DP_LINK_STATUS_SIZE];
+
+	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
+
+	mutex_lock(&mhdp->link_mutex);
+
+	if (!mhdp->plugged) {
+		cdns_mhdp_link_down(mhdp);
+		goto err;
+	}
+
+	/*
+	 * If we get a HPD pulse event and we were and still are connected,
+	 * check the link status. If link status is ok, there's nothing to do
+	 * as we don't handle DP interrupts. If link status is bad, continue
+	 * with full link setup.
+	 */
+	if (hpd_pulse && old_plugged == mhdp->plugged) {
+		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
+
+		/*
+		 * If everything looks fine, just return, as we don't handle
+		 * DP IRQs.
+		 */
+		if (ret > 0 &&
+		    drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
+		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes)) {
+			mutex_unlock(&mhdp->link_mutex);
+			return;
+		}
+
+		/* If link is bad, mark link as down so that we do a new LT */
+		mhdp->link_up = false;
+	}
+
+	if (!mhdp->link_up) {
+		ret = cdns_mhdp_link_up(mhdp);
+		if (ret < 0) {
+			mutex_unlock(&mhdp->link_mutex);
+			drm_connector_set_link_status_property(conn,
+							       DRM_MODE_LINK_STATUS_BAD);
+			return;
+		}
+	}
+
+	if (mhdp->bridge_enabled) {
+		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
+		if (!state)
+			goto err;
+
+		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
+		if (!cdns_bridge_state)
+			goto err;
+
+		current_mode = cdns_bridge_state->current_mode;
+		if (!current_mode)
+			goto err;
+
+		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
+		if (ret < 0)
+			goto err;
+
+		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
+			current_mode->name);
+
+		cdns_mhdp_sst_enable(mhdp, current_mode, state);
+	}
+err:
+	mutex_unlock(&mhdp->link_mutex);
+}
+
+static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
+{
+	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
+	u32 apb_stat, sw_ev0;
+	bool bridge_attached;
+
+	apb_stat = readl(mhdp->regs + CDNS_APB_INT_STATUS);
+	sw_ev0 = readl(mhdp->regs + CDNS_SW_EVENT0);
+
+	/*
+	 *  Calling drm_kms_helper_hotplug_event() when not attached
+	 *  to drm device causes an oops because the drm_bridge->dev
+	 *  is NULL. See cdns_mhdp_fw_cb() comments for details about the
+	 *  problems related drm_kms_helper_hotplug_event() call.
+	 */
+	spin_lock(&mhdp->start_lock);
+	bridge_attached = mhdp->bridge_attached;
+	spin_unlock(&mhdp->start_lock);
+
+	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
+		cdns_mhdp_update_link_status(mhdp);
+
+		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+	}
+
+	return IRQ_HANDLED;
+}
 
 static int cdns_mhdp_probe(struct platform_device *pdev)
 {
