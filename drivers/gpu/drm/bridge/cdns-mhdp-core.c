@@ -1343,9 +1343,10 @@ void mhdp_set_adjust_request_pre_emphasis(u8 link_status[DP_LINK_STATUS_SIZE],
 static void mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
 				     u8 link_status[DP_LINK_STATUS_SIZE])
 {
+	u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
+	u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
 	unsigned int i;
-	u8 volt, pre, max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing),
-		      max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
+	u8 volt, pre;
 
 	for (i = 0; i < mhdp->link.num_lanes; i++) {
 		volt = drm_dp_get_adjust_request_voltage(link_status, i);
@@ -1461,12 +1462,12 @@ static void mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
 				     u8 link_status[DP_LINK_STATUS_SIZE],
 				     u8 *req_volt, u8 *req_pre)
 {
-	const u32 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing),
-		  max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
+	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
+	const u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
 	unsigned int i;
 
 	for (i = 0; i < mhdp->link.num_lanes; i++) {
-		unsigned int val;
+		u8 val;
 
 		val = mhdp->host.volt_swing & CDNS_FORCE_VOLT_SWING ?
 		      max_volt : req_volt[i];
