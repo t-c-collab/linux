@@ -38,6 +38,8 @@
 
 #include "cdns-mhdp-core.h"
 
+#include "cdns-mhdp-j721e.h"
+
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
@@ -1691,6 +1693,16 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 
 	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
 
+	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
+	/*
+	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
+	 * in the display controller. This is achieved for the time being
+	 * by defining SAMPLE_NEGEDGE here.
+	 */
+		conn->display_info.bus_flags |=
+					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
+					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
+
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
 		dev_err(mhdp->dev, "failed to attach connector to encoder\n");
@@ -2470,6 +2482,9 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 
 static const struct of_device_id mhdp_ids[] = {
 	{ .compatible = "cdns,mhdp8546", },
+#ifdef CONFIG_DRM_CDNS_MHDP_J721E
+	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
+#endif
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, mhdp_ids);
