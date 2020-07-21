@@ -1008,8 +1008,8 @@ static void cdns_mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
 			cdns_mhdp_set_adjust_request_voltage(link_status, i,
 							     max_volt);
 		if (mhdp->host.pre_emphasis & CDNS_FORCE_PRE_EMPHASIS)
-			cdns_mhdp_set_adjust_request_pre_emphasis(link_status, i,
-								  max_pre);
+			cdns_mhdp_set_adjust_request_pre_emphasis(link_status,
+								  i, max_pre);
 	}
 }
 
@@ -1071,7 +1071,8 @@ static bool cdns_mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	drm_dp_dpcd_read_link_status(&mhdp->aux, link_status);
 
 	do {
-		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
+		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data,
+					   &phy_cfg);
 		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
 		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
@@ -1129,11 +1130,12 @@ static void cdns_mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
 	}
 }
 
-static void cdns_mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
-				  bool *same_before_adjust, bool *max_swing_reached,
-				  u8 before_cr[DP_LINK_STATUS_SIZE],
-				  u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
-				  u8 *req_pre)
+static
+void cdns_mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
+			   bool *same_before_adjust, bool *max_swing_reached,
+			   u8 before_cr[DP_LINK_STATUS_SIZE],
+			   u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
+			   u8 *req_pre)
 {
 	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
 	const u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
@@ -1190,7 +1192,8 @@ static bool cdns_mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 		u8 requested_adjust_pre_emphasis[CDNS_DP_MAX_NUM_LANES] = {};
 		bool same_before_adjust, max_swing_reached;
 
-		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
+		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data,
+					   &phy_cfg);
 		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
 		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
@@ -1207,7 +1210,8 @@ static bool cdns_mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 				    lanes_data, link_status);
 
 		cdns_mhdp_validate_cr(mhdp, &cr_done, &same_before_adjust,
-				      &max_swing_reached, lanes_data, link_status,
+				      &max_swing_reached, lanes_data,
+				      link_status,
 				      requested_adjust_volt_swing,
 				      requested_adjust_pre_emphasis);
 
@@ -1652,7 +1656,8 @@ static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
 	.destroy = drm_connector_cleanup,
 };
 
-static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_flags flags)
+static int cdns_mhdp_attach(struct drm_bridge *bridge,
+			    enum drm_bridge_attach_flags flags)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
@@ -2387,8 +2392,9 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
 
 	irq = platform_get_irq(pdev, 0);
-	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, cdns_mhdp_irq_handler,
-					IRQF_ONESHOT, "mhdp8546", mhdp);
+	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL,
+					cdns_mhdp_irq_handler, IRQF_ONESHOT,
+					"mhdp8546", mhdp);
 	if (ret) {
 		dev_err(dev, "cannot install IRQ %d\n", irq);
 		ret = -EIO;
