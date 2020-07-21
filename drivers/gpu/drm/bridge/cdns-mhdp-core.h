@@ -381,7 +381,7 @@ struct cdns_mhdp_device {
 	 * "start_lock" protects the access to bridge_attached and
 	 * hw_state data members that control the delayed firmware
 	 * loading and attaching the bridge. They are accessed from
-	 * both the DRM core and mhdp_fw_cb(). In most cases just
+	 * both the DRM core and cdns_mhdp_fw_cb(). In most cases just
 	 * protecting the data members is enough, but the irq mask
 	 * setting needs to be protected when enabling the FW.
 	 */

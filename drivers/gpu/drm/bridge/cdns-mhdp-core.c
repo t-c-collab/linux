@@ -43,9 +43,9 @@
 static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
 static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
 static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp);
-static int mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
-				     const struct drm_display_mode *mode,
-				     struct drm_bridge_state *bridge_state);
+static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
+					  const struct drm_display_mode *mode,
+					  struct drm_bridge_state *bridge_state);
 static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 				 const struct drm_display_mode *mode,
 				 struct drm_bridge_state *bridge_state);
@@ -627,28 +627,28 @@ int cdns_mhdp_link_configure(struct drm_dp_aux *aux,
 	return 0;
 }
 
-static unsigned int mhdp_max_link_rate(struct cdns_mhdp_device *mhdp)
+static unsigned int cdns_mhdp_max_link_rate(struct cdns_mhdp_device *mhdp)
 {
 	return min(mhdp->host.link_rate, mhdp->sink.link_rate);
 }
 
-static u8 mhdp_max_num_lanes(struct cdns_mhdp_device *mhdp)
+static u8 cdns_mhdp_max_num_lanes(struct cdns_mhdp_device *mhdp)
 {
 	return min(mhdp->sink.lanes_cnt, mhdp->host.lanes_cnt);
 }
 
-static u8 mhdp_eq_training_pattern_supported(struct cdns_mhdp_device *mhdp)
+static u8 cdns_mhdp_eq_training_pattern_supported(struct cdns_mhdp_device *mhdp)
 {
 	return fls(mhdp->host.pattern_supp & mhdp->sink.pattern_supp);
 }
 
-static bool mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
+static bool cdns_mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 {
 	/* Check if SSC is supported by both sides */
 	return (mhdp->host.ssc) && (mhdp->sink.ssc);
 }
 
-static int mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 {
 	u32 ver_l, ver_h, fw_ver;
 	u32 lib_l_addr, lib_h_addr, lib_ver;
@@ -694,8 +694,8 @@ fw_error:
 	return -ENODEV;
 }
 
-static int mhdp_fw_activate(const struct firmware *fw,
-			    struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_fw_activate(const struct firmware *fw,
+				 struct cdns_mhdp_device *mhdp)
 {
 	unsigned int reg;
 	int ret = 0;
@@ -739,7 +739,7 @@ static int mhdp_fw_activate(const struct firmware *fw,
 		goto error;
 	}
 
-	ret = mhdp_check_fw_version(mhdp);
+	ret = cdns_mhdp_check_fw_version(mhdp);
 	if (ret)
 		goto error;
 
@@ -788,7 +788,7 @@ error:
 	return ret;
 }
 
-static void mhdp_fw_cb(const struct firmware *fw, void *context)
+static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
 {
 	struct cdns_mhdp_device *mhdp = context;
 	bool bridge_attached;
@@ -796,7 +796,7 @@ static void mhdp_fw_cb(const struct firmware *fw, void *context)
 
 	dev_dbg(mhdp->dev, "firmware callback\n");
 
-	ret = mhdp_fw_activate(fw, mhdp);
+	ret = cdns_mhdp_fw_activate(fw, mhdp);
 
 	release_firmware(fw);
 
@@ -818,12 +818,12 @@ static void mhdp_fw_cb(const struct firmware *fw, void *context)
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
 }
 
-static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 {
 	int ret;
 
 	ret = request_firmware_nowait(THIS_MODULE, true, FW_NAME, mhdp->dev,
-				      GFP_KERNEL, mhdp, mhdp_fw_cb);
+				      GFP_KERNEL, mhdp, cdns_mhdp_fw_cb);
 	if (ret) {
 		dev_err(mhdp->dev, "failed to load firmware (%s), ret: %d\n",
 			FW_NAME, ret);
@@ -833,7 +833,7 @@ static int mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static bool mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
+static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 {
 	int hpd_event, hpd_status;
 
@@ -861,7 +861,7 @@ static bool mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 	return !!hpd_status;
 }
 
-static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
+static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 {
 	bool hpd_pulse;
 	int ret;
@@ -872,7 +872,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	bool old_plugged = mhdp->plugged;
 	u8 status[DP_LINK_STATUS_SIZE];
 
-	mhdp->plugged = mhdp_detect_hpd(mhdp, &hpd_pulse);
+	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
 
 	mutex_lock(&mhdp->link_mutex);
 
@@ -928,7 +928,7 @@ static void mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		if (!current_mode)
 			goto err;
 
-		ret = mhdp_validate_mode_params(mhdp, current_mode, state);
+		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
 		if (ret < 0)
 			goto err;
 
@@ -941,7 +941,7 @@ err:
 	mutex_unlock(&mhdp->link_mutex);
 }
 
-static irqreturn_t mhdp_irq_handler(int irq, void *data)
+static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 {
 	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
 	u32 apb_stat, sw_ev0;
@@ -953,7 +953,7 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	/*
 	 *  Calling drm_kms_helper_hotplug_event() when not attached
 	 *  to drm device causes an oops because the drm_bridge->dev
-	 *  is NULL. See mhdp_fw_cb() comments for details about the
+	 *  is NULL. See cdns_mhdp_fw_cb() comments for details about the
 	 *  problems related drm_kms_helper_hotplug_event() call.
 	 */
 	spin_lock(&mhdp->start_lock);
@@ -961,7 +961,7 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	spin_unlock(&mhdp->start_lock);
 
 	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
-		mhdp_update_link_status(mhdp);
+		cdns_mhdp_update_link_status(mhdp);
 
 		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
 	}
@@ -969,8 +969,8 @@ static irqreturn_t mhdp_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static ssize_t mhdp_transfer(struct drm_dp_aux *aux,
-			     struct drm_dp_aux_msg *msg)
+static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
+				  struct drm_dp_aux_msg *msg)
 {
 	struct cdns_mhdp_device *mhdp = dev_get_drvdata(aux->dev);
 	int ret;
@@ -1216,7 +1216,7 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge, enum drm_bridge_attach_fl
 	return 0;
 }
 
-static int mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
 	u8 i;
@@ -1246,7 +1246,7 @@ static int mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 		phy_cfg.dp.voltage[i] = 0;
 		phy_cfg.dp.pre[i] = 0;
 	}
-	phy_cfg.dp.ssc = mhdp_get_ssc_supported(mhdp);
+	phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 	phy_cfg.dp.set_lanes = true;
 	phy_cfg.dp.set_rate = true;
 	phy_cfg.dp.set_voltages = true;
@@ -1269,10 +1269,10 @@ static int mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 	return 0;
 }
 
-static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
-				  u8 link_status[DP_LINK_STATUS_SIZE],
-				  u8 lanes_data[CDNS_DP_MAX_NUM_LANES],
-				  union phy_configure_opts *phy_cfg)
+static void cdns_mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
+				       u8 link_status[DP_LINK_STATUS_SIZE],
+				       u8 lanes_data[CDNS_DP_MAX_NUM_LANES],
+				       union phy_configure_opts *phy_cfg)
 {
 	unsigned int i;
 	u8 adjust, max_pre_emph, max_volt_swing;
@@ -1313,8 +1313,8 @@ static void mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 }
 
 static
-void mhdp_set_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
-				     int lane, u8 volt)
+void cdns_mhdp_set_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
+					  int lane, u8 volt)
 {
 	int i = DP_ADJUST_REQUEST_LANE0_1 + (lane >> 1);
 	int s = ((lane & 1) ?
@@ -1327,8 +1327,8 @@ void mhdp_set_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
 }
 
 static
-void mhdp_set_adjust_request_pre_emphasis(u8 link_status[DP_LINK_STATUS_SIZE],
-					  int lane, u8 pre_emphasis)
+void cdns_mhdp_set_adjust_request_pre_emphasis(u8 link_status[DP_LINK_STATUS_SIZE],
+					       int lane, u8 pre_emphasis)
 {
 	int i = DP_ADJUST_REQUEST_LANE0_1 + (lane >> 1);
 	int s = ((lane & 1) ?
@@ -1340,8 +1340,8 @@ void mhdp_set_adjust_request_pre_emphasis(u8 link_status[DP_LINK_STATUS_SIZE],
 	link_status[idx] |= pre_emphasis << s;
 }
 
-static void mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
-				     u8 link_status[DP_LINK_STATUS_SIZE])
+static void cdns_mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
+					  u8 link_status[DP_LINK_STATUS_SIZE])
 {
 	u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
 	u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
@@ -1352,14 +1352,14 @@ static void mhdp_adjust_requested_eq(struct cdns_mhdp_device *mhdp,
 		volt = drm_dp_get_adjust_request_voltage(link_status, i);
 		pre = drm_dp_get_adjust_request_pre_emphasis(link_status, i);
 		if (volt + pre > 3)
-			mhdp_set_adjust_request_voltage(link_status, i,
-							3 - pre);
+			cdns_mhdp_set_adjust_request_voltage(link_status, i,
+							     3 - pre);
 		if (mhdp->host.volt_swing & CDNS_FORCE_VOLT_SWING)
-			mhdp_set_adjust_request_voltage(link_status, i,
-							max_volt);
+			cdns_mhdp_set_adjust_request_voltage(link_status, i,
+							     max_volt);
 		if (mhdp->host.pre_emphasis & CDNS_FORCE_PRE_EMPHASIS)
-			mhdp_set_adjust_request_pre_emphasis(link_status, i,
-							     max_pre);
+			cdns_mhdp_set_adjust_request_pre_emphasis(link_status, i,
+								  max_pre);
 	}
 }
 
@@ -1394,9 +1394,9 @@ static void cdns_mhdp_print_lt_status(const char *prefix,
 		vs_str, pe_str);
 }
 
-static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
-					  u8 eq_tps,
-					  unsigned int training_interval)
+static bool cdns_mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
+					       u8 eq_tps,
+					       unsigned int training_interval)
 {
 	u8 lanes_data[CDNS_DP_MAX_NUM_LANES], fail_counter_short = 0;
 	u8 link_status[DP_LINK_STATUS_SIZE];
@@ -1421,9 +1421,9 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	drm_dp_dpcd_read_link_status(&mhdp->aux, link_status);
 
 	do {
-		mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
+		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
 		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
-		phy_cfg.dp.ssc = mhdp_get_ssc_supported(mhdp);
+		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
 		phy_cfg.dp.set_voltages = true;
@@ -1449,7 +1449,7 @@ static bool mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 
 		fail_counter_short++;
 
-		mhdp_adjust_requested_eq(mhdp, link_status);
+		cdns_mhdp_adjust_requested_eq(mhdp, link_status);
 	} while (fail_counter_short < 5);
 
 err:
@@ -1458,9 +1458,9 @@ err:
 	return false;
 }
 
-static void mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
-				     u8 link_status[DP_LINK_STATUS_SIZE],
-				     u8 *req_volt, u8 *req_pre)
+static void cdns_mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
+					  u8 link_status[DP_LINK_STATUS_SIZE],
+					  u8 *req_volt, u8 *req_pre)
 {
 	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
 	const u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
@@ -1471,19 +1471,19 @@ static void mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
 
 		val = mhdp->host.volt_swing & CDNS_FORCE_VOLT_SWING ?
 		      max_volt : req_volt[i];
-		mhdp_set_adjust_request_voltage(link_status, i, val);
+		cdns_mhdp_set_adjust_request_voltage(link_status, i, val);
 
 		val = mhdp->host.pre_emphasis & CDNS_FORCE_PRE_EMPHASIS ?
 		      max_pre : req_pre[i];
-		mhdp_set_adjust_request_pre_emphasis(link_status, i, val);
+		cdns_mhdp_set_adjust_request_pre_emphasis(link_status, i, val);
 	}
 }
 
-static void mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
-			     bool *same_before_adjust, bool *max_swing_reached,
-			     u8 before_cr[DP_LINK_STATUS_SIZE],
-			     u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
-			     u8 *req_pre)
+static void cdns_mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
+				  bool *same_before_adjust, bool *max_swing_reached,
+				  u8 before_cr[DP_LINK_STATUS_SIZE],
+				  u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
+				  u8 *req_pre)
 {
 	const u8 max_volt = CDNS_VOLT_SWING(mhdp->host.volt_swing);
 	const u8 max_pre = CDNS_PRE_EMPHASIS(mhdp->host.pre_emphasis);
@@ -1518,7 +1518,7 @@ static void mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
 	}
 }
 
-static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
+static bool cdns_mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 {
 	u8 lanes_data[CDNS_DP_MAX_NUM_LANES],
 	fail_counter_short = 0, fail_counter_cr_long = 0;
@@ -1529,7 +1529,7 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 
 	dev_dbg(mhdp->dev, "Starting CR phase\n");
 
-	ret = mhdp_link_training_init(mhdp);
+	ret = cdns_mhdp_link_training_init(mhdp);
 	if (ret)
 		goto err;
 
@@ -1540,9 +1540,9 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 		u8 requested_adjust_pre_emphasis[CDNS_DP_MAX_NUM_LANES] = {};
 		bool same_before_adjust, max_swing_reached;
 
-		mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
+		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data, &phy_cfg);
 		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
-		phy_cfg.dp.ssc = mhdp_get_ssc_supported(mhdp);
+		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
 		phy_cfg.dp.set_voltages = true;
@@ -1556,10 +1556,10 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 		cdns_mhdp_adjust_lt(mhdp, mhdp->link.num_lanes, 100,
 				    lanes_data, link_status);
 
-		mhdp_validate_cr(mhdp, &cr_done, &same_before_adjust,
-				 &max_swing_reached, lanes_data, link_status,
-				 requested_adjust_volt_swing,
-				 requested_adjust_pre_emphasis);
+		cdns_mhdp_validate_cr(mhdp, &cr_done, &same_before_adjust,
+				      &max_swing_reached, lanes_data, link_status,
+				      requested_adjust_volt_swing,
+				      requested_adjust_pre_emphasis);
 
 		if (max_swing_reached) {
 			dev_err(mhdp->dev, "CR: max swing reached\n");
@@ -1585,9 +1585,9 @@ static bool mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 		 * Voltage swing/pre-emphasis adjust requested
 		 * during CR phase
 		 */
-		mhdp_adjust_requested_cr(mhdp, link_status,
-					 requested_adjust_volt_swing,
-					 requested_adjust_pre_emphasis);
+		cdns_mhdp_adjust_requested_cr(mhdp, link_status,
+					      requested_adjust_volt_swing,
+					      requested_adjust_pre_emphasis);
 	} while (fail_counter_short < 5 && fail_counter_cr_long < 10);
 
 err:
@@ -1596,7 +1596,7 @@ err:
 	return false;
 }
 
-static void lower_link_rate(struct cdns_mhdp_link *link)
+static void cdns_mhdp_lower_link_rate(struct cdns_mhdp_link *link)
 {
 	switch (drm_dp_link_rate_to_bw_code(link->rate)) {
 	case DP_LINK_BW_2_7:
@@ -1611,27 +1611,27 @@ static void lower_link_rate(struct cdns_mhdp_link *link)
 	}
 }
 
-static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
-			      unsigned int training_interval)
+static int cdns_mhdp_link_training(struct cdns_mhdp_device *mhdp,
+				   unsigned int training_interval)
 {
 	u32 reg32;
-	const u8 eq_tps = mhdp_eq_training_pattern_supported(mhdp);
+	const u8 eq_tps = cdns_mhdp_eq_training_pattern_supported(mhdp);
 	int ret;
 
 	while (1) {
-		if (!mhdp_link_training_cr(mhdp)) {
+		if (!cdns_mhdp_link_training_cr(mhdp)) {
 			if (drm_dp_link_rate_to_bw_code(mhdp->link.rate) !=
 			    DP_LINK_BW_1_62) {
 				dev_dbg(mhdp->dev,
 					"Reducing link rate during CR phase\n");
-				lower_link_rate(&mhdp->link);
+				cdns_mhdp_lower_link_rate(&mhdp->link);
 
 				continue;
 			} else if (mhdp->link.num_lanes > 1) {
 				dev_dbg(mhdp->dev,
 					"Reducing lanes number during CR phase\n");
 				mhdp->link.num_lanes >>= 1;
-				mhdp->link.rate = mhdp_max_link_rate(mhdp);
+				mhdp->link.rate = cdns_mhdp_max_link_rate(mhdp);
 
 				continue;
 			}
@@ -1641,8 +1641,8 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			goto err;
 		}
 
-		if (mhdp_link_training_channel_eq(mhdp, eq_tps,
-						  training_interval))
+		if (cdns_mhdp_link_training_channel_eq(mhdp, eq_tps,
+						       training_interval))
 			break;
 
 		if (mhdp->link.num_lanes > 1) {
@@ -1655,8 +1655,8 @@ static int mhdp_link_training(struct cdns_mhdp_device *mhdp,
 			   DP_LINK_BW_1_62) {
 			dev_dbg(mhdp->dev,
 				"Reducing link rate during EQ phase\n");
-			lower_link_rate(&mhdp->link);
-			mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
+			cdns_mhdp_lower_link_rate(&mhdp->link);
+			mhdp->link.num_lanes = cdns_mhdp_max_num_lanes(mhdp);
 
 			continue;
 		}
@@ -1734,8 +1734,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	mutex_unlock(&mhdp->link_mutex);
 }
 
-static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
-				    u32 interval)
+static u32 cdns_mhdp_get_training_interval_us(struct cdns_mhdp_device *mhdp,
+					      u32 interval)
 {
 	if (interval == 0)
 		return 400;
@@ -1746,7 +1746,7 @@ static u32 get_training_interval_us(struct cdns_mhdp_device *mhdp,
 	return 0;
 }
 
-static void mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
+static void cdns_mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
 {
 	unsigned int link_rate;
 	struct phy_attrs attrs;
@@ -1778,8 +1778,8 @@ static void mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
 	mhdp->host.ssc = false;
 }
 
-static void mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
-				u8 dpcd[DP_RECEIVER_CAP_SIZE])
+static void cdns_mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
+				     u8 dpcd[DP_RECEIVER_CAP_SIZE])
 {
 	mhdp->sink.link_rate = mhdp->link.rate;
 	mhdp->sink.lanes_cnt = mhdp->link.num_lanes;
@@ -1836,10 +1836,10 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	dev_dbg(mhdp->dev, "Set sink device power state via DPCD\n");
 	cdns_mhdp_link_power_up(&mhdp->aux, &mhdp->link);
 
-	mhdp_fill_sink_caps(mhdp, dpcd);
+	cdns_mhdp_fill_sink_caps(mhdp, dpcd);
 
-	mhdp->link.rate = mhdp_max_link_rate(mhdp);
-	mhdp->link.num_lanes = mhdp_max_num_lanes(mhdp);
+	mhdp->link.rate = cdns_mhdp_max_link_rate(mhdp);
+	mhdp->link.num_lanes = cdns_mhdp_max_num_lanes(mhdp);
 
 	/* Disable framer for link training */
 	err = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
@@ -1854,7 +1854,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, resp);
 
 	/* Spread AMP if required, enable 8b/10b coding */
-	amp[0] = mhdp_get_ssc_supported(mhdp) ? DP_SPREAD_AMP_0_5 : 0;
+	amp[0] = cdns_mhdp_get_ssc_supported(mhdp) ? DP_SPREAD_AMP_0_5 : 0;
 	amp[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&mhdp->aux, DP_DOWNSPREAD_CTRL, amp, 2);
 
@@ -1865,10 +1865,10 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	} else {
 		const u32 interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] &
 				     DP_TRAINING_AUX_RD_MASK;
-		const u32 interval_us = get_training_interval_us(mhdp,
-								 interval);
+		const u32 interval_us = cdns_mhdp_get_training_interval_us(mhdp,
+									   interval);
 		if (!interval_us ||
-		    mhdp_link_training(mhdp, interval_us)) {
+		    cdns_mhdp_link_training(mhdp, interval_us)) {
 			dev_err(mhdp->dev, "Link training failed. Exiting.\n");
 			err = -EIO;
 			goto error;
@@ -2218,9 +2218,9 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 	return &cdns_mhdp_state->base;
 }
 
-static int mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
-				     const struct drm_display_mode *mode,
-				     struct drm_bridge_state *bridge_state)
+static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
+					  const struct drm_display_mode *mode,
+					  struct drm_bridge_state *bridge_state)
 {
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
@@ -2304,7 +2304,7 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 			goto err_check;
 	}
 
-	ret = mhdp_validate_mode_params(mhdp, mode, bridge_state);
+	ret = cdns_mhdp_validate_mode_params(mhdp, mode, bridge_state);
 
 err_check:
 	mutex_unlock(&mhdp->link_mutex);
@@ -2322,7 +2322,7 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 };
 
-static int mhdp_probe(struct platform_device *pdev)
+static int cdns_mhdp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct cdns_mhdp_device *mhdp;
@@ -2349,7 +2349,7 @@ static int mhdp_probe(struct platform_device *pdev)
 
 	drm_dp_aux_init(&mhdp->aux);
 	mhdp->aux.dev = dev;
-	mhdp->aux.transfer = mhdp_transfer;
+	mhdp->aux.transfer = cdns_mhdp_transfer;
 
 	mhdp->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(mhdp->regs)) {
@@ -2395,7 +2395,7 @@ static int mhdp_probe(struct platform_device *pdev)
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
 
 	irq = platform_get_irq(pdev, 0);
-	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, mhdp_irq_handler,
+	ret = devm_request_threaded_irq(mhdp->dev, irq, NULL, cdns_mhdp_irq_handler,
 					IRQF_ONESHOT, "mhdp8546", mhdp);
 	if (ret) {
 		dev_err(dev, "cannot install IRQ %d\n", irq);
@@ -2403,7 +2403,7 @@ static int mhdp_probe(struct platform_device *pdev)
 		goto plat_fini;
 	}
 
-	mhdp_fill_host_caps(mhdp);
+	cdns_mhdp_fill_host_caps(mhdp);
 
 	/* The only currently supported format */
 	mhdp->display_fmt.y_only = false;
@@ -2419,7 +2419,7 @@ static int mhdp_probe(struct platform_device *pdev)
 		goto plat_fini;
 	}
 
-	ret = mhdp_load_firmware(mhdp);
+	ret = cdns_mhdp_load_firmware(mhdp);
 	if (ret)
 		goto phy_exit;
 
@@ -2441,7 +2441,7 @@ clk_disable:
 	return ret;
 }
 
-static int mhdp_remove(struct platform_device *pdev)
+static int cdns_mhdp_remove(struct platform_device *pdev)
 {
 	struct cdns_mhdp_device *mhdp = dev_get_drvdata(&pdev->dev);
 	unsigned long timeout = msecs_to_jiffies(100);
@@ -2496,8 +2496,8 @@ static struct platform_driver mhdp_driver = {
 		.name		= "cdns-mhdp",
 		.of_match_table	= of_match_ptr(mhdp_ids),
 	},
-	.probe	= mhdp_probe,
-	.remove	= mhdp_remove,
+	.probe	= cdns_mhdp_probe,
+	.remove	= cdns_mhdp_remove,
 };
 module_platform_driver(mhdp_driver);
 
