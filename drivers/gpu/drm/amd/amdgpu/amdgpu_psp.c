@@ -500,7 +500,6 @@ static int psp_asd_load(struct psp_context *psp)
 	 * TODO: add version check to make it common
 	 */
 	if (amdgpu_sriov_vf(psp->adev) ||
-	    (psp->adev->asic_type == CHIP_SIENNA_CICHLID) ||
 	    (psp->adev->asic_type == CHIP_NAVY_FLOUNDER))
 		return 0;
 
@@ -1988,7 +1987,7 @@ static int psp_suspend(void *handle)
 
 	ret = psp_tmr_terminate(psp);
 	if (ret) {
-		DRM_ERROR("Failed to terminate tmr\n");
+		DRM_ERROR("Falied to terminate tmr\n");
 		return ret;
 	}
 
