@@ -1669,31 +1669,24 @@ static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
 	.destroy = drm_connector_cleanup,
 };
 
-static int cdns_mhdp_attach(struct drm_bridge *bridge,
-			    enum drm_bridge_attach_flags flags)
+static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 {
-	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
 	struct drm_connector *conn = &mhdp->connector;
-	bool hw_ready;
+	struct drm_bridge *bridge = &mhdp->bridge;
 	int ret;
 
-	dev_dbg(mhdp->dev, "%s\n", __func__);
-
-	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
-		DRM_ERROR("Fix bridge driver to make connector optional!");
-		return -EINVAL;
-	}
-
-	if (&mhdp->bridge != bridge)
+	if (!bridge->encoder) {
+		DRM_ERROR("Parent encoder object not found");
 		return -ENODEV;
+	}
 
 	conn->polled = DRM_CONNECTOR_POLL_HPD;
 
 	ret = drm_connector_init(bridge->dev, conn, &cdns_mhdp_conn_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret) {
-		dev_err(mhdp->dev, "failed to init connector\n");
+		DRM_ERROR("Failed to initialize connector with drm\n");
 		return ret;
 	}
 
@@ -1718,9 +1711,33 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
-		dev_err(mhdp->dev, "failed to attach connector to encoder\n");
+		DRM_ERROR("Failed to attach connector to encoder\n");
 		return ret;
 	}
+
+	return 0;
+}
+
+static int cdns_mhdp_attach(struct drm_bridge *bridge,
+			    enum drm_bridge_attach_flags flags)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	bool hw_ready;
+	int ret;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
+		DRM_ERROR("Fix bridge driver to make connector optional!");
+		return -EINVAL;
+	}
+
+	if (&mhdp->bridge != bridge)
+		return -ENODEV;
+
+	ret = cdns_mhdp_connector_init(mhdp);
+	if (ret)
+		return ret;
 
 	spin_lock(&mhdp->start_lock);
 
