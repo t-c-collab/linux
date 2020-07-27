@@ -1521,6 +1521,15 @@ static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
 	mhdp->link_up = false;
 }
 
+static struct edid *cdns_mhdp_get_edid(struct cdns_mhdp_device *mhdp,
+				       struct drm_connector *connector)
+{
+	if (!mhdp->plugged)
+		return NULL;
+
+	return drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
+}
+
 static int cdns_mhdp_get_modes(struct drm_connector *connector)
 {
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
@@ -1540,12 +1549,12 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 			return 0;
 		}
 	}
+
 	mutex_unlock(&mhdp->link_mutex);
 
-	edid = drm_do_get_edid(connector, cdns_mhdp_get_edid_block, mhdp);
+	edid = cdns_mhdp_get_edid(mhdp, connector);
 	if (!edid) {
 		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
-
 		return 0;
 	}
 
