@@ -2086,12 +2086,10 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
 	struct cdns_mhdp_bridge_state *state;
-	u32 bpp, bpc, pxlfmt;
 	int pxlclock, ret;
+	u32 bpp;
 
 	state = to_cdns_mhdp_bridge_state(bridge_state);
-	pxlfmt = mhdp->display_fmt.color_format;
-	bpc = mhdp->display_fmt.bpc;
 
 	pxlclock = mode->crtc_clock;
 
@@ -2298,6 +2296,9 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 	bool bridge_attached;
 
 	apb_stat = readl(mhdp->regs + CDNS_APB_INT_STATUS);
+	if (!(apb_stat & CDNS_APB_INT_MASK_SW_EVENT_INT))
+		return IRQ_NONE;
+
 	sw_ev0 = readl(mhdp->regs + CDNS_SW_EVENT0);
 
 	/*
