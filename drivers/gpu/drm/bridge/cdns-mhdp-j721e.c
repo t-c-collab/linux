@@ -45,10 +45,7 @@ static int cdns_mhdp_j721e_init(struct cdns_mhdp_device *mhdp)
 	struct platform_device *pdev = to_platform_device(mhdp->dev);
 
 	mhdp->j721e_regs = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(mhdp->j721e_regs))
-		return PTR_ERR(mhdp->j721e_regs);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(mhdp->j721e_regs);
 }
 
 static void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
