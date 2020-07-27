@@ -1582,18 +1582,23 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
-static int cdns_mhdp_detect(struct drm_connector *conn,
-			    struct drm_modeset_acquire_ctx *ctx,
-			    bool force)
+static enum drm_connector_status cdns_mhdp_detect(struct cdns_mhdp_device *mhdp)
 {
-	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
-
 	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
 
 	if (mhdp->plugged)
 		return connector_status_connected;
 	else
 		return connector_status_disconnected;
+}
+
+static int cdns_mhdp_connector_detect(struct drm_connector *conn,
+				      struct drm_modeset_acquire_ctx *ctx,
+				      bool force)
+{
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
+
+	return cdns_mhdp_detect(mhdp);
 }
 
 static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
@@ -1656,7 +1661,7 @@ enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
 }
 
 static const struct drm_connector_helper_funcs cdns_mhdp_conn_helper_funcs = {
-	.detect_ctx = cdns_mhdp_detect,
+	.detect_ctx = cdns_mhdp_connector_detect,
 	.get_modes = cdns_mhdp_get_modes,
 	.mode_valid = cdns_mhdp_mode_valid,
 };
@@ -2200,6 +2205,21 @@ err_check:
 	return ret;
 }
 
+static enum drm_connector_status cdns_mhdp_bridge_detect(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	return cdns_mhdp_detect(mhdp);
+}
+
+static struct edid *cdns_mhdp_bridge_get_edid(struct drm_bridge *bridge,
+					      struct drm_connector *connector)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	return cdns_mhdp_get_edid(mhdp, connector);
+}
+
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_atomic_disable,
@@ -2209,6 +2229,8 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_duplicate_state = cdns_mhdp_bridge_atomic_duplicate_state,
 	.atomic_destroy_state = cdns_mhdp_bridge_atomic_destroy_state,
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
+	.detect = cdns_mhdp_bridge_detect,
+	.get_edid = cdns_mhdp_bridge_get_edid,
 };
 
 static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
@@ -2441,6 +2463,7 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 	mhdp->bridge.of_node = pdev->dev.of_node;
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
+	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
 
 	ret = phy_init(mhdp->phy);
 	if (ret) {
