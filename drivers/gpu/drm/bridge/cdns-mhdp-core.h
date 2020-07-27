@@ -2,7 +2,7 @@
 /*
  * Cadence MHDP DP bridge driver.
  *
- * Copyright: 2019 Cadence Design Systems, Inc.
+ * Copyright (C) 2020 Cadence Design Systems, Inc.
  *
  * Author: Quentin Schulz <quentin.schulz@free-electrons.com>
  *         Swapnil Jakhade <sjakhade@cadence.com>

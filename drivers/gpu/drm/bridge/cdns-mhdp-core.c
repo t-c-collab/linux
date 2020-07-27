@@ -2,9 +2,13 @@
 /*
  * Cadence MHDP DP bridge driver.
  *
- * Copyright: 2019 Cadence Design Systems, Inc.
+ * Copyright (C) 2020 Cadence Design Systems, Inc.
  *
- * Author: Quentin Schulz <quentin.schulz@free-electrons.com>
+ * Authors: Quentin Schulz <quentin.schulz@free-electrons.com>
+ *          Swapnil Jakhade <sjakhade@cadence.com>
+ *          Yuti Amonkar <yamonkar@cadence.com>
+ *          Tomi Valkeinen <tomi.valkeinen@ti.com>
+ *          Jyri Sarha <jsarha@ti.com>
  */
 
 #include <linux/clk.h>
@@ -2504,6 +2508,9 @@ MODULE_FIRMWARE(FW_NAME);
 
 MODULE_AUTHOR("Quentin Schulz <quentin.schulz@free-electrons.com>");
 MODULE_AUTHOR("Swapnil Jakhade <sjakhade@cadence.com>");
+MODULE_AUTHOR("Yuti Amonkar <yamonkar@cadence.com>");
+MODULE_AUTHOR("Tomi Valkeinen <tomi.valkeinen@ti.com>");
+MODULE_AUTHOR("Jyri Sarha <jsarha@ti.com>");
 MODULE_DESCRIPTION("Cadence MHDP DP bridge driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:cdns-mhdp");

@@ -2,7 +2,7 @@
 /*
  * TI j721e Cadence MHDP DP wrapper
  *
- * Copyright (C) 2019 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2020 Texas Instruments Incorporated - http://www.ti.com/
  * Author: Jyri Sarha <jsarha@ti.com
  */
 
