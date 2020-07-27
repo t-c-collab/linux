@@ -1732,17 +1732,14 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
-	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR) {
-		DRM_ERROR("Fix bridge driver to make connector optional!");
-		return -EINVAL;
-	}
-
 	if (&mhdp->bridge != bridge)
 		return -ENODEV;
 
-	ret = cdns_mhdp_connector_init(mhdp);
-	if (ret)
-		return ret;
+	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
+		ret = cdns_mhdp_connector_init(mhdp);
+		if (ret)
+			return ret;
+	}
 
 	spin_lock(&mhdp->start_lock);
 
