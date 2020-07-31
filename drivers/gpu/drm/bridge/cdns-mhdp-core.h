@@ -372,7 +372,7 @@ struct cdns_mhdp_device {
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;
 	struct cdns_mhdp_display_fmt display_fmt;
-	s8 stream_id;
+	u8 stream_id;
 
 	bool link_up;
 	bool plugged;
