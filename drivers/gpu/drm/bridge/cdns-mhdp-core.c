@@ -2094,6 +2094,11 @@ cdns_mhdp_bridge_atomic_destroy_state(struct drm_bridge *bridge,
 
 	cdns_mhdp_state = to_cdns_mhdp_bridge_state(state);
 
+	if (cdns_mhdp_state->current_mode) {
+		drm_mode_destroy(bridge->dev, cdns_mhdp_state->current_mode);
+		cdns_mhdp_state->current_mode = NULL;
+	}
+
 	kfree(cdns_mhdp_state);
 }
 
