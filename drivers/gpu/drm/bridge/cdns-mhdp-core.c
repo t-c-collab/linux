@@ -333,13 +333,9 @@ int cdns_mhdp_set_firmware_active(struct cdns_mhdp_device *mhdp, bool enable)
 	}
 
 	/* read the firmware state */
-	for (i = 0; i < sizeof(msg); i++)  {
-		ret = cdns_mhdp_mailbox_read(mhdp);
-		if (ret < 0)
-			goto err_set_firmware_active;
-
-		msg[i] = ret;
-	}
+	ret = cdns_mhdp_mailbox_read_receive(mhdp, msg, sizeof(msg));
+	if (ret)
+		goto err_set_firmware_active;
 
 	ret = 0;
 
@@ -646,19 +642,14 @@ static bool cdns_mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 
 static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 {
-	u32 ver_l, ver_h, fw_ver;
-	u32 lib_l_addr, lib_h_addr, lib_ver;
 	u32 major_num, minor_num, revision;
+	u32 fw_ver, lib_ver;
 
-	ver_l = readl(mhdp->regs + CDNS_VER_L);
-	ver_h = readl(mhdp->regs + CDNS_VER_H);
+	fw_ver = (readl(mhdp->regs + CDNS_VER_H) << 8)
+	       | readl(mhdp->regs + CDNS_VER_L);
 
-	fw_ver = (ver_h << 8) | ver_l;
-
-	lib_l_addr = readl(mhdp->regs + CDNS_LIB_L_ADDR);
-	lib_h_addr = readl(mhdp->regs + CDNS_LIB_H_ADDR);
-
-	lib_ver = (lib_h_addr << 8) | lib_l_addr;
+	lib_ver = (readl(mhdp->regs + CDNS_LIB_H_ADDR) << 8)
+		| readl(mhdp->regs + CDNS_LIB_L_ADDR);
 
 	if (lib_ver < 33984) {
 		/*
@@ -668,12 +659,15 @@ static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 		 */
 		major_num = 1;
 		minor_num = 2;
-		if (fw_ver == 26098)
+		if (fw_ver == 26098) {
 			revision = 15;
-		else if (lib_ver == 0 && fw_ver == 0)
+		} else if (lib_ver == 0 && fw_ver == 0) {
 			revision = 17;
-		else
-			goto fw_error;
+		} else {
+			dev_err(mhdp->dev, "Unsupported FW version: fw_ver = %u, lib_ver = %u\n",
+				fw_ver, lib_ver);
+			return -ENODEV;
+		}
 	} else {
 		/* To identify newer FW versions with major number 2 onwards. */
 		major_num = fw_ver / 10000;
@@ -684,10 +678,6 @@ static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 	dev_dbg(mhdp->dev, "FW version: v%u.%u.%u\n", major_num, minor_num,
 		revision);
 	return 0;
-
-fw_error:
-	dev_err(mhdp->dev, "Unsupported FW version\n");
-	return -ENODEV;
 }
 
 static int cdns_mhdp_fw_activate(const struct firmware *fw,
@@ -873,7 +863,6 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 static int cdns_mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 {
 	u32 reg32;
-	u8 i;
 	union phy_configure_opts phy_cfg;
 	int ret;
 
@@ -896,10 +885,10 @@ static int cdns_mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 	cdns_mhdp_link_configure(&mhdp->aux, &mhdp->link);
 	phy_cfg.dp.link_rate = mhdp->link.rate / 100;
 	phy_cfg.dp.lanes = mhdp->link.num_lanes;
-	for (i = 0; i < 4; i++) {
-		phy_cfg.dp.voltage[i] = 0;
-		phy_cfg.dp.pre[i] = 0;
-	}
+
+	memset(phy_cfg.dp.voltage, 0, sizeof(phy_cfg.dp.voltage));
+	memset(phy_cfg.dp.pre, 0, sizeof(phy_cfg.dp.pre));
+
 	phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 	phy_cfg.dp.set_lanes = true;
 	phy_cfg.dp.set_rate = true;
@@ -1022,31 +1011,22 @@ static void cdns_mhdp_print_lt_status(const char *prefix,
 				      struct cdns_mhdp_device *mhdp,
 				      union phy_configure_opts *phy_cfg)
 {
-	int i;
-	char vs_str[8];
-	char pe_str[8];
-	char *vs_p, *pe_p;
-
-	vs_p = vs_str;
-	pe_p = pe_str;
+	char vs[8] = "0/0/0/0";
+	char pe[8] = "0/0/0/0";
+	unsigned int i;
 
 	for (i = 0; i < mhdp->link.num_lanes; i++) {
-		if (i != 0) {
-			*vs_p++ = '/';
-			*pe_p++ = '/';
-		}
-
-		*vs_p++ = '0' + phy_cfg->dp.voltage[i];
-		*pe_p++ = '0' + phy_cfg->dp.pre[i];
+		vs[i * 2] = '0' + phy_cfg->dp.voltage[i];
+		pe[i * 2] = '0' + phy_cfg->dp.pre[i];
 	}
 
-	*vs_p = 0;
-	*pe_p = 0;
+	vs[i * 2 - 1] = '\0';
+	pe[i * 2 - 1] = '\0';
 
 	dev_dbg(mhdp->dev, "%s, %u lanes, %u Mbps, vs %s, pe %s\n",
 		prefix,
 		mhdp->link.num_lanes, mhdp->link.rate / 100,
-		vs_str, pe_str);
+		vs, pe);
 }
 
 static bool cdns_mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
