@@ -87,7 +87,7 @@ static int cdns_mhdp_mailbox_validate_receive(struct cdns_mhdp_device *mhdp,
 	int ret;
 
 	/* read the header of the message */
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < sizeof(header); i++) {
 		ret = cdns_mhdp_mailbox_read(mhdp);
 		if (ret < 0)
 			return ret;
@@ -140,7 +140,7 @@ static int cdns_mhdp_mailbox_send(struct cdns_mhdp_device *mhdp, u8 module_id,
 	header[1] = module_id;
 	put_unaligned_be16(size, header + 2);
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < sizeof(header); i++) {
 		ret = cdns_mhdp_mailbox_write(mhdp, header[i]);
 		if (ret)
 			return ret;
@@ -1732,9 +1732,6 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
-	if (&mhdp->bridge != bridge)
-		return -ENODEV;
-
 	if (!(flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)) {
 		ret = cdns_mhdp_connector_init(mhdp);
 		if (ret)
@@ -1931,14 +1928,10 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 				 const struct drm_display_mode *mode,
 				 struct drm_bridge_state *bridge_state)
 {
-	u32 vs, tu_size, line_thresh = 0;
-	struct cdns_mhdp_bridge_state *state;
-
-	state = to_cdns_mhdp_bridge_state(bridge_state);
-
-	vs = state->vs;
-	tu_size = state->tu_size;
-	line_thresh = state->line_thresh;
+	struct cdns_mhdp_bridge_state *state = to_cdns_mhdp_bridge_state(bridge_state);
+	u32 line_thresh = state->line_thresh;
+	u32 tu_size = state->tu_size;
+	u32 vs = state->vs;
 
 	mhdp->stream_id = 0;
 
@@ -2345,7 +2338,7 @@ err:
 
 static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 {
-	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)data;
+	struct cdns_mhdp_device *mhdp = data;
 	u32 apb_stat, sw_ev0;
 	bool bridge_attached;
 
