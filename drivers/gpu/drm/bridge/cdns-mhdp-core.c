@@ -44,8 +44,6 @@
 
 #include "cdns-mhdp-j721e.h"
 
-static DECLARE_WAIT_QUEUE_HEAD(fw_load_wq);
-
 static int cdns_mhdp_mailbox_read(struct cdns_mhdp_device *mhdp)
 {
 	int ret, empty;
@@ -735,7 +733,6 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	spin_lock(&mhdp->start_lock);
 
 	mhdp->hw_state = MHDP_HW_READY;
-	wake_up(&fw_load_wq);
 	/*
 	 * Here we must keep the lock while enabling the interrupts
 	 * since it would otherwise be possible that interrupt enable
@@ -752,6 +749,7 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 
 	spin_unlock(&mhdp->start_lock);
 
+	wake_up(&mhdp->fw_load_wq);
 	dev_dbg(mhdp->dev, "DP FW activated\n");
 
 	return 0;
@@ -2430,6 +2428,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 		goto plat_fini;
 	}
 
+	init_waitqueue_head(&mhdp->fw_load_wq);
+
 	ret = cdns_mhdp_load_firmware(mhdp);
 	if (ret)
 		goto phy_exit;
@@ -2461,7 +2461,8 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 
 	drm_bridge_remove(&mhdp->bridge);
 
-	ret = wait_event_timeout(fw_load_wq, mhdp->hw_state == MHDP_HW_READY,
+	ret = wait_event_timeout(mhdp->fw_load_wq,
+				 mhdp->hw_state == MHDP_HW_READY,
 				 timeout);
 	if (ret == 0)
 		dev_err(mhdp->dev, "%s: Timeout waiting for fw loading\n",

@@ -390,6 +390,7 @@ struct cdns_mhdp_device {
 	bool bridge_attached;
 	bool bridge_enabled;
 	enum mhdp_hw_state hw_state;
+	wait_queue_head_t fw_load_wq;
 };
 
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
