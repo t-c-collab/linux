@@ -641,7 +641,7 @@ static u8 cdns_mhdp_eq_training_pattern_supported(struct cdns_mhdp_device *mhdp)
 static bool cdns_mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 {
 	/* Check if SSC is supported by both sides */
-	return (mhdp->host.ssc) && (mhdp->sink.ssc);
+	return mhdp->host.ssc && mhdp->sink.ssc;
 }
 
 static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
@@ -661,7 +661,7 @@ static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 	lib_ver = (lib_h_addr << 8) | lib_l_addr;
 
 	if (lib_ver < 33984) {
-		/**
+		/*
 		 * Older FW versions with major number 1, used to store FW
 		 * version information by storing repository revision number
 		 * in registers. This is for identifying these FW versions.
@@ -694,7 +694,7 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 				 struct cdns_mhdp_device *mhdp)
 {
 	unsigned int reg;
-	int ret = 0;
+	int ret;
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
@@ -894,8 +894,8 @@ static int cdns_mhdp_link_training_init(struct cdns_mhdp_device *mhdp)
 			    CDNS_DP_LANE_EN_LANES(mhdp->link.num_lanes));
 
 	cdns_mhdp_link_configure(&mhdp->aux, &mhdp->link);
-	phy_cfg.dp.link_rate = (mhdp->link.rate / 100);
-	phy_cfg.dp.lanes = (mhdp->link.num_lanes);
+	phy_cfg.dp.link_rate = mhdp->link.rate / 100;
+	phy_cfg.dp.lanes = mhdp->link.num_lanes;
 	for (i = 0; i < 4; i++) {
 		phy_cfg.dp.voltage[i] = 0;
 		phy_cfg.dp.pre[i] = 0;
@@ -945,7 +945,8 @@ static void cdns_mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 		set_pre = min(adjust, max_pre_emph)
 			  >> DP_TRAIN_PRE_EMPHASIS_SHIFT;
 
-		/* Voltage swing level and pre-emphasis level combination is
+		/*
+		 * Voltage swing level and pre-emphasis level combination is
 		 * not allowed: leaving pre-emphasis as-is, and adjusting
 		 * voltage swing.
 		 */
@@ -1077,7 +1078,7 @@ static bool cdns_mhdp_link_training_channel_eq(struct cdns_mhdp_device *mhdp,
 	do {
 		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data,
 					   &phy_cfg);
-		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
+		phy_cfg.dp.lanes = mhdp->link.num_lanes;
 		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
@@ -1198,7 +1199,7 @@ static bool cdns_mhdp_link_training_cr(struct cdns_mhdp_device *mhdp)
 
 		cdns_mhdp_get_adjust_train(mhdp, link_status, lanes_data,
 					   &phy_cfg);
-		phy_cfg.dp.lanes = (mhdp->link.num_lanes);
+		phy_cfg.dp.lanes = mhdp->link.num_lanes;
 		phy_cfg.dp.ssc = cdns_mhdp_get_ssc_supported(mhdp);
 		phy_cfg.dp.set_lanes = false;
 		phy_cfg.dp.set_rate = false;
@@ -1769,7 +1770,8 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 	pxlfmt = mhdp->display_fmt.color_format;
 	bpc = mhdp->display_fmt.bpc;
 
-	/* If YCBCR supported and stream not SD, use ITU709
+	/*
+	 * If YCBCR supported and stream not SD, use ITU709
 	 * Need to handle ITU version with YCBCR420 when supported
 	 */
 	if ((pxlfmt == DRM_COLOR_FORMAT_YCRCB444 ||
@@ -2494,7 +2496,7 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 	struct cdns_mhdp_device *mhdp = dev_get_drvdata(&pdev->dev);
 	unsigned long timeout = msecs_to_jiffies(100);
 	bool stop_fw = false;
-	int ret = 0;
+	int ret;
 
 	drm_bridge_remove(&mhdp->bridge);
 
