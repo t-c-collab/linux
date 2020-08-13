@@ -1670,12 +1670,12 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 
 	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
 
-	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
 	/*
 	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
 	 * in the display controller. This is achieved for the time being
 	 * by defining SAMPLE_NEGEDGE here.
 	 */
+	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
 		conn->display_info.bus_flags |=
 					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
 					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;

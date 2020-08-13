@@ -3,7 +3,7 @@
  * TI j721e Cadence MHDP DP wrapper
  *
  * Copyright (C) 2020 Texas Instruments Incorporated - http://www.ti.com/
- * Author: Jyri Sarha <jsarha@ti.com
+ * Author: Jyri Sarha <jsarha@ti.com>
  */
 
 #include <linux/io.h>
@@ -51,7 +51,7 @@ static int cdns_mhdp_j721e_init(struct cdns_mhdp_device *mhdp)
 static void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
 {
 	/*
-	 * Eneble VIF_0 and select DPI2 as its input. DSS0 DPI0 is connected
+	 * Enable VIF_0 and select DPI2 as its input. DSS0 DPI0 is connected
 	 * to eDP DPI2. This is the only supported SST configuration on
 	 * J721E.
 	 */

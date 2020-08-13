@@ -41,7 +41,7 @@ config DRM_CDNS_MHDP
 if DRM_CDNS_MHDP
 
 config DRM_CDNS_MHDP_J721E
-	depends on ARCH_K3_J721E_SOC
+	depends on ARCH_K3_J721E_SOC || COMPILE_TEST
 	bool "J721E Cadence DPI/DP wrapper support"
 	default y
 	help

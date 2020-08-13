@@ -3,13 +3,12 @@
  * TI j721e Cadence MHDP DP wrapper
  *
  * Copyright (C) 2020 Texas Instruments Incorporated - http://www.ti.com/
- * Author: Jyri Sarha <jsarha@ti.com
+ * Author: Jyri Sarha <jsarha@ti.com>
  */
 
 #ifndef CDNS_MHDP_J721E_H
 #define CDNS_MHDP_J721E_H
 
-#include <linux/platform_device.h>
 #include "cdns-mhdp-core.h"
 
 struct mhdp_platform_ops;
