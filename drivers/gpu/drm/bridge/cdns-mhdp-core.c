@@ -192,7 +192,7 @@ int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 err_reg_read:
 	mutex_unlock(&mhdp->mbox_mutex);
 	if (ret) {
-		DRM_DEV_ERROR(mhdp->dev, "Failed to read register.\n");
+		dev_err(mhdp->dev, "Failed to read register\n");
 		*value = 0;
 	}
 
@@ -308,7 +308,7 @@ err_dpcd_write:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret)
-		DRM_DEV_ERROR(mhdp->dev, "dpcd write failed: %d\n", ret);
+		dev_err(mhdp->dev, "dpcd write failed: %d\n", ret);
 	return ret;
 }
 
@@ -343,7 +343,7 @@ err_set_firmware_active:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret < 0)
-		DRM_DEV_ERROR(mhdp->dev, "set firmware active failed\n");
+		dev_err(mhdp->dev, "set firmware active failed\n");
 	return ret;
 }
 
@@ -372,14 +372,14 @@ int cdns_mhdp_get_hpd_status(struct cdns_mhdp_device *mhdp)
 
 	mutex_unlock(&mhdp->mbox_mutex);
 
-	dev_dbg(mhdp->dev, "%s: %d\n", __func__, status);
+	dev_dbg(mhdp->dev, "%s: HPD %splugged\n", __func__,
+		status ? "" : "un");
 
 	return status;
 
 err_get_hpd:
 	mutex_unlock(&mhdp->mbox_mutex);
 
-	DRM_DEV_ERROR(mhdp->dev, "get hpd status failed: %d\n", ret);
 	return ret;
 }
 
@@ -424,8 +424,8 @@ int cdns_mhdp_get_edid_block(void *data, u8 *edid,
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret)
-		DRM_DEV_ERROR(mhdp->dev, "get block[%d] edid failed: %d\n",
-			      block, ret);
+		dev_err(mhdp->dev, "get block[%d] edid failed: %d\n",
+			block, ret);
 
 	return ret;
 }
@@ -478,8 +478,7 @@ int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
 	int ret;
 
 	if (nlanes != 4 && nlanes != 2 && nlanes != 1) {
-		DRM_DEV_ERROR(mhdp->dev, "invalid number of lanes: %d\n",
-			      nlanes);
+		dev_err(mhdp->dev, "invalid number of lanes: %d\n", nlanes);
 		ret = -EINVAL;
 		goto err_adjust_lt;
 	}
@@ -517,7 +516,7 @@ err_adjust_lt:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret)
-		DRM_DEV_ERROR(mhdp->dev, "Failed to adjust Link Training.\n");
+		dev_err(mhdp->dev, "Failed to adjust Link Training.\n");
 
 	return ret;
 }
@@ -686,13 +685,6 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	unsigned int reg;
 	int ret;
 
-	dev_dbg(mhdp->dev, "%s\n", __func__);
-
-	if (!fw || !fw->data) {
-		dev_err(mhdp->dev, "%s: No firmware.\n", __func__);
-		return -EINVAL;
-	}
-
 	spin_lock(&mhdp->start_lock);
 	if (mhdp->hw_state != MHDP_HW_INACTIVE) {
 		spin_unlock(&mhdp->start_lock);
@@ -737,11 +729,8 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 
 	/* Activate uCPU */
 	ret = cdns_mhdp_set_firmware_active(mhdp, true);
-	if (ret) {
-		dev_err(mhdp->dev, "%s: Failed to activate FW: %d\n",
-			__func__, ret);
+	if (ret)
 		goto error;
-	}
 
 	spin_lock(&mhdp->start_lock);
 
@@ -781,6 +770,11 @@ static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
 	int ret;
 
 	dev_dbg(mhdp->dev, "firmware callback\n");
+
+	if (!fw || !fw->data) {
+		dev_err(mhdp->dev, "%s: No firmware.\n", __func__);
+		return;
+	}
 
 	ret = cdns_mhdp_fw_activate(fw, mhdp);
 
@@ -839,9 +833,9 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 			if (!ret)
 				continue;
 
-			DRM_DEV_ERROR(mhdp->dev,
-				      "Failed to write DPCD addr %u\n",
-				      msg->address + i);
+			dev_err(mhdp->dev,
+				"Failed to write DPCD addr %u\n",
+				msg->address + i);
 
 			return ret;
 		}
@@ -849,9 +843,9 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 		ret = cdns_mhdp_dpcd_read(mhdp, msg->address,
 					  msg->buffer, msg->size);
 		if (ret) {
-			DRM_DEV_ERROR(mhdp->dev,
-				      "Failed to read DPCD addr %u\n",
-				      msg->address);
+			dev_err(mhdp->dev,
+				"Failed to read DPCD addr %u\n",
+				msg->address);
 
 			return ret;
 		}
@@ -1535,7 +1529,7 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 
 	edid = cdns_mhdp_get_edid(mhdp, connector);
 	if (!edid) {
-		DRM_DEV_ERROR(mhdp->dev, "Failed to read EDID\n");
+		dev_err(mhdp->dev, "Failed to read EDID\n");
 		return 0;
 	}
 
@@ -1663,7 +1657,7 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 	int ret;
 
 	if (!bridge->encoder) {
-		DRM_ERROR("Parent encoder object not found");
+		dev_err(mhdp->dev, "Parent encoder object not found");
 		return -ENODEV;
 	}
 
@@ -1672,7 +1666,7 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 	ret = drm_connector_init(bridge->dev, conn, &cdns_mhdp_conn_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
 	if (ret) {
-		DRM_ERROR("Failed to initialize connector with drm\n");
+		dev_err(mhdp->dev, "Failed to initialize connector with drm\n");
 		return ret;
 	}
 
@@ -1697,7 +1691,7 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
-		DRM_ERROR("Failed to attach connector to encoder\n");
+		dev_err(mhdp->dev, "Failed to attach connector to encoder\n");
 		return ret;
 	}
 
@@ -2492,12 +2486,8 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 	mhdp->hw_state = MHDP_HW_STOPPED;
 	spin_unlock(&mhdp->start_lock);
 
-	if (stop_fw) {
+	if (stop_fw)
 		ret = cdns_mhdp_set_firmware_active(mhdp, false);
-		if (ret)
-			dev_err(mhdp->dev, "%s: De-activate FW failed: %d\n",
-				__func__, ret);
-	}
 
 	phy_exit(mhdp->phy);
 
