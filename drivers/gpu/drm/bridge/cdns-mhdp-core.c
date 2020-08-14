@@ -169,27 +169,27 @@ int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 				     GENERAL_REGISTER_READ,
 				     sizeof(msg), msg);
 	if (ret)
-		goto err_reg_read;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_GENERAL,
 						 GENERAL_REGISTER_READ,
 						 sizeof(resp));
 	if (ret)
-		goto err_reg_read;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, resp, sizeof(resp));
 	if (ret)
-		goto err_reg_read;
+		goto out;
 
 	/* Returned address value should be the same as requested */
 	if (memcmp(msg, resp, sizeof(msg))) {
 		ret = -EINVAL;
-		goto err_reg_read;
+		goto out;
 	}
 
 	*value = get_unaligned_be32(resp + 4);
 
-err_reg_read:
+out:
 	mutex_unlock(&mhdp->mbox_mutex);
 	if (ret) {
 		dev_err(mhdp->dev, "Failed to read register\n");
@@ -255,21 +255,21 @@ int cdns_mhdp_dpcd_read(struct cdns_mhdp_device *mhdp,
 	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
 				     DPTX_READ_DPCD, sizeof(msg), msg);
 	if (ret)
-		goto err_dpcd_read;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
 						 DPTX_READ_DPCD,
 						 sizeof(reg) + len);
 	if (ret)
-		goto err_dpcd_read;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, reg, sizeof(reg));
 	if (ret)
-		goto err_dpcd_read;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, data, len);
 
-err_dpcd_read:
+out:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	return ret;
@@ -290,21 +290,21 @@ int cdns_mhdp_dpcd_write(struct cdns_mhdp_device *mhdp, u32 addr, u8 value)
 	ret = cdns_mhdp_mailbox_send(mhdp, MB_MODULE_ID_DP_TX,
 				     DPTX_WRITE_DPCD, sizeof(msg), msg);
 	if (ret)
-		goto err_dpcd_write;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
 						 DPTX_WRITE_DPCD, sizeof(reg));
 	if (ret)
-		goto err_dpcd_write;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, reg, sizeof(reg));
 	if (ret)
-		goto err_dpcd_write;
+		goto out;
 
 	if (addr != get_unaligned_be24(reg + 2))
 		ret = -EINVAL;
 
-err_dpcd_write:
+out:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret)
@@ -329,17 +329,17 @@ int cdns_mhdp_set_firmware_active(struct cdns_mhdp_device *mhdp, bool enable)
 	for (i = 0; i < sizeof(msg); i++) {
 		ret = cdns_mhdp_mailbox_write(mhdp, msg[i]);
 		if (ret)
-			goto err_set_firmware_active;
+			goto out;
 	}
 
 	/* read the firmware state */
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, msg, sizeof(msg));
 	if (ret)
-		goto err_set_firmware_active;
+		goto out;
 
 	ret = 0;
 
-err_set_firmware_active:
+out:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret < 0)
@@ -480,7 +480,7 @@ int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
 	if (nlanes != 4 && nlanes != 2 && nlanes != 1) {
 		dev_err(mhdp->dev, "invalid number of lanes: %d\n", nlanes);
 		ret = -EINVAL;
-		goto err_adjust_lt;
+		goto out;
 	}
 
 	payload[0] = nlanes;
@@ -493,26 +493,26 @@ int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
 				     DPTX_ADJUST_LT,
 				     sizeof(payload), payload);
 	if (ret)
-		goto err_adjust_lt;
+		goto out;
 
 	/* Yes, read the DPCD read command response */
 	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
 						 DPTX_READ_DPCD,
 						 sizeof(hdr) + nregs);
 	if (ret)
-		goto err_adjust_lt;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, hdr, sizeof(hdr));
 	if (ret)
-		goto err_adjust_lt;
+		goto out;
 
 	addr = get_unaligned_be24(hdr + 2);
 	if (addr != DP_LANE0_1_STATUS)
-		goto err_adjust_lt;
+		goto out;
 
 	ret = cdns_mhdp_mailbox_read_receive(mhdp, link_status, nregs);
 
-err_adjust_lt:
+out:
 	mutex_unlock(&mhdp->mbox_mutex);
 
 	if (ret)
@@ -1408,7 +1408,7 @@ static void cdns_mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
 
 static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 {
-	u32 resp;
+	u32 resp, interval, interval_us;
 	u8 dpcd[DP_RECEIVER_CAP_SIZE], amp[2];
 	u8 ext_cap_chk = 0;
 	unsigned int addr;
@@ -1464,26 +1464,20 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 
 	if (mhdp->host.fast_link & mhdp->sink.fast_link) {
 		dev_err(mhdp->dev, "fastlink not supported\n");
-		err = -EOPNOTSUPP;
-		goto error;
-	} else {
-		const u32 interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] &
-				     DP_TRAINING_AUX_RD_MASK;
-		const u32 interval_us = cdns_mhdp_get_training_interval_us(mhdp,
-									   interval);
-		if (!interval_us ||
-		    cdns_mhdp_link_training(mhdp, interval_us)) {
-			dev_err(mhdp->dev, "Link training failed. Exiting.\n");
-			err = -EIO;
-			goto error;
-		}
+		return -EOPNOTSUPP;
+	}
+
+	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
+	interval_us = cdns_mhdp_get_training_interval_us(mhdp, interval);
+	if (!interval_us ||
+	    cdns_mhdp_link_training(mhdp, interval_us)) {
+		dev_err(mhdp->dev, "Link training failed. Exiting.\n");
+		return -EIO;
 	}
 
 	mhdp->link_up = true;
 
 	return 0;
-error:
-	return err;
 }
 
 static void cdns_mhdp_link_down(struct cdns_mhdp_device *mhdp)
@@ -1947,7 +1941,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (mhdp->plugged && !mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
 		if (ret < 0)
-			goto err_enable;
+			goto out;
 	}
 
 	if (mhdp->ops && mhdp->ops->enable)
@@ -1957,7 +1951,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
 	if (ret < 0) {
 		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
-		goto err_enable;
+		goto out;
 	}
 
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
@@ -1966,21 +1960,21 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
 	if (WARN_ON(!connector))
-		goto err_enable;
+		goto out;
 
 	conn_state = drm_atomic_get_new_connector_state(state, connector);
 	if (WARN_ON(!conn_state))
-		goto err_enable;
+		goto out;
 
 	crtc_state = drm_atomic_get_new_crtc_state(state, conn_state->crtc);
 	if (WARN_ON(!crtc_state))
-		goto err_enable;
+		goto out;
 
 	mode = &crtc_state->adjusted_mode;
 
 	new_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_state))
-		goto err_enable;
+		goto out;
 
 	cdns_mhdp_sst_enable(mhdp, mode, new_state);
 
@@ -1993,7 +1987,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	mhdp->bridge_enabled = true;
 
-err_enable:
+out:
 	mutex_unlock(&mhdp->link_mutex);
 }
 
@@ -2092,7 +2086,7 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
 	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
 	struct cdns_mhdp_bridge_state *state;
-	int pxlclock, ret;
+	int pxlclock;
 	u32 bpp;
 
 	state = to_cdns_mhdp_bridge_state(bridge_state);
@@ -2108,8 +2102,7 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
 			__func__, mode->name, mhdp->link.num_lanes,
 			mhdp->link.rate / 100);
-		ret = -EINVAL;
-		goto err_tu_size;
+		return -EINVAL;
 	}
 
 	/* find optimal tu_size */
@@ -2130,8 +2123,7 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
 			__func__, mode->name, mhdp->link.num_lanes,
 			mhdp->link.rate / 100);
-		ret = -EINVAL;
-		goto err_tu_size;
+		return -EINVAL;
 	}
 
 	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
@@ -2144,9 +2136,6 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 	state->line_thresh = line_thresh;
 
 	return 0;
-
-err_tu_size:
-	return ret;
 }
 
 static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
@@ -2166,12 +2155,12 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
 		if (ret < 0)
-			goto err_check;
+			goto out;
 	}
 
 	ret = cdns_mhdp_validate_mode_params(mhdp, mode, bridge_state);
 
-err_check:
+out:
 	mutex_unlock(&mhdp->link_mutex);
 	return ret;
 }
@@ -2249,7 +2238,7 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	if (!mhdp->plugged) {
 		cdns_mhdp_link_down(mhdp);
-		goto err;
+		goto out;
 	}
 
 	/*
@@ -2267,10 +2256,8 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		 */
 		if (ret > 0 &&
 		    drm_dp_channel_eq_ok(status, mhdp->link.num_lanes) &&
-		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes)) {
-			mutex_unlock(&mhdp->link_mutex);
-			return;
-		}
+		    drm_dp_clock_recovery_ok(status, mhdp->link.num_lanes))
+			goto out;
 
 		/* If link is bad, mark link as down so that we do a new LT */
 		mhdp->link_up = false;
@@ -2289,26 +2276,26 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	if (mhdp->bridge_enabled) {
 		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
 		if (!state)
-			goto err;
+			goto out;
 
 		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
 		if (!cdns_bridge_state)
-			goto err;
+			goto out;
 
 		current_mode = cdns_bridge_state->current_mode;
 		if (!current_mode)
-			goto err;
+			goto out;
 
 		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
 		if (ret < 0)
-			goto err;
+			goto out;
 
 		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
 			current_mode->name);
 
 		cdns_mhdp_sst_enable(mhdp, current_mode, state);
 	}
-err:
+out:
 	mutex_unlock(&mhdp->link_mutex);
 }
 
