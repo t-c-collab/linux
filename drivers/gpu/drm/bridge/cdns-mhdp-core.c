@@ -429,7 +429,7 @@ int cdns_mhdp_get_edid_block(void *data, u8 *edid,
 }
 
 static
-int cdns_mhdp_read_event(struct cdns_mhdp_device *mhdp)
+int cdns_mhdp_read_hpd_event(struct cdns_mhdp_device *mhdp)
 {
 	u8 event = 0;
 	int ret;
@@ -466,17 +466,17 @@ out:
 }
 
 static
-int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
-			u8 nlanes, u16 udelay, u8 *lanes_data, u8 *link_status)
+int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp, unsigned int nlanes,
+			unsigned int udelay, const u8 *lanes_data,
+			u8 link_status[DP_LINK_STATUS_SIZE])
 {
 	u8 payload[7];
 	u8 hdr[5]; /* For DPCD read response header */
 	u32 addr;
-	u8 const nregs = 6; /* Registers 0x202-0x207 */
 	int ret;
 
 	if (nlanes != 4 && nlanes != 2 && nlanes != 1) {
-		dev_err(mhdp->dev, "invalid number of lanes: %d\n", nlanes);
+		dev_err(mhdp->dev, "invalid number of lanes: %u\n", nlanes);
 		ret = -EINVAL;
 		goto out;
 	}
@@ -496,7 +496,7 @@ int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
 	/* Yes, read the DPCD read command response */
 	ret = cdns_mhdp_mailbox_validate_receive(mhdp, MB_MODULE_ID_DP_TX,
 						 DPTX_READ_DPCD,
-						 sizeof(hdr) + nregs);
+						 sizeof(hdr) + DP_LINK_STATUS_SIZE);
 	if (ret)
 		goto out;
 
@@ -508,7 +508,8 @@ int cdns_mhdp_adjust_lt(struct cdns_mhdp_device *mhdp,
 	if (addr != DP_LANE0_1_STATUS)
 		goto out;
 
-	ret = cdns_mhdp_mailbox_read_receive(mhdp, link_status, nregs);
+	ret = cdns_mhdp_mailbox_read_receive(mhdp, link_status,
+					     DP_LINK_STATUS_SIZE);
 
 out:
 	mutex_unlock(&mhdp->mbox_mutex);
@@ -823,7 +824,7 @@ static ssize_t cdns_mhdp_transfer(struct drm_dp_aux *aux,
 
 	if (msg->request == DP_AUX_NATIVE_WRITE) {
 		const u8 *buf = msg->buffer;
-		int i;
+		unsigned int i;
 
 		for (i = 0; i < msg->size; ++i) {
 			ret = cdns_mhdp_dpcd_write(mhdp,
@@ -950,13 +951,12 @@ static void cdns_mhdp_get_adjust_train(struct cdns_mhdp_device *mhdp,
 
 static
 void cdns_mhdp_set_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
-					  int lane, u8 volt)
+					  unsigned int lane, u8 volt)
 {
-	int i = DP_ADJUST_REQUEST_LANE0_1 + (lane >> 1);
-	int s = ((lane & 1) ?
-		 DP_ADJUST_VOLTAGE_SWING_LANE1_SHIFT :
-		 DP_ADJUST_VOLTAGE_SWING_LANE0_SHIFT);
-	int idx = i - DP_LANE0_1_STATUS;
+	unsigned int s = ((lane & 1) ?
+			  DP_ADJUST_VOLTAGE_SWING_LANE1_SHIFT :
+			  DP_ADJUST_VOLTAGE_SWING_LANE0_SHIFT);
+	unsigned int idx = DP_ADJUST_REQUEST_LANE0_1 - DP_LANE0_1_STATUS + (lane >> 1);
 
 	link_status[idx] &= ~(DP_ADJUST_VOLTAGE_SWING_LANE0_MASK << s);
 	link_status[idx] |= volt << s;
@@ -964,13 +964,12 @@ void cdns_mhdp_set_adjust_request_voltage(u8 link_status[DP_LINK_STATUS_SIZE],
 
 static
 void cdns_mhdp_set_adjust_request_pre_emphasis(u8 link_status[DP_LINK_STATUS_SIZE],
-					       int lane, u8 pre_emphasis)
+					       unsigned int lane, u8 pre_emphasis)
 {
-	int i = DP_ADJUST_REQUEST_LANE0_1 + (lane >> 1);
-	int s = ((lane & 1) ?
-		 DP_ADJUST_PRE_EMPHASIS_LANE1_SHIFT :
-		 DP_ADJUST_PRE_EMPHASIS_LANE0_SHIFT);
-	int idx = i - DP_LANE0_1_STATUS;
+	unsigned int s = ((lane & 1) ?
+			  DP_ADJUST_PRE_EMPHASIS_LANE1_SHIFT :
+			  DP_ADJUST_PRE_EMPHASIS_LANE0_SHIFT);
+	unsigned int idx = DP_ADJUST_REQUEST_LANE0_1 - DP_LANE0_1_STATUS + (lane >> 1);
 
 	link_status[idx] &= ~(DP_ADJUST_PRE_EMPHASIS_LANE0_MASK << s);
 	link_status[idx] |= pre_emphasis << s;
@@ -1110,7 +1109,7 @@ static void cdns_mhdp_adjust_requested_cr(struct cdns_mhdp_device *mhdp,
 static
 void cdns_mhdp_validate_cr(struct cdns_mhdp_device *mhdp, bool *cr_done,
 			   bool *same_before_adjust, bool *max_swing_reached,
-			   u8 before_cr[DP_LINK_STATUS_SIZE],
+			   u8 before_cr[CDNS_DP_MAX_NUM_LANES],
 			   u8 after_cr[DP_LINK_STATUS_SIZE], u8 *req_volt,
 			   u8 *req_pre)
 {
@@ -1596,7 +1595,7 @@ static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
 static
 bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 			    const struct drm_display_mode *mode,
-			    int lanes, int rate)
+			    unsigned int lanes, unsigned int rate)
 {
 	u32 max_bw, req_bw, bpp;
 
@@ -2197,7 +2196,7 @@ static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 
 	*hpd_pulse = false;
 
-	hpd_event = cdns_mhdp_read_event(mhdp);
+	hpd_event = cdns_mhdp_read_hpd_event(mhdp);
 
 	/* Getting event bits failed, bail out */
 	if (hpd_event < 0) {
