@@ -338,6 +338,11 @@ struct cdns_mhdp_bridge_state {
 	struct drm_display_mode *current_mode;
 };
 
+struct cdns_mhdp_platform_info {
+	const struct drm_bridge_timings *timings;
+	const struct mhdp_platform_ops *ops;
+};
+
 #define to_cdns_mhdp_bridge_state(s) \
 		container_of(s, struct cdns_mhdp_bridge_state, base)
 
@@ -349,7 +354,7 @@ struct cdns_mhdp_device {
 	struct clk *clk;
 	struct phy *phy;
 
-	const struct mhdp_platform_ops *ops;
+	const struct cdns_mhdp_platform_info *info;
 
 	/* This is to protect mailbox communications with the firmware */
 	struct mutex mbox_mutex;

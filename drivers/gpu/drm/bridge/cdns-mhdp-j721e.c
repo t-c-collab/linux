@@ -70,3 +70,9 @@ const struct mhdp_platform_ops mhdp_ti_j721e_ops = {
 	.enable = cdns_mhdp_j721e_enable,
 	.disable = cdns_mhdp_j721e_disable,
 };
+
+const struct drm_bridge_timings mhdp_ti_j721e_bridge_timings = {
+	.input_bus_flags = DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
+			   DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE |
+			   DRM_BUS_FLAG_DE_HIGH,
+};

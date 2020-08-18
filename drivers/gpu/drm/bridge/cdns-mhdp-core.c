@@ -1668,18 +1668,6 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 	if (ret)
 		return ret;
 
-	conn->display_info.bus_flags = DRM_BUS_FLAG_DE_HIGH;
-
-	/*
-	 * DP is internal to J7 SoC and we need to use DRIVE_POSEDGE
-	 * in the display controller. This is achieved for the time being
-	 * by defining SAMPLE_NEGEDGE here.
-	 */
-	if (of_device_is_compatible(mhdp->dev->of_node, "ti,j721e-mhdp8546"))
-		conn->display_info.bus_flags |=
-					DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
-					DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE;
-
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
 		dev_err(mhdp->dev, "Failed to attach connector to encoder\n");
@@ -1941,8 +1929,8 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 			goto out;
 	}
 
-	if (mhdp->ops && mhdp->ops->enable)
-		mhdp->ops->enable(mhdp);
+	if (mhdp->info->ops && mhdp->info->ops->enable)
+		mhdp->info->ops->enable(mhdp);
 
 	/* Enable VIF clock for stream 0 */
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
@@ -2011,8 +1999,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
 
-	if (mhdp->ops && mhdp->ops->disable)
-		mhdp->ops->disable(mhdp);
+	if (mhdp->info->ops && mhdp->info->ops->disable)
+		mhdp->info->ops->disable(mhdp);
 
 	mutex_unlock(&mhdp->link_mutex);
 }
@@ -2370,7 +2358,7 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mhdp);
 
-	mhdp->ops = of_device_get_match_data(dev);
+	mhdp->info = of_device_get_match_data(dev);
 
 	clk_prepare_enable(clk);
 
@@ -2382,8 +2370,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 		goto clk_disable;
 	}
 
-	if (mhdp->ops && mhdp->ops->init) {
-		ret = mhdp->ops->init(mhdp);
+	if (mhdp->info->ops && mhdp->info->ops->init) {
+		ret = mhdp->info->ops->init(mhdp);
 		if (ret != 0) {
 			dev_err(dev, "MHDP platform initialization failed: %d\n",
 				ret);
@@ -2420,6 +2408,7 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
 	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
 	mhdp->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
+	mhdp->bridge.timings = mhdp->info->timings;
 
 	ret = phy_init(mhdp->phy);
 	if (ret) {
@@ -2440,8 +2429,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 phy_exit:
 	phy_exit(mhdp->phy);
 plat_fini:
-	if (mhdp->ops && mhdp->ops->exit)
-		mhdp->ops->exit(mhdp);
+	if (mhdp->info->ops && mhdp->info->ops->exit)
+		mhdp->info->ops->exit(mhdp);
 runtime_put:
 	pm_runtime_put_sync(dev);
 	pm_runtime_disable(dev);
@@ -2478,8 +2467,8 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 
 	phy_exit(mhdp->phy);
 
-	if (mhdp->ops && mhdp->ops->exit)
-		mhdp->ops->exit(mhdp);
+	if (mhdp->info->ops && mhdp->info->ops->exit)
+		mhdp->info->ops->exit(mhdp);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
@@ -2492,7 +2481,12 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 static const struct of_device_id mhdp_ids[] = {
 	{ .compatible = "cdns,mhdp8546", },
 #ifdef CONFIG_DRM_CDNS_MHDP_J721E
-	{ .compatible = "ti,j721e-mhdp8546", .data = &mhdp_ti_j721e_ops },
+	{ .compatible = "ti,j721e-mhdp8546",
+	  .data = &(const struct cdns_mhdp_platform_info) {
+		  .timings = &mhdp_ti_j721e_bridge_timings,
+		  .ops = &mhdp_ti_j721e_ops,
+	  },
+	},
 #endif
 	{ /* sentinel */ }
 };
