@@ -310,14 +310,10 @@ struct cdns_mhdp_display_fmt {
 /*
  * These enums present MHDP hw initialization state
  * Legal state transitions are:
- * MHDP_HW_INACTIVE <-> MHDP_HW_LOADING -> MHDP_HW_READY
- *        |                                     |
- *        '----------> MHDP_HW_STOPPED <--------'
+ * MHDP_HW_READY <-> MHDP_HW_STOPPED
  */
 enum mhdp_hw_state {
-	MHDP_HW_INACTIVE = 0,	/* HW not initialized */
-	MHDP_HW_LOADING,	/* HW initialization in progress */
-	MHDP_HW_READY,		/* HW ready, FW active*/
+	MHDP_HW_READY = 1,	/* HW ready, FW active*/
 	MHDP_HW_STOPPED		/* Driver removal FW to be stopped */
 };
 

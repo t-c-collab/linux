@@ -694,17 +694,6 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	unsigned int reg;
 	int ret;
 
-	spin_lock(&mhdp->start_lock);
-	if (mhdp->hw_state != MHDP_HW_INACTIVE) {
-		spin_unlock(&mhdp->start_lock);
-		if (mhdp->hw_state != MHDP_HW_STOPPED)
-			dev_err(mhdp->dev, "%s: Bad HW state: %d\n",
-				__func__, mhdp->hw_state);
-		return -EBUSY;
-	}
-	mhdp->hw_state = MHDP_HW_LOADING;
-	spin_unlock(&mhdp->start_lock);
-
 	/* Release uCPU reset and stall it. */
 	writel(CDNS_CPU_STALL, mhdp->regs + CDNS_APB_CTRL);
 
@@ -723,12 +712,12 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	if (ret) {
 		dev_err(mhdp->dev,
 			"device didn't give any life sign: reg %d\n", reg);
-		goto error;
+		return ret;
 	}
 
 	ret = cdns_mhdp_check_fw_version(mhdp);
 	if (ret)
-		goto error;
+		return ret;
 
 	/* Init events to 0 as it's not cleared by FW at boot but on read */
 	readl(mhdp->regs + CDNS_SW_EVENT0);
@@ -739,7 +728,7 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	/* Activate uCPU */
 	ret = cdns_mhdp_set_firmware_active(mhdp, true);
 	if (ret)
-		goto error;
+		return ret;
 
 	spin_lock(&mhdp->start_lock);
 
@@ -764,12 +753,6 @@ static int cdns_mhdp_fw_activate(const struct firmware *fw,
 	dev_dbg(mhdp->dev, "DP FW activated\n");
 
 	return 0;
-error:
-	spin_lock(&mhdp->start_lock);
-	mhdp->hw_state = MHDP_HW_INACTIVE;
-	spin_unlock(&mhdp->start_lock);
-
-	return ret;
 }
 
 static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
