@@ -1586,7 +1586,7 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 
 	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
 	req_bw = mode->clock * bpp / 8;
-	max_bw = lanes * rate;
+	max_bw = lanes * rate * 10;
 	if (req_bw > max_bw) {
 		dev_dbg(mhdp->dev,
 			"Unsupported Mode: %s, Req BW: %u, Available Max BW:%u\n",
