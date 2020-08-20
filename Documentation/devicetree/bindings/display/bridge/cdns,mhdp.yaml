@@ -58,19 +58,35 @@ properties:
       '#size-cells':
         const: 0
 
+    patternProperties:
       port@0:
         type: object
         description:
-          Input port representing the DP bridge input.
+          First input port representing the DP bridge input.
 
       port@1:
+        type: object
+        description:
+          Second input port representing the DP bridge input.
+
+      port@2:
+        type: object
+        description:
+          Third input port representing the DP bridge input.
+
+      port@3:
+        type: object
+        description:
+          Fourth input port representing the DP bridge input.
+
+      port@4:
         type: object
         description:
           Output port representing the DP bridge output.
 
     required:
       - port@0
-      - port@1
+      - port@4
       - '#address-cells'
       - '#size-cells'
 
@@ -122,13 +138,13 @@ examples:
 
                 port@0 {
                     reg = <0>;
-                    dp_bridge_input: endpoint {
-                        remote-endpoint = <&xxx_dpi_output>;
+                    dp_bridge_input_0: endpoint {
+                        remote-endpoint = <&xxx_dpi_output0>;
                     };
                 };
 
-                port@1 {
-                    reg = <1>;
+                port@4 {
+                    reg = <4>;
                     dp_bridge_output: endpoint {
                         remote-endpoint = <&xxx_dp_connector_input>;
                     };
