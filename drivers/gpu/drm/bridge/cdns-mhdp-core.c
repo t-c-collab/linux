@@ -638,6 +638,16 @@ static bool cdns_mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 	return mhdp->host.ssc && mhdp->sink.ssc;
 }
 
+static enum drm_connector_status cdns_mhdp_detect(struct cdns_mhdp_device *mhdp)
+{
+	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
+
+	if (mhdp->plugged)
+		return connector_status_connected;
+	else
+		return connector_status_disconnected;
+}
+
 static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
 {
 	u32 major_num, minor_num, revision;
@@ -793,8 +803,12 @@ static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
 	spin_lock(&mhdp->start_lock);
 	bridge_attached = mhdp->bridge_attached;
 	spin_unlock(&mhdp->start_lock);
-	if (bridge_attached)
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+	if (bridge_attached) {
+		if (mhdp->connector.dev)
+			drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		else
+			drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
+	}
 }
 
 static int cdns_mhdp_load_firmware(struct cdns_mhdp_device *mhdp)
@@ -1548,16 +1562,6 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
-static enum drm_connector_status cdns_mhdp_detect(struct cdns_mhdp_device *mhdp)
-{
-	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
-
-	if (mhdp->plugged)
-		return connector_status_connected;
-	else
-		return connector_status_disconnected;
-}
-
 static int cdns_mhdp_connector_detect(struct drm_connector *conn,
 				      struct drm_modeset_acquire_ctx *ctx,
 				      bool force)
@@ -2165,6 +2169,23 @@ static struct edid *cdns_mhdp_bridge_get_edid(struct drm_bridge *bridge,
 	return cdns_mhdp_get_edid(mhdp, connector);
 }
 
+static void cdns_mhdp_bridge_hpd_enable(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	if (mhdp->bridge_attached)
+		/* enable SW event interrupts */
+		writel(~CDNS_APB_INT_MASK_SW_EVENT_INT,
+		       mhdp->regs + CDNS_APB_INT_MASK);
+}
+
+static void cdns_mhdp_bridge_hpd_disable(struct drm_bridge *bridge)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	writel(CDNS_APB_INT_MASK_SW_EVENT_INT, mhdp->regs + CDNS_APB_INT_MASK);
+}
+
 static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_atomic_disable,
@@ -2176,6 +2197,8 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 	.detect = cdns_mhdp_bridge_detect,
 	.get_edid = cdns_mhdp_bridge_get_edid,
+	.hpd_enable = cdns_mhdp_bridge_hpd_enable,
+	.hpd_disable = cdns_mhdp_bridge_hpd_disable,
 };
 
 static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
@@ -2308,8 +2331,10 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 
 	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
 		cdns_mhdp_update_link_status(mhdp);
-
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		if (mhdp->connector.dev)
+			drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		else
+			drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
 	}
 
 	return IRQ_HANDLED;
@@ -2406,7 +2431,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 	mhdp->bridge.of_node = pdev->dev.of_node;
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
-	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID;
+	mhdp->bridge.ops = DRM_BRIDGE_OP_DETECT | DRM_BRIDGE_OP_EDID |
+			   DRM_BRIDGE_OP_HPD;
 	mhdp->bridge.type = DRM_MODE_CONNECTOR_DisplayPort;
 	mhdp->bridge.timings = mhdp->info->timings;
 
