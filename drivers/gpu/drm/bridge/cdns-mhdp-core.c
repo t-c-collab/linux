@@ -11,6 +11,7 @@
  *          Jyri Sarha <jsarha@ti.com>
  */
 
+#define DEBUG
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -1454,11 +1455,11 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	amp[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&mhdp->aux, DP_DOWNSPREAD_CTRL, amp, 2);
 
+	return -1;
 	if (mhdp->host.fast_link & mhdp->sink.fast_link) {
 		dev_err(mhdp->dev, "fastlink not supported\n");
 		return -EOPNOTSUPP;
 	}
-
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
 	interval_us = cdns_mhdp_get_training_interval_us(mhdp, interval);
 	if (!interval_us ||
@@ -1466,7 +1467,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 		dev_err(mhdp->dev, "Link training failed. Exiting.\n");
 		return -EIO;
 	}
-
+	
 	mhdp->link_up = true;
 
 	return 0;
@@ -1501,7 +1502,7 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	if (!mhdp->plugged)
 		return 0;
 
-	mutex_lock(&mhdp->link_mutex);
+	/*mutex_lock(&mhdp->link_mutex);
 
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
@@ -1511,7 +1512,7 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 		}
 	}
 
-	mutex_unlock(&mhdp->link_mutex);
+	mutex_unlock(&mhdp->link_mutex);*/
 
 	edid = cdns_mhdp_get_edid(mhdp, connector);
 	if (!edid) {
@@ -1910,6 +1911,10 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	if (mhdp->plugged && !mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
+		if (!mhdp->link.rate && !mhdp->link.num_lanes) {
+			mhdp->link.rate = mhdp->host.link_rate;
+			mhdp->link.num_lanes = mhdp->host.lanes_cnt;
+		}
 		if (ret < 0)
 			goto out;
 	}
@@ -1959,6 +1964,9 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 out:
 	mutex_unlock(&mhdp->link_mutex);
+	/*if (ret < 0)
+		drm_connector_set_link_status_property(&mhdp->connector,
+						       DRM_MODE_LINK_STATUS_BAD);*/
 }
 
 static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
@@ -2122,11 +2130,11 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 
 	mutex_lock(&mhdp->link_mutex);
 
-	if (!mhdp->link_up) {
+	/*if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
 		if (ret < 0)
 			goto out;
-	}
+	}*/
 
 	ret = cdns_mhdp_validate_mode_params(mhdp, mode, bridge_state);
 
@@ -2254,6 +2262,10 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
+		if (!mhdp->link.rate && !mhdp->link.num_lanes) {
+			mhdp->link.rate = mhdp->host.link_rate;
+			mhdp->link.num_lanes = mhdp->host.lanes_cnt;
+		}
 		if (ret < 0) {
 			mutex_unlock(&mhdp->link_mutex);
 			drm_connector_set_link_status_property(conn,
