@@ -1455,11 +1455,11 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	amp[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&mhdp->aux, DP_DOWNSPREAD_CTRL, amp, 2);
 
-	return -1;
 	if (mhdp->host.fast_link & mhdp->sink.fast_link) {
 		dev_err(mhdp->dev, "fastlink not supported\n");
 		return -EOPNOTSUPP;
 	}
+
 	interval = dpcd[DP_TRAINING_AUX_RD_INTERVAL] & DP_TRAINING_AUX_RD_MASK;
 	interval_us = cdns_mhdp_get_training_interval_us(mhdp, interval);
 	if (!interval_us ||
@@ -1467,7 +1467,7 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 		dev_err(mhdp->dev, "Link training failed. Exiting.\n");
 		return -EIO;
 	}
-	
+
 	mhdp->link_up = true;
 
 	return 0;
@@ -1497,22 +1497,11 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
 	struct edid *edid;
 	int num_modes;
-	int ret;
+
+	dev_dbg(mhdp->dev, "%s\n", __func__);
 
 	if (!mhdp->plugged)
 		return 0;
-
-	/*mutex_lock(&mhdp->link_mutex);
-
-	if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_mutex);
-			return 0;
-		}
-	}
-
-	mutex_unlock(&mhdp->link_mutex);*/
 
 	edid = cdns_mhdp_get_edid(mhdp, connector);
 	if (!edid) {
@@ -1911,10 +1900,6 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 	if (mhdp->plugged && !mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (!mhdp->link.rate && !mhdp->link.num_lanes) {
-			mhdp->link.rate = mhdp->host.link_rate;
-			mhdp->link.num_lanes = mhdp->host.lanes_cnt;
-		}
 		if (ret < 0)
 			goto out;
 	}
@@ -2067,6 +2052,8 @@ static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
 	int pxlclock;
 	u32 bpp;
 
+	dev_dbg(mhdp->dev, "%s\n", __func__);
+
 	state = to_cdns_mhdp_bridge_state(bridge_state);
 
 	pxlclock = mode->crtc_clock;
@@ -2125,21 +2112,22 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 	int ret;
 
-	if (!mhdp->plugged)
-		return 0;
+	dev_dbg(mhdp->dev, "%s\n", __func__);
 
 	mutex_lock(&mhdp->link_mutex);
 
-	/*if (!mhdp->link_up) {
-		ret = cdns_mhdp_link_up(mhdp);
-		if (ret < 0)
-			goto out;
-	}*/
+	if (!mhdp->plugged) {		//for application run w/o cable, when kmstest is run second time, it takes link params last set. Use host params everytime
+		mhdp->link.rate = mhdp->host.link_rate;
+		mhdp->link.num_lanes = mhdp->host.lanes_cnt;
+	}
+
+	dev_dbg(mhdp->dev, "%s: Checking mode %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
 
 	ret = cdns_mhdp_validate_mode_params(mhdp, mode, bridge_state);
-
-out:
 	mutex_unlock(&mhdp->link_mutex);
+
 	return ret;
 }
 
@@ -2262,34 +2250,26 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
-		if (!mhdp->link.rate && !mhdp->link.num_lanes) {
-			mhdp->link.rate = mhdp->host.link_rate;
-			mhdp->link.num_lanes = mhdp->host.lanes_cnt;
-		}
-		if (ret < 0) {
-			mutex_unlock(&mhdp->link_mutex);
-			drm_connector_set_link_status_property(conn,
-							       DRM_MODE_LINK_STATUS_BAD);
-			return;
-		}
+		if (ret < 0)
+			goto error;
 	}
 
 	if (mhdp->bridge_enabled) {
 		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
 		if (!state)
-			goto out;
+			goto error;
 
 		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
 		if (!cdns_bridge_state)
-			goto out;
+			goto error;
 
 		current_mode = cdns_bridge_state->current_mode;
 		if (!current_mode)
-			goto out;
+			goto error;
 
 		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
 		if (ret < 0)
-			goto out;
+			goto error;
 
 		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
 			current_mode->name);
@@ -2298,6 +2278,11 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	}
 out:
 	mutex_unlock(&mhdp->link_mutex);
+	return;
+error:
+	mutex_unlock(&mhdp->link_mutex);
+	drm_connector_set_link_status_property(conn,
+					       DRM_MODE_LINK_STATUS_BAD);
 }
 
 static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
@@ -2414,6 +2399,10 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	}
 
 	cdns_mhdp_fill_host_caps(mhdp);
+
+	/* Initialize link rate and num of lanes to host values */
+	mhdp->link.rate = mhdp->host.link_rate;
+	mhdp->link.num_lanes = mhdp->host.lanes_cnt;
 
 	/* The only currently supported format */
 	mhdp->display_fmt.y_only = false;
