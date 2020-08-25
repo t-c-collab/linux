@@ -9,6 +9,13 @@
  *          Yuti Amonkar <yamonkar@cadence.com>
  *          Tomi Valkeinen <tomi.valkeinen@ti.com>
  *          Jyri Sarha <jsarha@ti.com>
+ * TODO:
+ *      - Implement optimized code for handling mailbox communication.
+ *      - Implement power management.
+ *      - Add audio and mst feature.
+ *      - Implement request_fw_cancel to handle HW_STATE.
+ *      - Fix asynchronous loading of firmware implementation.
+ *      - Add DRM helper function for cdns_mhdp_lower_link_rate.
  */
 
 #include <linux/clk.h>
