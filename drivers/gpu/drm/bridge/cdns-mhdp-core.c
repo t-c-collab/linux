@@ -788,8 +788,10 @@ static void cdns_mhdp_fw_cb(const struct firmware *fw, void *context)
 	bridge_attached = mhdp->bridge_attached;
 	spin_unlock(&mhdp->start_lock);
 	if (bridge_attached) {
-		drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		if (mhdp->connector.dev)
+			drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		else
+			drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
 	}
 }
 
@@ -1406,6 +1408,13 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	u8 ext_cap_chk = 0;
 	unsigned int addr;
 	int err;
+	static int flag = 0;
+
+	dev_dbg(mhdp->dev, "%s : %d\n" ,__func__, flag);
+	if (flag < 3) {
+		flag++;
+		return -1;
+	}
 
 	WARN_ON(!mutex_is_locked(&mhdp->link_mutex));
 
@@ -1949,9 +1958,8 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 
 out:
 	mutex_unlock(&mhdp->link_mutex);
-	/*if (ret < 0)
-		drm_connector_set_link_status_property(&mhdp->connector,
-						       DRM_MODE_LINK_STATUS_BAD);*/
+	if (ret < 0)
+		schedule_work(&mhdp->modeset_retry_work);
 }
 
 static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
@@ -2206,10 +2214,10 @@ static bool cdns_mhdp_detect_hpd(struct cdns_mhdp_device *mhdp, bool *hpd_pulse)
 	return !!hpd_status;
 }
 
-static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
+static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 {
 	bool hpd_pulse;
-	int ret;
+	int ret = 0;
 	struct drm_bridge_state *state;
 	struct cdns_mhdp_bridge_state *cdns_bridge_state;
 	struct drm_connector *conn = &mhdp->connector;
@@ -2251,25 +2259,31 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	if (!mhdp->link_up) {
 		ret = cdns_mhdp_link_up(mhdp);
 		if (ret < 0)
-			goto error;
+			goto out;
 	}
 
 	if (mhdp->bridge_enabled) {
 		state = drm_priv_to_bridge_state(mhdp->bridge.base.state);
-		if (!state)
-			goto error;
+		if (!state) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		cdns_bridge_state = to_cdns_mhdp_bridge_state(state);
-		if (!cdns_bridge_state)
-			goto error;
+		if (!cdns_bridge_state) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		current_mode = cdns_bridge_state->current_mode;
-		if (!current_mode)
-			goto error;
+		if (!current_mode) {
+			ret = -EINVAL;
+			goto out;
+		}
 
 		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
 		if (ret < 0)
-			goto error;
+			goto out;
 
 		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
 			current_mode->name);
@@ -2278,11 +2292,25 @@ static void cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	}
 out:
 	mutex_unlock(&mhdp->link_mutex);
-	return;
-error:
-	mutex_unlock(&mhdp->link_mutex);
+	return ret;
+}
+
+static void cdns_mhdp_modeset_retry_fn(struct work_struct *work)
+{
+	struct cdns_mhdp_device *mhdp;
+	struct drm_connector *conn;
+	static int count;
+
+	mhdp = container_of(work, typeof(*mhdp), modeset_retry_work);
+
+	conn = &mhdp->connector;
+
+	dev_dbg(mhdp->dev, "%s------> %d\n", __func__, count++);	
+	mutex_lock(&conn->dev->mode_config.mutex);
 	drm_connector_set_link_status_property(conn,
 					       DRM_MODE_LINK_STATUS_BAD);
+	mutex_unlock(&conn->dev->mode_config.mutex);
+	drm_kms_helper_hotplug_event(mhdp->bridge.dev);
 }
 
 static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
@@ -2290,6 +2318,7 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 	struct cdns_mhdp_device *mhdp = data;
 	u32 apb_stat, sw_ev0;
 	bool bridge_attached;
+	int ret;
 
 	apb_stat = readl(mhdp->regs + CDNS_APB_INT_STATUS);
 	if (!(apb_stat & CDNS_APB_INT_MASK_SW_EVENT_INT))
@@ -2308,9 +2337,16 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 	spin_unlock(&mhdp->start_lock);
 
 	if (bridge_attached && (sw_ev0 & CDNS_DPTX_HPD)) {
-		cdns_mhdp_update_link_status(mhdp);
-		drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
-		drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		ret = cdns_mhdp_update_link_status(mhdp);
+		if (mhdp->connector.dev) {
+			if (ret < 0)
+				schedule_work(&mhdp->modeset_retry_work);
+			else 
+				drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+		}
+		else {
+			drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
+		}
 	}
 
 	return IRQ_HANDLED;
@@ -2422,6 +2458,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 		goto plat_fini;
 	}
 
+	/* Intialize the work for modeset in case of link train failure */
+	INIT_WORK(&mhdp->modeset_retry_work, cdns_mhdp_modeset_retry_fn);
 	init_waitqueue_head(&mhdp->fw_load_wq);
 
 	ret = cdns_mhdp_load_firmware(mhdp);
