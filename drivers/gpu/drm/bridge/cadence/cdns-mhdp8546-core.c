@@ -1577,6 +1577,13 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 {
 	u32 max_bw, req_bw, bpp;
 
+	/*
+	 * mode->clock is expressed in kHz. Multiplying by bpp and dividing by 8
+	 * we get the number of kB/s. DisplayPort applies a 8b-10b encoding, the
+	 * value thus equals the bandwidth in 10kb/s units, which matches the
+	 * units of the rate parameter.
+	 */
+
 	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
 	req_bw = mode->clock * bpp / 8;
 	max_bw = lanes * rate;
@@ -1597,10 +1604,14 @@ enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
 {
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
 
+	mutex_lock(&mhdp->link_mutex);
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
-				    mhdp->link.rate))
+				    mhdp->link.rate)) {
+		mutex_unlock(&mhdp->link_mutex);
 		return MODE_CLOCK_HIGH;
+	}
 
+	mutex_unlock(&mhdp->link_mutex);
 	return MODE_OK;
 }
 
@@ -1858,13 +1869,33 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 }
 
 static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
-				 const struct drm_display_mode *mode,
-				 struct drm_bridge_state *bridge_state)
+				 const struct drm_display_mode *mode)
 {
-	struct cdns_mhdp_bridge_state *state = to_cdns_mhdp_bridge_state(bridge_state);
-	u32 line_thresh = state->line_thresh;
-	u32 tu_size = state->tu_size;
-	u32 vs = state->vs;
+	u32 tu_size = 64, line_thresh1, line_thresh2, line_thresh = 0;
+	u32 rate, vs, required_bandwidth, available_bandwidth;
+	int pxlclock;
+	u32 bpp;
+
+	pxlclock = mode->crtc_clock;
+
+	/* Get rate in MSymbols per second per lane */
+	rate = mhdp->link.rate / 1000;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+
+	required_bandwidth = pxlclock * bpp / 8;
+	available_bandwidth = mhdp->link.num_lanes * rate;
+
+	vs = tu_size * required_bandwidth / available_bandwidth;
+	vs /= 1000;
+
+	if (vs == tu_size)
+		vs = tu_size - 1;
+
+	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
+	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
+	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
+	line_thresh = (line_thresh >> 5) + 2;
 
 	mhdp->stream_id = 0;
 
@@ -1939,7 +1970,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (WARN_ON(!new_state))
 		goto out;
 
-	cdns_mhdp_sst_enable(mhdp, mode, new_state);
+	cdns_mhdp_sst_enable(mhdp, mode);
 
 	mhdp_state = to_cdns_mhdp_bridge_state(new_state);
 
@@ -2044,69 +2075,6 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 	return &cdns_mhdp_state->base;
 }
 
-static int cdns_mhdp_validate_mode_params(struct cdns_mhdp_device *mhdp,
-					  const struct drm_display_mode *mode,
-					  struct drm_bridge_state *bridge_state)
-{
-	u32 tu_size = 30, line_thresh1, line_thresh2, line_thresh = 0;
-	u32 rate, vs, vs_f, required_bandwidth, available_bandwidth;
-	struct cdns_mhdp_bridge_state *state;
-	int pxlclock;
-	u32 bpp;
-
-	state = to_cdns_mhdp_bridge_state(bridge_state);
-
-	pxlclock = mode->crtc_clock;
-
-	/* Get rate in MSymbols per second per lane */
-	rate = mhdp->link.rate / 1000;
-
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
-
-	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
-				    mhdp->link.rate)) {
-		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
-			__func__, mode->name, mhdp->link.num_lanes,
-			mhdp->link.rate / 100);
-		return -EINVAL;
-	}
-
-	/* find optimal tu_size */
-	required_bandwidth = pxlclock * bpp / 8;
-	available_bandwidth = mhdp->link.num_lanes * rate;
-	do {
-		tu_size += 2;
-
-		vs_f = tu_size * required_bandwidth / available_bandwidth;
-		vs = vs_f / 1000;
-		vs_f = vs_f % 1000;
-		/* Downspreading is unused currently */
-	} while ((vs == 1 || ((vs_f > 850 || vs_f < 100) && vs_f != 0) ||
-		 tu_size - vs < 2) && tu_size < 64);
-
-	if (vs > 64) {
-		dev_err(mhdp->dev,
-			"%s: No space for framing %s (%u lanes at %u Mbps)\n",
-			__func__, mode->name, mhdp->link.num_lanes,
-			mhdp->link.rate / 100);
-		return -EINVAL;
-	}
-
-	if (vs == tu_size)
-		vs = tu_size - 1;
-
-	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
-	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
-	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
-	line_thresh = (line_thresh >> 5) + 2;
-
-	state->vs = vs;
-	state->tu_size = tu_size;
-	state->line_thresh = line_thresh;
-
-	return 0;
-}
-
 static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 				  struct drm_bridge_state *bridge_state,
 				  struct drm_crtc_state *crtc_state,
@@ -2114,19 +2082,21 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&mhdp->link_mutex);
 
-	if (!mhdp->plugged) {
-		mhdp->link.rate = mhdp->host.link_rate;
-		mhdp->link.num_lanes = mhdp->host.lanes_cnt;
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate)) {
+		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
+			__func__, mode->name, mhdp->link.num_lanes,
+			mhdp->link.rate / 100);
+		ret = -EINVAL;
+		goto out;
 	}
 
-	ret = cdns_mhdp_validate_mode_params(mhdp, mode, bridge_state);
-
+out:
 	mutex_unlock(&mhdp->link_mutex);
-
 	return ret;
 }
 
@@ -2215,12 +2185,14 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	bool old_plugged = mhdp->plugged;
 	u8 status[DP_LINK_STATUS_SIZE];
 
-	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
-
 	mutex_lock(&mhdp->link_mutex);
+
+	mhdp->plugged = cdns_mhdp_detect_hpd(mhdp, &hpd_pulse);
 
 	if (!mhdp->plugged) {
 		cdns_mhdp_link_down(mhdp);
+		mhdp->link.rate = mhdp->host.link_rate;
+		mhdp->link.num_lanes = mhdp->host.lanes_cnt;
 		goto out;
 	}
 
@@ -2271,14 +2243,16 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			goto out;
 		}
 
-		ret = cdns_mhdp_validate_mode_params(mhdp, current_mode, state);
+		ret = cdns_mhdp_bandwidth_ok(mhdp, current_mode,
+					     mhdp->link.num_lanes,
+					     mhdp->link.rate);
 		if (ret < 0)
 			goto out;
 
 		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
 			current_mode->name);
 
-		cdns_mhdp_sst_enable(mhdp, current_mode, state);
+		cdns_mhdp_sst_enable(mhdp, current_mode);
 	}
 out:
 	mutex_unlock(&mhdp->link_mutex);
@@ -2301,8 +2275,7 @@ static void cdns_mhdp_modeset_retry_fn(struct work_struct *work)
 	 * Set connector link status to BAD and send a Uevent to notify
 	 * userspace to do a modeset.
 	 */
-	drm_connector_set_link_status_property(conn,
-					       DRM_MODE_LINK_STATUS_BAD);
+	drm_connector_set_link_status_property(conn, DRM_MODE_LINK_STATUS_BAD);
 	mutex_unlock(&conn->dev->mode_config.mutex);
 
 	/* Send Hotplug uevent so userspace can reprobe */
