@@ -328,9 +328,6 @@ struct mhdp_platform_ops {
 
 struct cdns_mhdp_bridge_state {
 	struct drm_bridge_state base;
-	u32 tu_size;
-	u32 vs;
-	u32 line_thresh;
 	struct drm_display_mode *current_mode;
 };
 
