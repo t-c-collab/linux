@@ -1605,6 +1605,7 @@ enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
 
 	mutex_lock(&mhdp->link_mutex);
+
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
 				    mhdp->link.rate)) {
 		mutex_unlock(&mhdp->link_mutex);
@@ -1873,10 +1874,8 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 {
 	u32 tu_size = 64, line_thresh1, line_thresh2, line_thresh = 0;
 	u32 rate, vs, required_bandwidth, available_bandwidth;
-	int pxlclock;
+	int pxlclock = mode->crtc_clock;
 	u32 bpp;
-
-	pxlclock = mode->crtc_clock;
 
 	/* Get rate in MSymbols per second per lane */
 	rate = mhdp->link.rate / 1000;
@@ -1969,6 +1968,12 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	new_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_state))
 		goto out;
+
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	cdns_mhdp_sst_enable(mhdp, mode);
 
@@ -2082,7 +2087,6 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
-	int ret = 0;
 
 	mutex_lock(&mhdp->link_mutex);
 
@@ -2091,13 +2095,12 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 		dev_err(mhdp->dev, "%s: Not enough BW for %s (%u lanes at %u Mbps)\n",
 			__func__, mode->name, mhdp->link.num_lanes,
 			mhdp->link.rate / 100);
-		ret = -EINVAL;
-		goto out;
+		mutex_unlock(&mhdp->link_mutex);
+		return -EINVAL;
 	}
 
-out:
 	mutex_unlock(&mhdp->link_mutex);
-	return ret;
+	return 0;
 }
 
 static enum drm_connector_status cdns_mhdp_bridge_detect(struct drm_bridge *bridge)
@@ -2243,11 +2246,11 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			goto out;
 		}
 
-		ret = cdns_mhdp_bandwidth_ok(mhdp, current_mode,
-					     mhdp->link.num_lanes,
-					     mhdp->link.rate);
-		if (ret < 0)
+		if (!cdns_mhdp_bandwidth_ok(mhdp, current_mode, mhdp->link.num_lanes,
+					    mhdp->link.rate)) {
+			ret = -EINVAL;
 			goto out;
+		}
 
 		dev_dbg(mhdp->dev, "%s: Enabling mode %s\n", __func__,
 			current_mode->name);
