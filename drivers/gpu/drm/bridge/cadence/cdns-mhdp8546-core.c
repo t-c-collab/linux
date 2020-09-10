@@ -18,7 +18,7 @@
  *     - Fix asynchronous loading of firmware implementation
  *     - Add DRM helper function for cdns_mhdp_lower_link_rate
  */
-
+#define DEBUG
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -1411,9 +1411,14 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	u8 ext_cap_chk = 0;
 	unsigned int addr;
 	int err;
+	//static int flag=0;
 
 	WARN_ON(!mutex_is_locked(&mhdp->link_mutex));
 
+	/*if (flag < 5) {
+		flag++;
+		return -1;
+	}*/
 	drm_dp_dpcd_readb(&mhdp->aux, DP_TRAINING_AUX_RD_INTERVAL,
 			  &ext_cap_chk);
 
@@ -1503,6 +1508,7 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int num_modes;
 
+	dev_dbg(mhdp->dev, "%s:%d\n",__func__, __LINE__); 
 	if (!mhdp->plugged)
 		return 0;
 
@@ -1604,6 +1610,7 @@ enum drm_mode_status cdns_mhdp_mode_valid(struct drm_connector *conn,
 {
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(conn);
 
+	dev_dbg(mhdp->dev, "%s:%d\n", __func__, __LINE__);
 	mutex_lock(&mhdp->link_mutex);
 
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
@@ -1896,6 +1903,8 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
 	line_thresh = line_thresh1 - line_thresh2 / (s32)mhdp->link.num_lanes;
 	line_thresh = (line_thresh >> 5) + 2;
+        dev_dbg(mhdp->dev, "vs: %d bpp: %u pxlclock: %d rate: %d lanes: %d\n", vs, bpp, pxlclock, rate, mhdp->link.num_lanes);
+        dev_dbg(mhdp->dev, "line_thresh1: %d line_thresh2: %d line_thresh: %d\n", line_thresh1, line_thresh2, line_thresh);
 
 	mhdp->stream_id = 0;
 
@@ -1937,6 +1946,8 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 		if (ret < 0)
 			goto out;
 	}
+	mhdp->link.rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_1_62);
+	mhdp->link.num_lanes = 1;
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->enable)
 		mhdp->info->ops->enable(mhdp);
@@ -1969,7 +1980,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	new_state = drm_atomic_get_new_bridge_state(state, bridge);
 	if (WARN_ON(!new_state))
 		goto out;
-
+	dev_dbg(mhdp->dev, "%s: check bandwith_ok\n", __func__);
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
 				    mhdp->link.rate)) {
 		ret = -EINVAL;
@@ -2089,6 +2100,7 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
+	dev_dbg(mhdp->dev, "%s:%d %s\n",__func__, __LINE__, mode->name); 
 	mutex_lock(&mhdp->link_mutex);
 
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
@@ -2271,7 +2283,8 @@ static void cdns_mhdp_modeset_retry_fn(struct work_struct *work)
 	mhdp = container_of(work, typeof(*mhdp), modeset_retry_work);
 
 	conn = &mhdp->connector;
-
+	
+	dev_dbg(mhdp->dev, "%s: set link status bad\n", __func__);
 	/* Grab the locks before changing connector property */
 	mutex_lock(&conn->dev->mode_config.mutex);
 
@@ -2314,8 +2327,8 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 		if (mhdp->connector.dev) {
 			if (ret < 0)
 				schedule_work(&mhdp->modeset_retry_work);
-			else
-				drm_kms_helper_hotplug_event(mhdp->bridge.dev);
+			/*else
+				drm_kms_helper_hotplug_event(mhdp->bridge.dev);*/
 		} else {
 			drm_bridge_hpd_notify(&mhdp->bridge, cdns_mhdp_detect(mhdp));
 		}
