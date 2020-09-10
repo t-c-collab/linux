@@ -1872,7 +1872,8 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 				 const struct drm_display_mode *mode)
 {
-	u32 tu_size = 64, line_thresh1, line_thresh2, line_thresh = 0;
+	u32 tu_size = 64;
+	s32 line_thresh1, line_thresh2, line_thresh = 0;
 	u32 rate, vs, required_bandwidth, available_bandwidth;
 	int pxlclock = mode->crtc_clock;
 	u32 bpp;
@@ -1893,7 +1894,7 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 
 	line_thresh1 = ((vs + 1) << 5) * 8 / bpp;
 	line_thresh2 = (pxlclock << 5) / 1000 / rate * (vs + 1) - (1 << 5);
-	line_thresh = line_thresh1 - line_thresh2 / mhdp->link.num_lanes;
+	line_thresh = line_thresh1 - line_thresh2 / (s32)mhdp->link.num_lanes;
 	line_thresh = (line_thresh >> 5) + 2;
 
 	mhdp->stream_id = 0;
