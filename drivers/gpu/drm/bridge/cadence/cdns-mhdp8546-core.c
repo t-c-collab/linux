@@ -1969,6 +1969,12 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (WARN_ON(!new_state))
 		goto out;
 
+	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
+				    mhdp->link.rate)) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	cdns_mhdp_sst_enable(mhdp, mode);
 
 	mhdp_state = to_cdns_mhdp_bridge_state(new_state);
