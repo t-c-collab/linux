@@ -1351,16 +1351,14 @@ static u32 cdns_mhdp_get_training_interval_us(struct cdns_mhdp_device *mhdp,
 static void cdns_mhdp_fill_host_caps(struct cdns_mhdp_device *mhdp)
 {
 	unsigned int link_rate;
-	struct phy_attrs attrs;
 
 	/* Get source capabilities based on PHY attributes */
-	phy_get_attrs(mhdp->phy, &attrs);
 
-	mhdp->host.lanes_cnt = attrs.bus_width;
+	mhdp->host.lanes_cnt = mhdp->phy->attrs.bus_width;
 	if (!mhdp->host.lanes_cnt)
 		mhdp->host.lanes_cnt = 4;
 
-	link_rate = attrs.max_link_rate;
+	link_rate = mhdp->phy->attrs.max_link_rate;
 	if (!link_rate)
 		link_rate = drm_dp_bw_code_to_link_rate(DP_LINK_BW_8_1);
 	else
