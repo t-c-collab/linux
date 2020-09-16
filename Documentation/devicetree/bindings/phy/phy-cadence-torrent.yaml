@@ -58,7 +58,7 @@ properties:
       - description: Torrent APB reset. This is optional.
 
 patternProperties:
-  '^phy@[0-7]$':
+  '^phy@[0-3]$':
     type: object
     description:
       Each group of PHY lanes with a single master lane should be represented as a sub-node.
@@ -66,6 +66,8 @@ patternProperties:
       reg:
         description:
           The master lane number. This is the lowest numbered lane in the lane group.
+        minimum: 0
+        maximum: 3
 
       resets:
         minItems: 1
