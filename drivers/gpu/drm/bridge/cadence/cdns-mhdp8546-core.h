@@ -62,6 +62,12 @@ struct phy;
 #define CDNS_VIF_CLK_EN				BIT(0)
 #define CDNS_VIF_CLK_RSTN			BIT(1)
 
+/* Clock Meter */
+#define CDNS_CLOCK_METER(s)			(0x00A00 + (s) * 0x40)
+#define CDNS_DP_CM_CTRL(s)			(CDNS_CLOCK_METER(s) + 0x00)
+#define CDNS_DP_CM_LANE_CTRL(s)			(CDNS_CLOCK_METER(s) + 0x10)
+#define LANE_REF_CYC				0x8000
+
 #define CDNS_SOURCE_VIDEO_IF(s)			(0x00b00 + ((s) * 0x20))
 #define CDNS_BND_HSYNC2VSYNC(s)			(CDNS_SOURCE_VIDEO_IF(s) + \
 						 0x00)
@@ -180,11 +186,15 @@ struct phy;
 #define CDNS_DP_FRAMER_HSYNC_POL_LOW		BIT(1)
 #define CDNS_DP_FRAMER_INTERLACE		BIT(2)
 
+#define CDNS_DP_AUDIO_PACK_CONTROL(s)		(CDNS_DPTX_STREAM(s) + 0x54)
+#define CDNS_DP_AUDIO_PACK_EN			BIT(8)
+
 #define CDNS_DP_LINE_THRESH(s)			(CDNS_DPTX_STREAM(s) + 0x64)
 #define CDNS_DP_ACTIVE_LINE_THRESH(x)		(x)
 
 #define CDNS_DP_VB_ID(s)			(CDNS_DPTX_STREAM(s) + 0x68)
 #define CDNS_DP_VB_ID_INTERLACED		BIT(2)
+#define CDNS_DP_VB_ID_AUDIO_MUTE		BIT(4)
 #define CDNS_DP_VB_ID_COMPRESSED		BIT(6)
 
 #define CDNS_DP_FRONT_BACK_PORCH(s)		(CDNS_DPTX_STREAM(s) + 0x78)
@@ -193,6 +203,29 @@ struct phy;
 
 #define CDNS_DP_BYTE_COUNT(s)			(CDNS_DPTX_STREAM(s) + 0x7c)
 #define CDNS_DP_BYTE_COUNT_BYTES_IN_CHUNK_SHIFT	16
+
+/* Audio Decoder */
+#define CDNS_AUDIO_DECODER(s)			(0x30000 + (s) * 0x100)
+
+#define CDNS_DP_AUDIO_SRC_CNTL(s)		(CDNS_AUDIO_DECODER(s) + 0x00)
+#define CDNS_DP_I2S_DEC_START			BIT(1)
+
+#define CDNS_DP_AUDIO_SRC_CNFG(s)		(CDNS_AUDIO_DECODER(s) + 0x04)
+
+#define CDNS_DP_COM_CH_STTS_BITS(s)		(CDNS_AUDIO_DECODER(s) + 0x08)
+#define SAMPLING_FREQ(x)			(((x) & 0xf) << 16)
+#define ORIGINAL_SAMP_FREQ(x)			(((x) & 0xf) << 24)
+
+#define CDNS_DP_STTS_BIT_CH(s, ch)		(CDNS_AUDIO_DECODER(s) + ((ch) << 2))
+
+#define CDNS_DP_SMPL2PKT_CNTL(s)		(CDNS_AUDIO_DECODER(s) + 0x80)
+#define CDNS_DP_SMPL2PKT_EN			BIT(1)
+
+#define CDNS_DP_SMPL2PKT_CNFG(s)		(CDNS_AUDIO_DECODER(s) + 0x84)
+
+#define CDNS_DP_FIFO_CNTL(s)			(CDNS_AUDIO_DECODER(s) + 0x88)
+#define CDNS_DP_AUDIO_SW_RST			BIT(0)
+#define CDNS_DP_SYNC_WR_TO_CH_ZERO		BIT(1)
 
 /* mailbox */
 #define MAILBOX_RETRY_US			1000
@@ -271,6 +304,30 @@ struct phy;
 #define CDNS_MHDP_MAX_STREAMS			4
 
 #define DP_LINK_CAP_ENHANCED_FRAMING		BIT(0)
+
+/* audio */
+#define MAX_NUM_CH(x)				(((x) & 0x1f) - 1)
+#define NUM_OF_I2S_PORTS(x)			((((x) / 2 - 1) & 0x3) << 5)
+#define AUDIO_TYPE_LPCM				(2 << 7)
+#define CFG_SUB_PCKT_NUM(x)			((((x) - 1) & 0x7) << 11)
+#define AUDIO_CH_NUM(x)				((((x) - 1) & 0x1f) << 2)
+#define TRANS_SMPL_WIDTH_16			0
+#define TRANS_SMPL_WIDTH_24			BIT(11)
+#define TRANS_SMPL_WIDTH_32			(2 << 11)
+#define I2S_DEC_PORT_EN(x)			(((x) & 0xf) << 17)
+
+enum audio_format {
+	AFMT_I2S = 0,
+	AFMT_SPDIF = 1,
+	AFMT_UNUSED,
+};
+
+struct audio_info {
+	enum audio_format format;
+	int sample_rate;
+	int channels;
+	int sample_width;
+};
 
 struct cdns_mhdp_link {
 	unsigned char revision;
@@ -367,6 +424,9 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_link link;
 	struct drm_dp_aux aux;
+
+	struct platform_device *audio_pdev;
+	struct audio_info audio_info;
 
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;

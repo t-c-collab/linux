@@ -48,6 +48,8 @@
 
 #include <asm/unaligned.h>
 
+#include <sound/hdmi-codec.h>
+
 #include "cdns-mhdp8546-core.h"
 
 #include "cdns-mhdp8546-j721e.h"
@@ -2321,6 +2323,221 @@ static irqreturn_t cdns_mhdp_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int cdns_mhdp_audio_stop(struct cdns_mhdp_device *mhdp,
+				struct audio_info *audio)
+{
+	int stream_id = mhdp->stream_id;
+	int ret;
+
+	ret = cdns_mhdp_reg_write(mhdp, CDNS_DP_AUDIO_PACK_CONTROL(stream_id), 0);
+	if (ret) {
+		dev_err(mhdp->dev, "audio stop failed: %d\n", ret);
+		return ret;
+	}
+
+	/* clear the audio config and reset */
+	writel(0, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+	writel(0, mhdp->regs + CDNS_DP_AUDIO_SRC_CNFG(stream_id));
+	writel(CDNS_DP_AUDIO_SW_RST, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+	writel(0, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+
+	/* reset smpl2pkt component  */
+	writel(0, mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id));
+	writel(CDNS_DP_AUDIO_SW_RST, mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id));
+	writel(0, mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id));
+
+	/* reset FIFO */
+	writel(CDNS_DP_AUDIO_SW_RST, mhdp->regs + CDNS_DP_FIFO_CNTL(stream_id));
+	writel(0, mhdp->regs + CDNS_DP_FIFO_CNTL(stream_id));
+
+	return 0;
+}
+
+static int cdns_mhdp_audio_mute(struct cdns_mhdp_device *mhdp, bool enable)
+{
+	int stream_id = mhdp->stream_id;
+	int ret;
+
+	ret = cdns_mhdp_reg_write_bit(mhdp, CDNS_DP_VB_ID(stream_id), 4, 1, enable);
+	if (ret)
+		dev_err(mhdp->dev, "audio mute failed: %d\n", ret);
+
+	return ret;
+}
+
+static void cdns_mhdp_audio_config_i2s(struct cdns_mhdp_device *mhdp,
+				       struct audio_info *audio)
+{
+	int sub_pckt_num = 1, i2s_port_en_val = 0xf, i;
+	int stream_id = mhdp->stream_id;
+	u32 val;
+
+	if (audio->channels == 2) {
+		if (mhdp->link.num_lanes == 1)
+			sub_pckt_num = 2;
+		else
+			sub_pckt_num = 4;
+
+		i2s_port_en_val = 1;
+	} else if (audio->channels == 4) {
+		i2s_port_en_val = 3;
+	}
+
+	writel(CDNS_DP_SYNC_WR_TO_CH_ZERO, mhdp->regs + CDNS_DP_FIFO_CNTL(stream_id));
+
+	val = MAX_NUM_CH(audio->channels);
+	val |= NUM_OF_I2S_PORTS(audio->channels);
+	val |= AUDIO_TYPE_LPCM;
+	val |= CFG_SUB_PCKT_NUM(sub_pckt_num);
+	writel(val, mhdp->regs + CDNS_DP_SMPL2PKT_CNFG(stream_id));
+
+	if (audio->sample_width == 16)
+		val = 0;
+	else if (audio->sample_width == 24)
+		val = 1 << 9;
+	else
+		val = 2 << 9;
+
+	val |= AUDIO_CH_NUM(audio->channels);
+	val |= I2S_DEC_PORT_EN(i2s_port_en_val);
+	val |= TRANS_SMPL_WIDTH_32;
+	writel(val, mhdp->regs + CDNS_DP_AUDIO_SRC_CNFG(stream_id));
+
+	for (i = 0; i < (audio->channels + 1) / 2; i++) {
+		if (audio->sample_width == 16)
+			val = (0x02 << 8) | (0x02 << 20);
+		else if (audio->sample_width == 24)
+			val = (0x0b << 8) | (0x0b << 20);
+
+		val |= ((2 * i) << 4) | ((2 * i + 1) << 16);
+		writel(val, mhdp->regs + CDNS_DP_STTS_BIT_CH(stream_id, i));
+	}
+
+	switch (audio->sample_rate) {
+	case 32000:
+		val = SAMPLING_FREQ(3) | ORIGINAL_SAMP_FREQ(0xc);
+		break;
+	case 44100:
+		val = SAMPLING_FREQ(0) | ORIGINAL_SAMP_FREQ(0xf);
+		break;
+	case 48000:
+		val = SAMPLING_FREQ(2) | ORIGINAL_SAMP_FREQ(0xd);
+		break;
+	case 88200:
+		val = SAMPLING_FREQ(8) | ORIGINAL_SAMP_FREQ(0x7);
+		break;
+	case 96000:
+		val = SAMPLING_FREQ(0xa) | ORIGINAL_SAMP_FREQ(5);
+		break;
+	case 176400:
+		val = SAMPLING_FREQ(0xc) | ORIGINAL_SAMP_FREQ(3);
+		break;
+	case 192000:
+		val = SAMPLING_FREQ(0xe) | ORIGINAL_SAMP_FREQ(1);
+		break;
+	}
+	val |= 4;
+	writel(val, mhdp->regs + CDNS_DP_COM_CH_STTS_BITS(stream_id));
+
+	writel(CDNS_DP_SMPL2PKT_EN, mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id));
+	writel(CDNS_DP_I2S_DEC_START, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+}
+
+static int cdns_mhdp_audio_config(struct cdns_mhdp_device *mhdp,
+				  struct audio_info *audio)
+{
+	int stream_id = mhdp->stream_id;
+	int ret;
+
+	ret = cdns_mhdp_reg_write(mhdp, CDNS_DP_CM_LANE_CTRL(stream_id), LANE_REF_CYC);
+	if (ret)
+		goto out;
+
+	ret = cdns_mhdp_reg_write(mhdp, CDNS_DP_CM_CTRL(stream_id), 0);
+	if (ret)
+		goto out;
+
+	if (audio->format == AFMT_I2S)
+		cdns_mhdp_audio_config_i2s(mhdp, audio);
+
+	ret = cdns_mhdp_reg_write(mhdp, CDNS_DP_AUDIO_PACK_CONTROL(stream_id),
+				  CDNS_DP_AUDIO_PACK_EN);
+
+out:
+	if (ret)
+		dev_err(mhdp->dev, "audio config failed: %d\n", ret);
+
+	return ret;
+}
+
+static int cdns_mhdp_audio_hw_params(struct device *dev, void *data,
+				     struct hdmi_codec_daifmt *daifmt,
+				     struct hdmi_codec_params *params)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	struct audio_info audio = {
+		.sample_width = params->sample_width,
+		.sample_rate = params->sample_rate,
+		.channels = params->channels,
+	};
+	int ret;
+
+	if (daifmt->fmt != HDMI_I2S) {
+		dev_err(dev, "Invalid format %d\n", daifmt->fmt);
+		return -EINVAL;
+	}
+
+	audio.format = AFMT_I2S;
+
+	ret = cdns_mhdp_audio_config(mhdp, &audio);
+	if (!ret)
+		mhdp->audio_info = audio;
+
+	return 0;
+}
+
+static void cdns_mhdp_audio_shutdown(struct device *dev, void *data)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+	int ret;
+
+	ret = cdns_mhdp_audio_stop(mhdp, &mhdp->audio_info);
+	if (!ret)
+		mhdp->audio_info.format = AFMT_UNUSED;
+}
+
+static int cdns_mhdp_audio_mute_stream(struct device *dev, void *data,
+				       bool enable, int direction)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+
+	return cdns_mhdp_audio_mute(mhdp, enable);
+}
+
+static int cdns_mhdp_audio_get_eld(struct device *dev, void *data,
+				   u8 *buf, size_t len)
+{
+	struct cdns_mhdp_device *mhdp = dev_get_drvdata(dev);
+
+	memcpy(buf, mhdp->connector.eld, min(sizeof(mhdp->connector.eld), len));
+
+	return 0;
+}
+
+static const struct hdmi_codec_ops cdns_mhdp_audio_codec_ops = {
+	.hw_params = cdns_mhdp_audio_hw_params,
+	.audio_shutdown = cdns_mhdp_audio_shutdown,
+	.mute_stream = cdns_mhdp_audio_mute_stream,
+	.get_eld = cdns_mhdp_audio_get_eld,
+	.no_capture_mute = 1,
+};
+
+static struct hdmi_codec_pdata codec_data = {
+	.i2s = 1,
+	.max_i2s_channels = 8,
+	.ops = &cdns_mhdp_audio_codec_ops,
+};
+
 static int cdns_mhdp_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2422,10 +2639,22 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	if (mhdp->info)
 		mhdp->bridge.timings = mhdp->info->timings;
 
+	mhdp->audio_pdev = platform_device_register_data(mhdp->dev,
+							 HDMI_CODEC_DRV_NAME,
+							 PLATFORM_DEVID_AUTO,
+							 &codec_data,
+							 sizeof(codec_data));
+	if (IS_ERR(mhdp->audio_pdev)) {
+		dev_err(dev, "Failed to register audio pdev\n");
+		ret = PTR_ERR(mhdp->audio_pdev);
+		goto plat_fini;
+	}
+	dev_dbg(dev, "Registered audio pdev\n");
+
 	ret = phy_init(mhdp->phy);
 	if (ret) {
 		dev_err(mhdp->dev, "Failed to initialize PHY: %d\n", ret);
-		goto plat_fini;
+		goto audio_unregister;
 	}
 
 	/* Initialize the work for modeset in case of link train failure */
@@ -2443,6 +2672,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 phy_exit:
 	phy_exit(mhdp->phy);
+audio_unregister:
+	platform_device_unregister(mhdp->audio_pdev);
 plat_fini:
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->exit)
 		mhdp->info->ops->exit(mhdp);
@@ -2481,6 +2712,8 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 		ret = cdns_mhdp_set_firmware_active(mhdp, false);
 
 	phy_exit(mhdp->phy);
+
+	platform_device_unregister(mhdp->audio_pdev);
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->exit)
 		mhdp->info->ops->exit(mhdp);
