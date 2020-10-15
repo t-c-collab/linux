@@ -62,6 +62,18 @@ struct phy;
 #define CDNS_VIF_CLK_EN				BIT(0)
 #define CDNS_VIF_CLK_RSTN			BIT(1)
 
+#define CDNS_SOURCE_PKT_CAR			0x00918
+#define CDNS_PKT_DATA_CLK_EN			BIT(0)
+#define CDNS_PKT_DATA_RSTN			BIT(1)
+#define CDNS_PKT_SYS_CLK_EN			BIT(2)
+#define CDNS_PKT_SYS_RSTN			BIT(3)
+
+#define CDNS_SOURCE_AIF_CAR			0x0091C
+#define CDNS_AIF_PKT_CLK_EN			BIT(0)
+#define CDNS_AIF_PKT_CLK_RSTN			BIT(1)
+#define CDNS_AIF_SYS_CLK_EN			BIT(2)
+#define CDNS_AIF_SYS_RSTN			BIT(3)
+
 /* Clock Meter */
 #define CDNS_CLOCK_METER(s)			(0x00A00 + (s) * 0x40)
 #define CDNS_DP_CM_CTRL(s)			(CDNS_CLOCK_METER(s) + 0x00)
