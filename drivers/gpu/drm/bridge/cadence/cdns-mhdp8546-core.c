@@ -1913,6 +1913,47 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	cdns_mhdp_configure_video(mhdp, mode);
 }
 
+static int cdns_mhdp_configure_car(struct cdns_mhdp_device *mhdp, u8 enable)
+{
+	u32 dptx_car, source_aif_car;
+	int ret;
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &dptx_car);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		goto out;
+	}
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_SOURCE_AIF_CAR, &source_aif_car);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_SOURCE_AIF_CAR %d\n", ret);
+		goto out;
+	}
+
+	if (enable) {
+		/* Enable VIF clock for stream 0 */
+		cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+				    dptx_car | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
+
+		/* Enable AIF clock */
+		cdns_mhdp_reg_write(mhdp, CDNS_SOURCE_AIF_CAR,
+				    source_aif_car | CDNS_AIF_PKT_CLK_EN
+						   | CDNS_AIF_PKT_CLK_RSTN);
+	} else {
+		/* Disable VIF clock for stream 0 */
+		cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+				    dptx_car & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
+
+		/* Disable AIF clock */
+		cdns_mhdp_reg_write(mhdp, CDNS_SOURCE_AIF_CAR,
+				    source_aif_car & ~(CDNS_AIF_PKT_CLK_EN
+						   | CDNS_AIF_PKT_CLK_RSTN));
+	}
+
+out:
+	return ret;
+}
+
 static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 				    struct drm_bridge_state *bridge_state)
 {
@@ -1924,7 +1965,6 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	struct drm_bridge_state *new_state;
 	const struct drm_display_mode *mode;
-	u32 resp;
 	int ret;
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
@@ -1940,15 +1980,12 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->enable)
 		mhdp->info->ops->enable(mhdp);
 
-	/* Enable VIF clock for stream 0 */
-	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	/* Enable VIF, AIF clocks */
+	ret = cdns_mhdp_configure_car(mhdp, 1);
 	if (ret < 0) {
-		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		dev_err(mhdp->dev, "Failed to enable clocks %d\n", ret);
 		goto out;
 	}
-
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
 
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
@@ -2010,10 +2047,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	cdns_mhdp_link_down(mhdp);
 
-	/* Disable VIF clock for stream 0 */
-	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
+	/* Disable VIF, AIF clocks */
+	cdns_mhdp_configure_car(mhdp, 0);
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->disable)
 		mhdp->info->ops->disable(mhdp);
