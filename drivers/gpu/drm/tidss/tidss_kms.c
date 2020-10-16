@@ -7,6 +7,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_fb_cma_helper.h>
 #include <drm/drm_fb_helper.h>
@@ -192,6 +193,7 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 	for (i = 0; i < num_pipes; ++i) {
 		struct tidss_plane *tplane;
 		struct tidss_crtc *tcrtc;
+		struct drm_connector *connector;
 		struct drm_encoder *enc;
 		u32 hw_plane_id = feat->vid_order[tidss->num_planes];
 		int ret;
@@ -222,11 +224,22 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 			return PTR_ERR(enc);
 		}
 
-		ret = drm_bridge_attach(enc, pipes[i].bridge, NULL, 0);
+		ret = drm_bridge_attach(enc, pipes[i].bridge, NULL,
+					DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 		if (ret) {
 			dev_err(tidss->dev, "bridge attach failed: %d\n", ret);
 			return ret;
 		}
+
+		connector = drm_bridge_connector_init(&tidss->ddev, enc);
+		if (IS_ERR(connector)) {
+			dev_err(tidss->dev, "bridge_connector create failed\n");
+			return PTR_ERR(connector);
+		}
+
+		tidss->connectors[tidss->num_connectors++] = connector;
+
+		drm_connector_attach_encoder(connector, enc);
 	}
 
 	/* create overlay planes of the leftover planes */
