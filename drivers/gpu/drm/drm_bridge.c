@@ -975,6 +975,13 @@ drm_atomic_bridge_propagate_bus_flags(struct drm_bridge *bridge,
 	 * duplicate the "dummy propagation" logic.
 	 */
 	bridge_state->input_bus_cfg.flags = output_flags;
+
+	/*
+	 * Use the bridge->timings->input_bus_flags as fallback if the next bridge
+	 * does not specify the flags
+	 */
+	if (!bridge_state->input_bus_cfg.flags)
+		bridge_state->input_bus_cfg.flags = bridge->timings->input_bus_flags;
 }
 
 /**
