@@ -22,6 +22,7 @@ static int tidss_encoder_atomic_check(struct drm_encoder *encoder,
 	struct drm_device *ddev = encoder->dev;
 	struct tidss_crtc_state *tcrtc_state = to_tidss_crtc_state(crtc_state);
 	struct drm_display_info *di = &conn_state->connector->display_info;
+	struct drm_bridge_state *bstate;
 	struct drm_bridge *bridge;
 	bool bus_flags_set = false;
 
@@ -41,14 +42,19 @@ static int tidss_encoder_atomic_check(struct drm_encoder *encoder,
 		break;
 	}
 
-	if (!di->bus_formats || di->num_bus_formats == 0)  {
-		dev_err(ddev->dev, "%s: No bus_formats in connected display\n",
-			__func__);
+	/* Copy the bus_format from the input_bus_format of first bridge */
+	bridge = drm_bridge_chain_get_first_bridge(encoder);
+	bstate = drm_atomic_get_new_bridge_state(crtc_state->state, bridge);
+	if (bstate)
+		tcrtc_state->bus_format = bstate->input_bus_cfg.format;
+
+	if (tcrtc_state->bus_format == 0 ||
+	    tcrtc_state->bus_format == MEDIA_BUS_FMT_FIXED) {
+
+		dev_err(ddev->dev, "Bridge connected to the encoder did not specify media bus format\n");
 		return -EINVAL;
 	}
 
-	// XXX any cleaner way to set bus format and flags?
-	tcrtc_state->bus_format = di->bus_formats[0];
 	if (!bus_flags_set)
 		tcrtc_state->bus_flags = di->bus_flags;
 
