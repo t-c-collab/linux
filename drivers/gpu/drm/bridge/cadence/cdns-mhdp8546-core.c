@@ -2106,6 +2106,74 @@ static u32 *cdns_mhdp_get_input_bus_fmts(struct drm_bridge *bridge,
 	return input_fmts;
 }
 
+#define MAX_OUTPUT_SEL_FORMATS 3
+
+static u32 *cdns_mhdp_get_output_bus_fmts(struct drm_bridge *bridge,
+					  struct drm_bridge_state *bridge_state,
+					  struct drm_crtc_state *crtc_state,
+					  struct drm_connector_state *conn_state,
+					  unsigned int *num_output_fmts)
+{
+	struct drm_connector *conn = conn_state->connector;
+	struct drm_display_info *info = &conn->display_info;
+	unsigned int i = 0;
+	u32 default_bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
+	u32 *output_fmts;
+
+	*num_output_fmts = 0;
+
+	output_fmts = kzalloc(sizeof(*output_fmts) * MAX_OUTPUT_SEL_FORMATS,
+			      GFP_KERNEL);
+	if (!output_fmts)
+		return NULL;
+
+	/*If mhdp is the only bridge */
+	if (list_is_singular(&bridge->encoder->bridge_chain)) {
+		*num_output_fmts = 1;
+		output_fmts[0] = default_bus_format;
+
+		return output_fmts;
+	}
+
+	if (info->bpc == 16) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+	}
+
+	if (info->bpc >= 12) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+			output_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+	}
+
+	if (info->bpc >= 10) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+			output_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+	}
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+		output_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+		output_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+
+	output_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+	*num_output_fmts = i;
+
+	return output_fmts;
+}
+
 static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 				  struct drm_bridge_state *bridge_state,
 				  struct drm_crtc_state *crtc_state,
@@ -2171,6 +2239,7 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_destroy_state = cdns_mhdp_bridge_atomic_destroy_state,
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 	.atomic_get_input_bus_fmts = cdns_mhdp_get_input_bus_fmts,
+	.atomic_get_output_bus_fmts = cdns_mhdp_get_output_bus_fmts,
 	.detect = cdns_mhdp_bridge_detect,
 	.get_edid = cdns_mhdp_bridge_get_edid,
 	.hpd_enable = cdns_mhdp_bridge_hpd_enable,
