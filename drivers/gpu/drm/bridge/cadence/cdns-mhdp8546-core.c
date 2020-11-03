@@ -1512,25 +1512,12 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 
 	drm_connector_update_edid_property(connector, edid);
 	num_modes = drm_add_edid_modes(connector, edid);
+
+	/* Set default color format and bpc */
+	mhdp->display_fmt.color_format = DRM_COLOR_FORMAT_RGB444;
+	mhdp->display_fmt.bpc = connector->display_info.bpc;
+
 	kfree(edid);
-
-	/*
-	 * HACK: Warn about unsupported display formats until we deal
-	 *       with them correctly.
-	 */
-	if (connector->display_info.color_formats &&
-	    !(connector->display_info.color_formats &
-	      mhdp->display_fmt.color_format))
-		dev_warn(mhdp->dev,
-			 "%s: No supported color_format found (0x%08x)\n",
-			__func__, connector->display_info.color_formats);
-
-	if (connector->display_info.bpc &&
-	    connector->display_info.bpc < mhdp->display_fmt.bpc)
-		dev_warn(mhdp->dev, "%s: Display bpc only %d < %d\n",
-			 __func__, connector->display_info.bpc,
-			 mhdp->display_fmt.bpc);
-
 	return num_modes;
 }
 
@@ -1630,7 +1617,6 @@ static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
 
 static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 {
-	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
 	struct drm_connector *conn = &mhdp->connector;
 	struct drm_bridge *bridge = &mhdp->bridge;
 	int ret;
@@ -1650,11 +1636,6 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 	}
 
 	drm_connector_helper_add(conn, &cdns_mhdp_conn_helper_funcs);
-
-	ret = drm_display_info_set_bus_formats(&conn->display_info,
-					       &bus_format, 1);
-	if (ret)
-		return ret;
 
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
@@ -1693,6 +1674,66 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 		       mhdp->regs + CDNS_APB_INT_MASK);
 
 	return 0;
+}
+
+static void cdns_mhdp_get_display_fmt(struct cdns_mhdp_device *mhdp,
+				      struct drm_bridge_state *state)
+{
+	u32 bus_fmt, bpc, pxlfmt;
+
+	bus_fmt = state->output_bus_cfg.format;
+	switch (bus_fmt) {
+	case MEDIA_BUS_FMT_RGB161616_1X48:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 16;
+		break;
+	case MEDIA_BUS_FMT_YUV16_1X48:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 16;
+		break;
+	case MEDIA_BUS_FMT_RGB121212_1X36:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_UYVY12_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_YUV12_1X36:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_RGB101010_1X30:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_UYVY10_1X20:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_YUV10_1X30:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 8;
+		break;
+	case MEDIA_BUS_FMT_UYVY8_1X16:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 8;
+		break;
+	case MEDIA_BUS_FMT_YUV8_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 8;
+		break;
+	default:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 8;
+	}
+
+	mhdp->display_fmt.color_format = pxlfmt;
+	mhdp->display_fmt.bpc = bpc;
 }
 
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
@@ -2078,32 +2119,178 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 	return &cdns_mhdp_state->base;
 }
 
+static const u32 cdns_mhdp_bus_fmts[] = {
+	MEDIA_BUS_FMT_YUV16_1X48,
+	MEDIA_BUS_FMT_RGB161616_1X48,
+	MEDIA_BUS_FMT_UYVY12_1X24,
+	MEDIA_BUS_FMT_YUV12_1X36,
+	MEDIA_BUS_FMT_RGB121212_1X36,
+	MEDIA_BUS_FMT_UYVY10_1X20,
+	MEDIA_BUS_FMT_YUV10_1X30,
+	MEDIA_BUS_FMT_RGB101010_1X30,
+	MEDIA_BUS_FMT_UYVY8_1X16,
+	MEDIA_BUS_FMT_YUV8_1X24,
+	MEDIA_BUS_FMT_RGB888_1X24
+};
+
+static bool cdns_mhdp_format_supported(u32 output_fmt)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(cdns_mhdp_bus_fmts); i++) {
+		if (output_fmt == cdns_mhdp_bus_fmts[i])
+			return true;
+	}
+
+	return false;
+}
+
+#define MAX_INPUT_FORMAT 4
+
 static u32 *cdns_mhdp_get_input_bus_fmts(struct drm_bridge *bridge,
-				      struct drm_bridge_state *bridge_state,
-				      struct drm_crtc_state *crtc_state,
-				      struct drm_connector_state *conn_state,
-				      u32 output_fmt,
-				      unsigned int *num_input_fmts)
+					 struct drm_bridge_state *bridge_state,
+					 struct drm_crtc_state *crtc_state,
+					 struct drm_connector_state *conn_state,
+					 u32 output_fmt,
+					 unsigned int *num_input_fmts)
 {
 	u32 *input_fmts;
-	u32 default_bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
-
+	unsigned int i = 0;
 	*num_input_fmts = 0;
 
-	/*
-	 * This bridge does not support media_bus_format conversion
-	 * Propagate only if supported
-	 */
-	if (output_fmt != default_bus_format && output_fmt != MEDIA_BUS_FMT_FIXED)
+	if (!cdns_mhdp_format_supported(output_fmt))
 		return NULL;
 
-	input_fmts = kzalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kcalloc(MAX_INPUT_FORMAT,
+			     sizeof(*input_fmts), GFP_KERNEL);
 	if (!input_fmts)
 		return NULL;
 
-	*num_input_fmts = 1;
-	input_fmts[0] = default_bus_format;
+	switch (output_fmt) {
+	/* RGB */
+	case MEDIA_BUS_FMT_RGB161616_1X48:
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		break;
+	case MEDIA_BUS_FMT_RGB121212_1X36:
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		break;
+	case MEDIA_BUS_FMT_RGB101010_1X30:
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		break;
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		break;
+
+	/* YUV444 */
+	case MEDIA_BUS_FMT_YUV16_1X48:
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		break;
+	case MEDIA_BUS_FMT_YUV12_1X36:
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		break;
+	case MEDIA_BUS_FMT_YUV10_1X30:
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		break;
+	case MEDIA_BUS_FMT_YUV8_1X24:
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		break;
+
+	/* YUV422 */
+	case MEDIA_BUS_FMT_UYVY12_1X24:
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		break;
+	case MEDIA_BUS_FMT_UYVY10_1X20:
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		break;
+	case MEDIA_BUS_FMT_UYVY8_1X16:
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		break;
+	}
+
+	*num_input_fmts = i;
+
 	return input_fmts;
+}
+
+static u32 *cdns_mhdp_get_output_bus_fmts(struct drm_bridge *bridge,
+					  struct drm_bridge_state *bridge_state,
+					  struct drm_crtc_state *crtc_state,
+					  struct drm_connector_state *conn_state,
+					  unsigned int *num_output_fmts)
+{
+	struct drm_connector *conn = conn_state->connector;
+	struct drm_display_info *info = &conn->display_info;
+	unsigned int i = 0;
+	u32 default_bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
+	u32 *output_fmts;
+
+	*num_output_fmts = 0;
+
+	output_fmts = kcalloc(ARRAY_SIZE(cdns_mhdp_bus_fmts),
+			      sizeof(*output_fmts), GFP_KERNEL);
+	if (!output_fmts)
+		return NULL;
+
+	/*If mhdp is the only bridge */
+	if (list_is_singular(&bridge->encoder->bridge_chain)) {
+		*num_output_fmts = 1;
+		output_fmts[0] = default_bus_format;
+
+		return output_fmts;
+	}
+
+	if (info->bpc == 16) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+	}
+
+	if (info->bpc >= 12) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+			output_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+	}
+
+	if (info->bpc >= 10) {
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+			output_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+
+		if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+			output_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+
+		output_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+	}
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422)
+		output_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444)
+		output_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+
+	output_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+	*num_output_fmts = i;
+
+	return output_fmts;
 }
 
 static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
@@ -2114,6 +2301,7 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
+	cdns_mhdp_get_display_fmt(mhdp, bridge_state);
 	mutex_lock(&mhdp->link_mutex);
 
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
@@ -2171,6 +2359,7 @@ static const struct drm_bridge_funcs cdns_mhdp_bridge_funcs = {
 	.atomic_destroy_state = cdns_mhdp_bridge_atomic_destroy_state,
 	.atomic_reset = cdns_mhdp_bridge_atomic_reset,
 	.atomic_get_input_bus_fmts = cdns_mhdp_get_input_bus_fmts,
+	.atomic_get_output_bus_fmts = cdns_mhdp_get_output_bus_fmts,
 	.detect = cdns_mhdp_bridge_detect,
 	.get_edid = cdns_mhdp_bridge_get_edid,
 	.hpd_enable = cdns_mhdp_bridge_hpd_enable,
@@ -2437,11 +2626,6 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	/* Initialize link rate and num of lanes to host values */
 	mhdp->link.rate = mhdp->host.link_rate;
 	mhdp->link.num_lanes = mhdp->host.lanes_cnt;
-
-	/* The only currently supported format */
-	mhdp->display_fmt.y_only = false;
-	mhdp->display_fmt.color_format = DRM_COLOR_FORMAT_RGB444;
-	mhdp->display_fmt.bpc = 8;
 
 	mhdp->bridge.of_node = pdev->dev.of_node;
 	mhdp->bridge.funcs = &cdns_mhdp_bridge_funcs;
