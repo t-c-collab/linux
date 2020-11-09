@@ -68,20 +68,19 @@
 	};
 
 	sound0: sound@0 {
-		compatible = "ti,j721e-cpb-audio";
-		model = "j721e-cpb";
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "HDMI_DP";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&dp_dailink_master>;
+		simple-audio-card,frame-master = <&dp_dailink_master>;
+		dp_dailink_master: simple-audio-card,cpu {
+			sound-dai = <&mcasp10>;
+			system-clock-frequency = <24000000>;
+		};
 
-		ti,cpb-mcasp = <&mcasp10>;
-		ti,cpb-codec = <&pcm3168a_1>;
-
-		clocks = <&k3_clks 184 1>,
-			 <&k3_clks 184 2>, <&k3_clks 184 4>,
-			 <&k3_clks 157 371>,
-			 <&k3_clks 157 400>, <&k3_clks 157 401>;
-		clock-names = "cpb-mcasp-auxclk",
-			      "cpb-mcasp-auxclk-48000", "cpb-mcasp-auxclk-44100",
-			      "cpb-codec-scki",
-			      "cpb-codec-scki-48000", "cpb-codec-scki-44100";
+		simple-audio-card,codec {
+			sound-dai = <&mhdp>;
+		};
 	};
 
 	dp_pwr_3v3: fixedregulator-dp-prw {
@@ -588,6 +587,8 @@
 
 &mhdp {
 	status = "ok";
+
+	#sound-dai-cells = <0>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&dp0_pins_default>;
