@@ -2095,27 +2095,92 @@ cdns_mhdp_bridge_atomic_reset(struct drm_bridge *bridge)
 	return &cdns_mhdp_state->base;
 }
 
+#define MAX_INPUT_FORMAT 11
+
 static u32 *cdns_mhdp_get_input_bus_fmts(struct drm_bridge *bridge,
-				      struct drm_bridge_state *bridge_state,
-				      struct drm_crtc_state *crtc_state,
-				      struct drm_connector_state *conn_state,
-				      u32 output_fmt,
-				      unsigned int *num_input_fmts)
+					 struct drm_bridge_state *bridge_state,
+					 struct drm_crtc_state *crtc_state,
+					 struct drm_connector_state *conn_state,
+					 u32 output_fmt,
+					 unsigned int *num_input_fmts)
 {
+	struct drm_connector *conn = conn_state->connector;
+	struct drm_display_info *info = &conn->display_info;
 	u32 *input_fmts;
 	u32 default_bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
+	unsigned int i = 0;
 
 	*num_input_fmts = 0;
 
 	if (output_fmt != MEDIA_BUS_FMT_FIXED)
 		return NULL;
 
-	input_fmts = kzalloc(sizeof(*input_fmts), GFP_KERNEL);
+	input_fmts = kcalloc(MAX_INPUT_FORMAT,
+			     sizeof(*input_fmts), GFP_KERNEL);
 	if (!input_fmts)
 		return NULL;
 
-	*num_input_fmts = 1;
-	input_fmts[0] = default_bus_format;
+	input_fmts[i++] = default_bus_format;
+
+	if (info->color_formats & DRM_COLOR_FORMAT_RGB444) {
+		if (info->bpc == 16) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
+		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+	}
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444) {
+		if (info->bpc == 16) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
+		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+	}
+
+	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422) {
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		}
+
+		input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+	}
+
+	*num_input_fmts = i;
+
 	return input_fmts;
 }
 
