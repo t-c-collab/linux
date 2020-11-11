@@ -1530,24 +1530,8 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 
 	drm_connector_update_edid_property(connector, edid);
 	num_modes = drm_add_edid_modes(connector, edid);
+
 	kfree(edid);
-
-	/*
-	 * HACK: Warn about unsupported display formats until we deal
-	 *       with them correctly.
-	 */
-	if (connector->display_info.color_formats &&
-	    !(connector->display_info.color_formats &
-	      mhdp->display_fmt.color_format))
-		dev_warn(mhdp->dev,
-			 "%s: No supported color_format found (0x%08x)\n",
-			__func__, connector->display_info.color_formats);
-
-	if (connector->display_info.bpc &&
-	    connector->display_info.bpc < mhdp->display_fmt.bpc)
-		dev_warn(mhdp->dev, "%s: Display bpc only %d < %d\n",
-			 __func__, connector->display_info.bpc,
-			 mhdp->display_fmt.bpc);
 
 	return num_modes;
 }
@@ -1704,6 +1688,66 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 		cdns_mhdp_bridge_hpd_enable(bridge);
 
 	return 0;
+}
+
+static void cdns_mhdp_get_display_fmt(struct cdns_mhdp_device *mhdp,
+				      struct drm_bridge_state *state)
+{
+	u32 bus_fmt, bpc, pxlfmt;
+
+	bus_fmt = state->input_bus_cfg.format;
+	switch (bus_fmt) {
+	case MEDIA_BUS_FMT_RGB161616_1X48:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 16;
+		break;
+	case MEDIA_BUS_FMT_YUV16_1X48:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 16;
+		break;
+	case MEDIA_BUS_FMT_RGB121212_1X36:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_UYVY12_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_YUV12_1X36:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 12;
+		break;
+	case MEDIA_BUS_FMT_RGB101010_1X30:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_UYVY10_1X20:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_YUV10_1X30:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 10;
+		break;
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 8;
+		break;
+	case MEDIA_BUS_FMT_UYVY8_1X16:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB422;
+		bpc = 8;
+		break;
+	case MEDIA_BUS_FMT_YUV8_1X24:
+		pxlfmt = DRM_COLOR_FORMAT_YCRCB444;
+		bpc = 8;
+		break;
+	default:
+		pxlfmt = DRM_COLOR_FORMAT_RGB444;
+		bpc = 8;
+	}
+
+	mhdp->display_fmt.color_format = pxlfmt;
+	mhdp->display_fmt.bpc = bpc;
 }
 
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
@@ -2121,6 +2165,8 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
+	cdns_mhdp_get_display_fmt(mhdp, bridge_state);
+
 	mutex_lock(&mhdp->link_mutex);
 
 	if (!cdns_mhdp_bandwidth_ok(mhdp, mode, mhdp->link.num_lanes,
@@ -2434,7 +2480,7 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 	mhdp->link.rate = mhdp->host.link_rate;
 	mhdp->link.num_lanes = mhdp->host.lanes_cnt;
 
-	/* The only currently supported format */
+	/* Initialize color format bpc and y_only to default values*/
 	mhdp->display_fmt.y_only = false;
 	mhdp->display_fmt.color_format = DRM_COLOR_FORMAT_RGB444;
 	mhdp->display_fmt.bpc = 8;
