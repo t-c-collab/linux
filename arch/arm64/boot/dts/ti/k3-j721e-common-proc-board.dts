@@ -75,7 +75,8 @@
 		simple-audio-card,frame-master = <&dp_dailink_master>;
 		dp_dailink_master: simple-audio-card,cpu {
 			sound-dai = <&mcasp10>;
-			system-clock-frequency = <24000000>;
+			clocks = <&k3_clks 184 1>;
+			system-clock-direction-out;
 		};
 
 		simple-audio-card,codec {
@@ -516,6 +517,8 @@
 		VCCAD2-supply = <&vsys_5v0>;
 		VCCDA1-supply = <&vsys_5v0>;
 		VCCDA2-supply = <&vsys_5v0>;
+
+		status = "disabled";
 	};
 };
 
@@ -619,9 +622,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&mcasp10_pins_default>;
 
+	assigned-clocks = <&k3_clks 184 1>;
+	assigned-clock-parents = <&k3_clks 184 2>;
+	assigned-clock-rates = <24576000>; /* for 48KHz */
+
 	op-mode = <0>;          /* MCASP_IIS_MODE */
 	tdm-slots = <2>;
-	auxclk-fs-ratio = <256>;
 
 	serial-dir = <	/* 0: INACTIVE, 1: TX, 2: RX */
 		1 1 1 1
