@@ -1648,7 +1648,6 @@ static const struct drm_connector_funcs cdns_mhdp_conn_funcs = {
 
 static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 {
-	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
 	struct drm_connector *conn = &mhdp->connector;
 	struct drm_bridge *bridge = &mhdp->bridge;
 	int ret;
@@ -1668,11 +1667,6 @@ static int cdns_mhdp_connector_init(struct cdns_mhdp_device *mhdp)
 	}
 
 	drm_connector_helper_add(conn, &cdns_mhdp_conn_helper_funcs);
-
-	ret = drm_display_info_set_bus_formats(&conn->display_info,
-					       &bus_format, 1);
-	if (ret)
-		return ret;
 
 	ret = drm_connector_attach_encoder(conn, bridge->encoder);
 	if (ret) {
