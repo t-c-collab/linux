@@ -1695,7 +1695,7 @@ static void cdns_mhdp_get_display_fmt(struct cdns_mhdp_device *mhdp,
 {
 	u32 bus_fmt, bpc, pxlfmt;
 
-	bus_fmt = state->output_bus_cfg.format;
+	bus_fmt = state->input_bus_cfg.format;
 	switch (bus_fmt) {
 	case MEDIA_BUS_FMT_RGB161616_1X48:
 		pxlfmt = DRM_COLOR_FORMAT_RGB444;
@@ -2158,23 +2158,62 @@ static u32 *cdns_mhdp_get_input_bus_fmts(struct drm_bridge *bridge,
 		return NULL;
 
 	if (info->color_formats & DRM_COLOR_FORMAT_RGB444) {
+		if (info->bpc == 16) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
+		}
+
 		input_fmts[i++] = MEDIA_BUS_FMT_RGB888_1X24;
-		input_fmts[i++] = MEDIA_BUS_FMT_RGB101010_1X30;
-		input_fmts[i++] = MEDIA_BUS_FMT_RGB121212_1X36;
-		input_fmts[i++] = MEDIA_BUS_FMT_RGB161616_1X48;
 	}
 
 	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB444) {
+		if (info->bpc == 16) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
+			input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
+		}
+
 		input_fmts[i++] = MEDIA_BUS_FMT_YUV8_1X24;
-		input_fmts[i++] = MEDIA_BUS_FMT_YUV10_1X30;
-		input_fmts[i++] = MEDIA_BUS_FMT_YUV12_1X36;
-		input_fmts[i++] = MEDIA_BUS_FMT_YUV16_1X48;
 	}
 
 	if (info->color_formats & DRM_COLOR_FORMAT_YCRCB422) {
+		if (info->bpc == 12) {
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		}
+
+		if (info->bpc == 10) {
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
+			input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
+		}
+
 		input_fmts[i++] = MEDIA_BUS_FMT_UYVY8_1X16;
-		input_fmts[i++] = MEDIA_BUS_FMT_UYVY10_1X20;
-		input_fmts[i++] = MEDIA_BUS_FMT_UYVY12_1X24;
 	}
 
 	*num_input_fmts = i;
