@@ -245,6 +245,7 @@ int tfp410_atomic_check(struct drm_bridge *bridge,
 	 * Set the bus flags in atomic_check statically for now
 	 */
 	bridge_state->input_bus_cfg.flags = dvi->timings.input_bus_flags;
+	return 0;
 }
 
 static const struct drm_bridge_funcs tfp410_bridge_funcs = {
