@@ -2540,6 +2540,106 @@ out:
 	return ret;
 }
 
+static void cdns_mhdp_write_sdp_entry_id(struct cdns_mhdp_device *mhdp, u8 entry_id)
+{
+	/* Write entry_id */
+	writel(entry_id, mhdp->regs + CDNS_SOURCE_PIF_WR_ADDR(mhdp->stream_id));
+
+	/* Write request */
+	writel(1, mhdp->regs + CDNS_SOURCE_PIF_WR_REQ(mhdp->stream_id));
+}
+
+static void cdns_mhdp_update_sdp_entry(struct cdns_mhdp_device *mhdp, u8 entry_id,
+				       u8 packet_type, bool video_mode, bool is_valid)
+{
+	u32 pkt_alloc_reg = 0;
+
+	pkt_alloc_reg = entry_id | (packet_type << 8);
+
+	if (is_valid)
+		pkt_alloc_reg |= 1 << 16;
+
+	if (video_mode)
+		pkt_alloc_reg |= 1 << 17;
+
+	writel(pkt_alloc_reg, mhdp->regs + CDNS_SOURCE_PIF_PKT_ALLOC_REG(mhdp->stream_id));
+
+	writel(1, mhdp->regs + CDNS_SOURCE_PIF_PKT_ALLOC_WR_EN(mhdp->stream_id));
+}
+
+static void cdns_mhdp_write_sdp_to_pktmem(struct cdns_mhdp_device *mhdp, u8 size, void *buf)
+{
+	u32 *buffer = buf;
+	u8 i;
+
+	for (i = 0; i < size; i++)
+		writel(buffer[i], mhdp->regs + CDNS_SOURCE_PIF_DATA_WR(mhdp->stream_id));
+}
+
+static void cdns_mhdp_set_sdp(struct cdns_mhdp_device *mhdp, u8 entry_id,
+			      u8 packet_type, size_t size, void *buf,
+			      bool video_mode)
+{
+#if 0
+	/* Disabling this as it raises bit 5 (alloc_wr_error) of SOURCE_PIF_INTERRUPT_SOURCE */
+
+	/* Invalidate entry */
+	cdns_mhdp_update_sdp_entry(mhdp, entry_id, packet_type, video_mode, false);
+#endif
+
+	/* Flush FIFO 1 */
+	writel(1, mhdp->regs + CDNS_SOURCE_PIF_FIFO1_FLUSH(mhdp->stream_id));
+
+	cdns_mhdp_write_sdp_to_pktmem(mhdp, size / 4, buf);
+
+	cdns_mhdp_write_sdp_entry_id(mhdp, entry_id);
+
+	cdns_mhdp_update_sdp_entry(mhdp, entry_id, packet_type, video_mode, true);
+}
+
+static void cdns_mhdp_audio_infoframe_sdp_pack(struct cdns_mhdp_device *mhdp,
+					       const struct hdmi_audio_infoframe *frame,
+					       size_t size, void *buffer)
+{
+	unsigned char channels;
+	u8 *ptr = buffer;
+	u8 i = 0;
+
+	memset(buffer, 0, size);
+
+	if (frame->channels >= 2)
+		channels = frame->channels - 1;
+	else
+		channels = 0;
+
+	ptr[i++] = 0x00;	/* HB0: Secondary-Data Packet ID */
+	ptr[i++] = frame->type;	/* HB1: Audio infoframe Type */
+	ptr[i++] = 0x1B;	/* HB2: Data byte count - 1 */
+	ptr[i++] = 0x12;	/* HB3: Infoframe SDP version number */
+
+	/* Start infoframe SDP payload */
+	ptr[i++] = ((frame->coding_type & 0xf) << 4) | (channels & 0x7);
+	ptr[i++] = ((frame->sample_frequency & 0x7) << 2) |
+		   (frame->sample_size & 0x3);
+	ptr[i++] = frame->coding_type_ext & 0x1f;
+	ptr[i++] = frame->channel_allocation;
+	ptr[i++] = ((frame->level_shift_value & 0xf) << 3) | (frame->downmix_inhibit ? BIT(7) : 0);
+
+	for (; i < size; i++)
+		ptr[i] = 0x00;
+}
+
+static void cdns_mhdp_set_audio_infoframe_sdp(struct cdns_mhdp_device *mhdp,
+					      struct hdmi_codec_params *params)
+{
+	u8 entry_id = 0;
+	u8 sdp_buf[32];
+
+	cdns_mhdp_audio_infoframe_sdp_pack(mhdp, &params->cea, sizeof(sdp_buf), sdp_buf);
+
+	cdns_mhdp_set_sdp(mhdp, entry_id, params->cea.type, sizeof(sdp_buf), sdp_buf, true);
+}
+
 static int cdns_mhdp_audio_hw_params(struct device *dev, void *data,
 				     struct hdmi_codec_daifmt *daifmt,
 				     struct hdmi_codec_params *params)
@@ -2558,6 +2658,8 @@ static int cdns_mhdp_audio_hw_params(struct device *dev, void *data,
 	}
 
 	audio.format = AFMT_I2S;
+
+	cdns_mhdp_set_audio_infoframe_sdp(mhdp, params);
 
 	ret = cdns_mhdp_audio_config(mhdp, &audio);
 	if (!ret)

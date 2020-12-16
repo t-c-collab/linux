@@ -249,6 +249,15 @@ struct phy;
 #define CDNS_DP_AUDIO_SW_RST			BIT(0)
 #define CDNS_DP_SYNC_WR_TO_CH_ZERO		BIT(1)
 
+/* SDP block */
+#define CDNS_SDP_BLOCK(s)			(0x30800 + (s) * 0x40)
+#define CDNS_SOURCE_PIF_WR_ADDR(s)		(CDNS_SDP_BLOCK(s) + 0x00)
+#define CDNS_SOURCE_PIF_WR_REQ(s)		(CDNS_SDP_BLOCK(s) + 0x04)
+#define CDNS_SOURCE_PIF_DATA_WR(s)		(CDNS_SDP_BLOCK(s) + 0x10)
+#define CDNS_SOURCE_PIF_FIFO1_FLUSH(s)		(CDNS_SDP_BLOCK(s) + 0x18)
+#define CDNS_SOURCE_PIF_PKT_ALLOC_REG(s)	(CDNS_SDP_BLOCK(s) + 0x2C)
+#define CDNS_SOURCE_PIF_PKT_ALLOC_WR_EN(s)	(CDNS_SDP_BLOCK(s) + 0x30)
+
 /* mailbox */
 #define MAILBOX_RETRY_US			1000
 #define MAILBOX_TIMEOUT_US			2000000
