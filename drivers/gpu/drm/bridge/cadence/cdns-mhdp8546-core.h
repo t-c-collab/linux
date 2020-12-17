@@ -163,6 +163,13 @@ struct phy;
 #define CDNS_DP_V1_VTOTAL(x)			(x)
 #define CDNS_DP_V1_VTOTAL_EVEN			BIT(16)
 
+#define CDNS_DP_BLOCK_SDP(s)			(CDNS_DPTX_STREAM(s) + 0x3c)
+#define CDNS_DP_BS_SDP_STOP_BLANK(x)		(x)
+#define CDNS_DP_BS_SDP_STOP_ACTIVE(x)		((x) << 16)
+#define CDNS_DP_BS_SDP_STOP_OVR_EN		BIT(31)
+#define DP_MAX_SDP_VBLANK_CYCLES_TO_BLOCK	65535
+#define DP_MAX_SDP_HBLANK_CYCLES_TO_BLOCK	32767
+
 #define CDNS_DP_MST_SLOT_ALLOCATE(s)		(CDNS_DPTX_STREAM(s) + 0x44)
 #define CDNS_DP_S_ALLOC_START_SLOT(x)		(x)
 #define CDNS_DP_S_ALLOC_END_SLOT(x)		((x) << 8)
