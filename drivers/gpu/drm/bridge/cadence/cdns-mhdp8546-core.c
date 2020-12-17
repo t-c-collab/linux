@@ -1697,6 +1697,62 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 	return 0;
 }
 
+static u32 cdns_mhdp_blank_cycle_adjust_margin(struct cdns_mhdp_device *mhdp,
+					       u32 blank_cycles)
+{
+	/* Set safety margin as 90% of base value */
+	u32 blank_cycles_with_margin = blank_cycles * 90;
+	u32 margin = ((36 / (mhdp->link.num_lanes + 1)) + 1) * 100;
+
+	if (blank_cycles_with_margin > margin)
+		blank_cycles_with_margin -= margin;
+	else
+		blank_cycles_with_margin = 0;
+
+	blank_cycles_with_margin /= 100;
+
+	return blank_cycles_with_margin;
+}
+
+static u32 cdns_mhdp_calc_sdp_blocking(struct cdns_mhdp_device *mhdp,
+				       const struct drm_display_mode *mode,
+				       u32 blank_lines)
+{
+	int pxlclock = mode->crtc_clock; /* KHz */
+	u32 blank_cycles;
+
+	blank_cycles = (blank_lines * (mhdp->link.rate / 2)) / pxlclock;
+
+	blank_cycles = cdns_mhdp_blank_cycle_adjust_margin(mhdp, blank_cycles);
+
+	return blank_cycles;
+}
+
+static void cdns_mhdp_configure_sdp_blocking(struct cdns_mhdp_device *mhdp,
+					     const struct drm_display_mode *mode)
+{
+	u32 vblank_sdp_cycles, hblank_sdp_cycles;
+	u32 blank_lines_h, blank_lines_v;
+
+	blank_lines_h = mode->htotal - mode->hdisplay;
+	blank_lines_v =  mode->htotal;
+
+	hblank_sdp_cycles = cdns_mhdp_calc_sdp_blocking(mhdp, mode, blank_lines_h);
+
+	vblank_sdp_cycles = cdns_mhdp_calc_sdp_blocking(mhdp, mode, blank_lines_v);
+
+	if (hblank_sdp_cycles > DP_MAX_SDP_HBLANK_CYCLES_TO_BLOCK)
+		hblank_sdp_cycles = DP_MAX_SDP_HBLANK_CYCLES_TO_BLOCK;
+
+	if (vblank_sdp_cycles > DP_MAX_SDP_VBLANK_CYCLES_TO_BLOCK)
+		vblank_sdp_cycles = DP_MAX_SDP_VBLANK_CYCLES_TO_BLOCK;
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_BLOCK_SDP(mhdp->stream_id),
+			    CDNS_DP_BS_SDP_STOP_OVR_EN |
+			    CDNS_DP_BS_SDP_STOP_ACTIVE(hblank_sdp_cycles) |
+			    CDNS_DP_BS_SDP_STOP_BLANK(vblank_sdp_cycles));
+}
+
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 				      const struct drm_display_mode *mode)
 {
@@ -1909,6 +1965,8 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_STREAM_CONFIG_2(0),
 			    CDNS_DP_SC2_TU_VS_DIFF((tu_size - vs > 3) ?
 						   0 : tu_size - vs));
+
+	cdns_mhdp_configure_sdp_blocking(mhdp, mode);
 
 	cdns_mhdp_configure_video(mhdp, mode);
 }
