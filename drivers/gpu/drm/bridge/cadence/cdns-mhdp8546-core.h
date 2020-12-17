@@ -227,7 +227,7 @@ struct phy;
 #define SAMPLING_FREQ(x)			(((x) & 0xf) << 16)
 #define ORIGINAL_SAMP_FREQ(x)			(((x) & 0xf) << 24)
 
-#define CDNS_DP_STTS_BIT_CH(s, ch)		(CDNS_AUDIO_DECODER(s) + ((ch) << 2))
+#define CDNS_DP_STTS_BIT_CH(s, ch)		(CDNS_AUDIO_DECODER(s) + 0x0C + ((ch) << 2))
 
 #define CDNS_DP_SMPL2PKT_CNTL(s)		(CDNS_AUDIO_DECODER(s) + 0x80)
 #define CDNS_DP_SMPL2PKT_EN			BIT(1)

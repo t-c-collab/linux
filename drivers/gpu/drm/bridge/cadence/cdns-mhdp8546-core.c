@@ -2489,15 +2489,19 @@ static void cdns_mhdp_audio_config_i2s(struct cdns_mhdp_device *mhdp,
 	} else if (audio->channels == 4) {
 		i2s_port_en_val = 3;
 	}
+	dev_dbg(mhdp->dev, "channels %d i2s ports: %d sub packet: %d\n", MAX_NUM_CH(audio->channels),NUM_OF_I2S_PORTS(audio->channels), CFG_SUB_PCKT_NUM(sub_pckt_num));
 
 	writel(CDNS_DP_SYNC_WR_TO_CH_ZERO, mhdp->regs + CDNS_DP_FIFO_CNTL(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_FIFO_CNTL: %x\n", readl(mhdp->regs + CDNS_DP_FIFO_CNTL(stream_id)));
 
 	val = MAX_NUM_CH(audio->channels);
 	val |= NUM_OF_I2S_PORTS(audio->channels);
 	val |= AUDIO_TYPE_LPCM;
 	val |= CFG_SUB_PCKT_NUM(sub_pckt_num);
 	writel(val, mhdp->regs + CDNS_DP_SMPL2PKT_CNFG(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_SMPL2PKT_CNFG: %x\n", readl( mhdp->regs + CDNS_DP_SMPL2PKT_CNFG(stream_id)));
 
+	dev_dbg(mhdp->dev, "sample width: %d \n", audio->sample_width);
 	if (audio->sample_width == 16)
 		val = 0;
 	else if (audio->sample_width == 24)
@@ -2509,17 +2513,10 @@ static void cdns_mhdp_audio_config_i2s(struct cdns_mhdp_device *mhdp,
 	val |= I2S_DEC_PORT_EN(i2s_port_en_val);
 	val |= TRANS_SMPL_WIDTH_32;
 	writel(val, mhdp->regs + CDNS_DP_AUDIO_SRC_CNFG(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_AUDIO_SRC_CNFG: %x\n", readl( mhdp->regs + CDNS_DP_AUDIO_SRC_CNFG(stream_id)));
 
-	for (i = 0; i < (audio->channels + 1) / 2; i++) {
-		if (audio->sample_width == 16)
-			val = (0x02 << 8) | (0x02 << 20);
-		else if (audio->sample_width == 24)
-			val = (0x0b << 8) | (0x0b << 20);
 
-		val |= ((2 * i) << 4) | ((2 * i + 1) << 16);
-		writel(val, mhdp->regs + CDNS_DP_STTS_BIT_CH(stream_id, i));
-	}
-
+	dev_dbg(mhdp->dev, "sample rate: %d \n", audio->sample_rate);
 	switch (audio->sample_rate) {
 	case 32000:
 		val = SAMPLING_FREQ(3) | ORIGINAL_SAMP_FREQ(0xc);
@@ -2545,9 +2542,24 @@ static void cdns_mhdp_audio_config_i2s(struct cdns_mhdp_device *mhdp,
 	}
 	val |= 4;
 	writel(val, mhdp->regs + CDNS_DP_COM_CH_STTS_BITS(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_COM_CH_STTS_BITS: %x\n", readl( mhdp->regs + CDNS_DP_COM_CH_STTS_BITS(stream_id)));
+
+	writel(CDNS_DP_I2S_DEC_START, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_AUDIO_SRC_CNTL: %x\n", readl( mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id)));
 
 	writel(CDNS_DP_SMPL2PKT_EN, mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id));
-	writel(CDNS_DP_I2S_DEC_START, mhdp->regs + CDNS_DP_AUDIO_SRC_CNTL(stream_id));
+	dev_dbg(mhdp->dev, "CDNS_DP_SMPL2PKT_CNTL: %x\n", readl( mhdp->regs + CDNS_DP_SMPL2PKT_CNTL(stream_id)));
+
+	for (i = 0; i < (audio->channels + 1) / 2; i++) {
+		if (audio->sample_width == 16)
+			val = (0x02 << 8) | (0x02 << 20);
+		else if (audio->sample_width == 24)
+			val = (0x0b << 8) | (0x0b << 20);
+
+		val |= ((2 * i) << 4) | ((2 * i + 1) << 16);
+		writel(val, mhdp->regs + CDNS_DP_STTS_BIT_CH(stream_id, i));
+		dev_dbg(mhdp->dev, "CDNS_DP_STTS_BIT_CH: %x\n", readl( mhdp->regs + CDNS_DP_STTS_BIT_CH(stream_id, i)));
+	}
 }
 
 static int cdns_mhdp_audio_config(struct cdns_mhdp_device *mhdp,
