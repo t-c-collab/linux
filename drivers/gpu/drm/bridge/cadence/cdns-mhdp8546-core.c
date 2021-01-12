@@ -2471,6 +2471,7 @@ static void cdns_mhdp_audio_config_i2s(struct cdns_mhdp_device *mhdp,
 	val |= AUDIO_CH_NUM(audio->channels);
 	val |= I2S_DEC_PORT_EN(i2s_port_en_val);
 	val |= TRANS_SMPL_WIDTH_32;
+	val |= AUDIO_SAMPLE_RIGHT_JUSTIFY;
 	writel(val, mhdp->regs + CDNS_DP_AUDIO_SRC_CNFG(stream_id));
 
 	for (i = 0; i < (audio->channels + 1) / 2; i++) {

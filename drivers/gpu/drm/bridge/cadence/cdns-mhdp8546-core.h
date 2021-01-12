@@ -223,6 +223,12 @@ struct phy;
 #define CDNS_DP_I2S_DEC_START			BIT(1)
 
 #define CDNS_DP_AUDIO_SRC_CNFG(s)		(CDNS_AUDIO_DECODER(s) + 0x04)
+#define AUDIO_CH_NUM(x)				((((x) - 1) & 0x1f) << 2)
+#define AUDIO_SAMPLE_RIGHT_JUSTIFY		BIT(7)
+#define TRANS_SMPL_WIDTH_16			0
+#define TRANS_SMPL_WIDTH_24			BIT(11)
+#define TRANS_SMPL_WIDTH_32			(2 << 11)
+#define I2S_DEC_PORT_EN(x)			(((x) & 0xf) << 17)
 
 #define CDNS_DP_COM_CH_STTS_BITS(s)		(CDNS_AUDIO_DECODER(s) + 0x08)
 #define SAMPLING_FREQ(x)			(((x) & 0xf) << 16)
@@ -234,6 +240,10 @@ struct phy;
 #define CDNS_DP_SMPL2PKT_EN			BIT(1)
 
 #define CDNS_DP_SMPL2PKT_CNFG(s)		(CDNS_AUDIO_DECODER(s) + 0x84)
+#define MAX_NUM_CH(x)				(((x) & 0x1f) - 1)
+#define NUM_OF_I2S_PORTS(x)			((((x) / 2 - 1) & 0x3) << 5)
+#define AUDIO_TYPE_LPCM				(2 << 7)
+#define CFG_SUB_PCKT_NUM(x)			((((x) - 1) & 0x7) << 11)
 
 #define CDNS_DP_FIFO_CNTL(s)			(CDNS_AUDIO_DECODER(s) + 0x88)
 #define CDNS_DP_AUDIO_SW_RST			BIT(0)
@@ -316,17 +326,6 @@ struct phy;
 #define CDNS_MHDP_MAX_STREAMS			4
 
 #define DP_LINK_CAP_ENHANCED_FRAMING		BIT(0)
-
-/* audio */
-#define MAX_NUM_CH(x)				(((x) & 0x1f) - 1)
-#define NUM_OF_I2S_PORTS(x)			((((x) / 2 - 1) & 0x3) << 5)
-#define AUDIO_TYPE_LPCM				(2 << 7)
-#define CFG_SUB_PCKT_NUM(x)			((((x) - 1) & 0x7) << 11)
-#define AUDIO_CH_NUM(x)				((((x) - 1) & 0x1f) << 2)
-#define TRANS_SMPL_WIDTH_16			0
-#define TRANS_SMPL_WIDTH_24			BIT(11)
-#define TRANS_SMPL_WIDTH_32			(2 << 11)
-#define I2S_DEC_PORT_EN(x)			(((x) & 0xf) << 17)
 
 enum audio_format {
 	AFMT_I2S = 0,
