@@ -127,7 +127,7 @@ TRACE_EVENT(amdgpu_bo_create,
 
 	    TP_fast_assign(
 			   __entry->bo = bo;
-			   __entry->pages = bo->tbo.num_pages;
+			   __entry->pages = bo->tbo.mem.num_pages;
 			   __entry->type = bo->tbo.mem.mem_type;
 			   __entry->prefer = bo->preferred_domains;
 			   __entry->allow = bo->allowed_domains;
@@ -358,10 +358,11 @@ TRACE_EVENT(amdgpu_vm_update_ptes,
 			}
 	),
 	TP_printk("pid:%u vm_ctx:0x%llx start:0x%010llx end:0x%010llx,"
-		  " flags:0x%llx, incr:%llu, dst:\n%s", __entry->pid,
+		  " flags:0x%llx, incr:%llu, dst:\n%s%s", __entry->pid,
 		  __entry->vm_ctx, __entry->start, __entry->end,
 		  __entry->flags, __entry->incr,  __print_array(
-		  __get_dynamic_array(dst), __entry->nptes, 8))
+		  __get_dynamic_array(dst), min(__entry->nptes, 32u), 8),
+		  __entry->nptes > 32 ? "..." : "")
 );
 
 TRACE_EVENT(amdgpu_vm_set_ptes,
