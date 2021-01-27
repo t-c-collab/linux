@@ -2247,7 +2247,7 @@ intel_pin_and_fence_fb_obj(struct drm_framebuffer *fb,
 		 */
 		ret = i915_vma_pin_fence(vma);
 		if (ret != 0 && INTEL_GEN(dev_priv) < 4) {
-			i915_gem_object_unpin_from_display_plane(vma);
+			i915_vma_unpin(vma);
 			vma = ERR_PTR(ret);
 			goto err;
 		}
@@ -2265,12 +2265,9 @@ err:
 
 void intel_unpin_fb_vma(struct i915_vma *vma, unsigned long flags)
 {
-	i915_gem_object_lock(vma->obj, NULL);
 	if (flags & PLANE_HAS_FENCE)
 		i915_vma_unpin_fence(vma);
-	i915_gem_object_unpin_from_display_plane(vma);
-	i915_gem_object_unlock(vma->obj);
-
+	i915_vma_unpin(vma);
 	i915_vma_put(vma);
 }
 
@@ -3752,33 +3749,19 @@ static int intel_plane_max_height(struct intel_plane *plane,
 		return INT_MAX;
 }
 
-static int skl_check_main_surface(struct intel_plane_state *plane_state)
+int skl_calc_main_surface_offset(const struct intel_plane_state *plane_state,
+				 int *x, int *y, u32 *offset)
 {
 	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
 	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
 	const struct drm_framebuffer *fb = plane_state->hw.fb;
-	unsigned int rotation = plane_state->hw.rotation;
-	int x = plane_state->uapi.src.x1 >> 16;
-	int y = plane_state->uapi.src.y1 >> 16;
-	int w = drm_rect_width(&plane_state->uapi.src) >> 16;
-	int h = drm_rect_height(&plane_state->uapi.src) >> 16;
-	int min_width = intel_plane_min_width(plane, fb, 0, rotation);
-	int max_width = intel_plane_max_width(plane, fb, 0, rotation);
-	int max_height = intel_plane_max_height(plane, fb, 0, rotation);
-	int aux_plane = intel_main_to_aux_plane(fb, 0);
-	u32 aux_offset = plane_state->color_plane[aux_plane].offset;
-	u32 alignment, offset;
+	const int aux_plane = intel_main_to_aux_plane(fb, 0);
+	const u32 aux_offset = plane_state->color_plane[aux_plane].offset;
+	const u32 alignment = intel_surf_alignment(fb, 0);
+	const int w = drm_rect_width(&plane_state->uapi.src) >> 16;
 
-	if (w > max_width || w < min_width || h > max_height) {
-		drm_dbg_kms(&dev_priv->drm,
-			    "requested Y/RGB source size %dx%d outside limits (min: %dx1 max: %dx%d)\n",
-			    w, h, min_width, max_width, max_height);
-		return -EINVAL;
-	}
-
-	intel_add_fb_offsets(&x, &y, plane_state, 0);
-	offset = intel_plane_compute_aligned_offset(&x, &y, plane_state, 0);
-	alignment = intel_surf_alignment(fb, 0);
+	intel_add_fb_offsets(x, y, plane_state, 0);
+	*offset = intel_plane_compute_aligned_offset(x, y, plane_state, 0);
 	if (drm_WARN_ON(&dev_priv->drm, alignment && !is_power_of_2(alignment)))
 		return -EINVAL;
 
@@ -3787,9 +3770,10 @@ static int skl_check_main_surface(struct intel_plane_state *plane_state)
 	 * main surface offset, and it must be non-negative. Make
 	 * sure that is what we will get.
 	 */
-	if (aux_plane && offset > aux_offset)
-		offset = intel_plane_adjust_aligned_offset(&x, &y, plane_state, 0,
-							   offset, aux_offset & ~(alignment - 1));
+	if (aux_plane && *offset > aux_offset)
+		*offset = intel_plane_adjust_aligned_offset(x, y, plane_state, 0,
+							    *offset,
+							    aux_offset & ~(alignment - 1));
 
 	/*
 	 * When using an X-tiled surface, the plane blows up
@@ -3800,17 +3784,50 @@ static int skl_check_main_surface(struct intel_plane_state *plane_state)
 	if (fb->modifier == I915_FORMAT_MOD_X_TILED) {
 		int cpp = fb->format->cpp[0];
 
-		while ((x + w) * cpp > plane_state->color_plane[0].stride) {
-			if (offset == 0) {
+		while ((*x + w) * cpp > plane_state->color_plane[0].stride) {
+			if (*offset == 0) {
 				drm_dbg_kms(&dev_priv->drm,
 					    "Unable to find suitable display surface offset due to X-tiling\n");
 				return -EINVAL;
 			}
 
-			offset = intel_plane_adjust_aligned_offset(&x, &y, plane_state, 0,
-								   offset, offset - alignment);
+			*offset = intel_plane_adjust_aligned_offset(x, y, plane_state, 0,
+								    *offset,
+								    *offset - alignment);
 		}
 	}
+
+	return 0;
+}
+
+static int skl_check_main_surface(struct intel_plane_state *plane_state)
+{
+	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	struct drm_i915_private *dev_priv = to_i915(plane->base.dev);
+	const struct drm_framebuffer *fb = plane_state->hw.fb;
+	const unsigned int rotation = plane_state->hw.rotation;
+	int x = plane_state->uapi.src.x1 >> 16;
+	int y = plane_state->uapi.src.y1 >> 16;
+	const int w = drm_rect_width(&plane_state->uapi.src) >> 16;
+	const int h = drm_rect_height(&plane_state->uapi.src) >> 16;
+	const int min_width = intel_plane_min_width(plane, fb, 0, rotation);
+	const int max_width = intel_plane_max_width(plane, fb, 0, rotation);
+	const int max_height = intel_plane_max_height(plane, fb, 0, rotation);
+	const int aux_plane = intel_main_to_aux_plane(fb, 0);
+	const u32 alignment = intel_surf_alignment(fb, 0);
+	u32 offset;
+	int ret;
+
+	if (w > max_width || w < min_width || h > max_height) {
+		drm_dbg_kms(&dev_priv->drm,
+			    "requested Y/RGB source size %dx%d outside limits (min: %dx1 max: %dx%d)\n",
+			    w, h, min_width, max_width, max_height);
+		return -EINVAL;
+	}
+
+	ret = skl_calc_main_surface_offset(plane_state, &x, &y, &offset);
+	if (ret)
+		return ret;
 
 	/*
 	 * CCS AUX surface doesn't have its own x/y offsets, we must make sure
@@ -15611,15 +15628,6 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
 		intel_unpin_fb_vma(vma, old_plane_state->flags);
 }
 
-static void fb_obj_bump_render_priority(struct drm_i915_gem_object *obj)
-{
-	struct i915_sched_attr attr = {
-		.priority = I915_USER_PRIORITY(I915_PRIORITY_DISPLAY),
-	};
-
-	i915_gem_object_wait_priority(obj, 0, &attr);
-}
-
 /**
  * intel_prepare_plane_fb - Prepare fb for usage on plane
  * @_plane: drm plane to prepare for
@@ -15636,6 +15644,9 @@ int
 intel_prepare_plane_fb(struct drm_plane *_plane,
 		       struct drm_plane_state *_new_plane_state)
 {
+	struct i915_sched_attr attr = {
+		.priority = I915_USER_PRIORITY(I915_PRIORITY_DISPLAY),
+	};
 	struct intel_plane *plane = to_intel_plane(_plane);
 	struct intel_plane_state *new_plane_state =
 		to_intel_plane_state(_new_plane_state);
@@ -15675,6 +15686,8 @@ intel_prepare_plane_fb(struct drm_plane *_plane,
 	}
 
 	if (new_plane_state->uapi.fence) { /* explicit fencing */
+		i915_gem_fence_wait_priority(new_plane_state->uapi.fence,
+					     &attr);
 		ret = i915_sw_fence_await_dma_fence(&state->commit_ready,
 						    new_plane_state->uapi.fence,
 						    i915_fence_timeout(dev_priv),
@@ -15696,7 +15709,7 @@ intel_prepare_plane_fb(struct drm_plane *_plane,
 	if (ret)
 		return ret;
 
-	fb_obj_bump_render_priority(obj);
+	i915_gem_object_wait_priority(obj, 0, &attr);
 	i915_gem_object_flush_frontbuffer(obj, ORIGIN_DIRTYFB);
 
 	if (!new_plane_state->uapi.fence) { /* implicit fencing */
