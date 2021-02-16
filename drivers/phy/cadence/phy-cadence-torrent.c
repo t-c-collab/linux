@@ -99,6 +99,7 @@
 #define CMN_PLL0_FRACDIVH_M0		0x0092U
 #define CMN_PLL0_HIGH_THR_M0		0x0093U
 #define CMN_PLL0_DSM_DIAG_M0		0x0094U
+#define CMN_PLL0_DSM_FBH_OVRD_M0	0x0095U
 #define CMN_PLL0_SS_CTRL1_M0		0x0098U
 #define CMN_PLL0_SS_CTRL2_M0            0x0099U
 #define CMN_PLL0_SS_CTRL3_M0            0x009AU
@@ -124,6 +125,8 @@
 #define CMN_PLL1_FRACDIVH_M0		0x00D2U
 #define CMN_PLL1_HIGH_THR_M0		0x00D3U
 #define CMN_PLL1_DSM_DIAG_M0		0x00D4U
+#define CMN_PLL1_DSM_FBH_OVRD_M0	0x00D5U
+#define CMN_PLL1_DSM_FBL_OVRD_M0	0x00D6U
 #define CMN_PLL1_SS_CTRL1_M0		0x00D8U
 #define CMN_PLL1_SS_CTRL2_M0            0x00D9U
 #define CMN_PLL1_SS_CTRL3_M0            0x00DAU
@@ -771,6 +774,89 @@ void cdns_torrent_dp_pma_cmn_vco_cfg_25mhz(struct cdns_torrent_phy *cdns_phy,
 	cdns_torrent_phy_write(regmap, CMN_PLL1_LOCK_PLLCNT_START, 0x00C7);
 }
 
+static
+void cdns_torrent_dp_pma_cmn_vco_cfg_100mhz(struct cdns_torrent_phy *cdns_phy,
+					    u32 rate, bool ssc)
+{
+	struct regmap *regmap = cdns_phy->regmap_common_cdb;
+
+	/* Assumes 100 MHz refclock */
+	switch (rate) {
+	/* Setting VCO for 10.8GHz */
+	case 2700:
+	case 5400:
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_PADJ_M0, 0x0028);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_DSM_FBH_OVRD_M0, 0x0022);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_DSM_FBH_OVRD_M0, 0x0022);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_DSM_FBL_OVRD_M0, 0x000C);
+		break;
+	/* Setting VCO for 9.72GHz */
+	case 1620:
+	case 2430:
+	case 3240:
+		cdns_torrent_phy_write(regmap, CMN_PLL0_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_INTDIV_M0, 0x0061);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_INTDIV_M0, 0x0061);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_FRACDIVL_M0, 0x3333);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_FRACDIVL_M0, 0x3333);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_HIGH_THR_M0, 0x0042);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_HIGH_THR_M0, 0x0042);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CTRL_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CTRL_M0, 0x0002);
+		break;
+	/* Setting VCO for 8.64GHz */
+	case 2160:
+	case 4320:
+		cdns_torrent_phy_write(regmap, CMN_PLL0_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_INTDIV_M0, 0x0056);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_INTDIV_M0, 0x0056);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_FRACDIVL_M0, 0x6666);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_FRACDIVL_M0, 0x6666);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_HIGH_THR_M0, 0x003A);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_HIGH_THR_M0, 0x003A);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CTRL_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CTRL_M0, 0x0002);
+		break;
+	/* Setting VCO for 8.1GHz */
+	case 8100:
+		cdns_torrent_phy_write(regmap, CMN_PLL0_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_DSM_DIAG_M0, 0x0004);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_PADJ_M0, 0x0509);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CP_IADJ_M0, 0x0F00);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_FILT_PADJ_M0, 0x0F08);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_INTDIV_M0, 0x0051);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_INTDIV_M0, 0x0051);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_FRACDIVH_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PLL0_HIGH_THR_M0, 0x0036);
+		cdns_torrent_phy_write(regmap, CMN_PLL1_HIGH_THR_M0, 0x0036);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL0_CTRL_M0, 0x0002);
+		cdns_torrent_phy_write(regmap, CMN_PDIAG_PLL1_CTRL_M0, 0x0002);
+		break;
+	}
+}
+
 /*
  * Enable or disable PLL for selected lanes.
  */
@@ -1011,6 +1097,10 @@ static int cdns_torrent_dp_configure_rate(struct cdns_torrent_phy *cdns_phy,
 	else if (cdns_phy->ref_clk_rate == CLK_25_MHZ)
 		/* PMA common configuration 25MHz */
 		cdns_torrent_dp_pma_cmn_vco_cfg_25mhz(cdns_phy, dp->link_rate, dp->ssc);
+	else if (cdns_phy->ref_clk_rate == CLK_100_MHZ)
+		/* PMA common configuration 100MHz */
+		cdns_torrent_dp_pma_cmn_vco_cfg_100mhz(cdns_phy, dp->link_rate, dp->ssc);
+
 	cdns_torrent_dp_pma_cmn_rate(cdns_phy, dp->link_rate, dp->lanes);
 
 	/* Enable the cmn_pll0_en. */
@@ -1350,6 +1440,7 @@ static int cdns_torrent_dp_init(struct phy *phy)
 	switch (cdns_phy->ref_clk_rate) {
 	case CLK_19_2_MHZ:
 	case CLK_25_MHZ:
+	case CLK_100_MHZ:
 		/* Valid Ref Clock Rate */
 		break;
 	default:
@@ -1386,6 +1477,11 @@ static int cdns_torrent_dp_init(struct phy *phy)
 		cdns_torrent_dp_pma_cmn_vco_cfg_25mhz(cdns_phy,
 						      cdns_phy->max_bit_rate,
 						      false);
+	else if (cdns_phy->ref_clk_rate == CLK_100_MHZ)
+		cdns_torrent_dp_pma_cmn_vco_cfg_100mhz(cdns_phy,
+						       cdns_phy->max_bit_rate,
+						       false);
+
 	cdns_torrent_dp_pma_cmn_rate(cdns_phy, cdns_phy->max_bit_rate,
 				     inst->num_lanes);
 
@@ -2282,6 +2378,44 @@ static struct cdns_torrent_vals sl_dp_25_no_ssc_rx_ln_vals = {
 	.num_regs = ARRAY_SIZE(sl_dp_25_no_ssc_rx_ln_regs),
 };
 
+/* Single DP, 100 MHz Ref clk, no SSC */
+static struct cdns_reg_pairs sl_dp_100_no_ssc_cmn_regs[] = {
+	{0x0003, CMN_PLL0_VCOCAL_TCTRL},
+	{0x0003, CMN_PLL1_VCOCAL_TCTRL}
+};
+
+static struct cdns_reg_pairs sl_dp_100_no_ssc_tx_ln_regs[] = {
+	{0x00FB, TX_PSC_A0},
+	{0x04AA, TX_PSC_A2},
+	{0x04AA, TX_PSC_A3},
+	{0x000F, XCVR_DIAG_BIDI_CTRL}
+};
+
+static struct cdns_reg_pairs sl_dp_100_no_ssc_rx_ln_regs[] = {
+	{0x0000, RX_PSC_A0},
+	{0x0000, RX_PSC_A2},
+	{0x0000, RX_PSC_A3},
+	{0x0000, RX_PSC_CAL},
+	{0x0000, RX_REE_GCSM1_CTRL},
+	{0x0000, RX_REE_GCSM2_CTRL},
+	{0x0000, RX_REE_PERGCSM_CTRL}
+};
+
+static struct cdns_torrent_vals sl_dp_100_no_ssc_cmn_vals = {
+	.reg_pairs = sl_dp_100_no_ssc_cmn_regs,
+	.num_regs = ARRAY_SIZE(sl_dp_100_no_ssc_cmn_regs),
+};
+
+static struct cdns_torrent_vals sl_dp_100_no_ssc_tx_ln_vals = {
+	.reg_pairs = sl_dp_100_no_ssc_tx_ln_regs,
+	.num_regs = ARRAY_SIZE(sl_dp_100_no_ssc_tx_ln_regs),
+};
+
+static struct cdns_torrent_vals sl_dp_100_no_ssc_rx_ln_vals = {
+	.reg_pairs = sl_dp_100_no_ssc_rx_ln_regs,
+	.num_regs = ARRAY_SIZE(sl_dp_100_no_ssc_rx_ln_regs),
+};
+
 /* USB and SGMII/QSGMII link configuration */
 static struct cdns_reg_pairs usb_sgmii_link_cmn_regs[] = {
 	{0x0002, PHY_PLL_CFG},
@@ -3159,6 +3293,11 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_cmn_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = &pcie_100_no_ssc_cmn_vals,
@@ -3251,6 +3390,11 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_tx_ln_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = NULL,
@@ -3343,6 +3487,11 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_rx_ln_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = &pcie_100_no_ssc_rx_ln_vals,
@@ -3626,6 +3775,11 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_cmn_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = &pcie_100_no_ssc_cmn_vals,
@@ -3718,6 +3872,11 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_tx_ln_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = NULL,
@@ -3810,6 +3969,11 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 			},
 		},
 		[CLK_100_MHZ] = {
+			[TYPE_DP] = {
+				[TYPE_NONE] = {
+					[NO_SSC] = &sl_dp_100_no_ssc_rx_ln_vals,
+				},
+			},
 			[TYPE_PCIE] = {
 				[TYPE_NONE] = {
 					[NO_SSC] = &pcie_100_no_ssc_rx_ln_vals,
