@@ -51,6 +51,10 @@
 #define TORRENT_PHY_PCS_COMMON_OFFSET(block_offset)	\
 				(0xC000 << (block_offset))
 
+#define TORRENT_PHY_PCS_LANE_CDB_OFFSET(ln, block_offset, reg_offset)	\
+				((0xD000 << (block_offset)) +		\
+				(((ln) << 9) << (reg_offset)))
+
 #define TORRENT_PHY_PMA_COMMON_OFFSET(block_offset)	\
 				(0xE000 << (block_offset))
 
@@ -218,6 +222,9 @@
 #define PHY_PIPE_USB3_GEN2_POST_CFG0	0x0022U
 #define PHY_PIPE_USB3_GEN2_POST_CFG1	0x0023U
 
+/* PHY PCS lane registers */
+#define PHY_PCS_ISO_LINK_CTRL		0x000BU
+
 /* PHY PMA common registers */
 #define PHY_PMA_CMN_CTRL1		0x0000U
 #define PHY_PMA_CMN_CTRL2		0x0001U
@@ -316,6 +323,7 @@ struct cdns_torrent_phy {
 	struct regmap *regmap_phy_pma_common_cdb;
 	struct regmap *regmap_tx_lane_cdb[MAX_NUM_LANES];
 	struct regmap *regmap_rx_lane_cdb[MAX_NUM_LANES];
+	struct regmap *regmap_phy_pcs_lane_cdb[MAX_NUM_LANES];
 	struct regmap *regmap_dptx_phy_reg;
 	struct regmap_field *phy_pll_cfg;
 	struct regmap_field *phy_pma_cmn_ctrl_1;
@@ -454,6 +462,22 @@ static const struct regmap_config cdns_torrent_common_cdb_config = {
 	.fast_io = true,
 	.reg_write = cdns_regmap_write,
 	.reg_read = cdns_regmap_read,
+};
+
+#define TORRENT_PHY_PCS_LANE_CDB_REGMAP_CONF(n) \
+{ \
+	.name = "torrent_phy_pcs_lane" n "_cdb", \
+	.reg_stride = 1, \
+	.fast_io = true, \
+	.reg_write = cdns_regmap_write, \
+	.reg_read = cdns_regmap_read, \
+}
+
+static const struct regmap_config cdns_torrent_phy_pcs_lane_cdb_config[] = {
+	TORRENT_PHY_PCS_LANE_CDB_REGMAP_CONF("0"),
+	TORRENT_PHY_PCS_LANE_CDB_REGMAP_CONF("1"),
+	TORRENT_PHY_PCS_LANE_CDB_REGMAP_CONF("2"),
+	TORRENT_PHY_PCS_LANE_CDB_REGMAP_CONF("3"),
 };
 
 static const struct regmap_config cdns_torrent_phy_pcs_cmn_cdb_config = {
@@ -1538,6 +1562,17 @@ static int cdns_torrent_phy_on(struct phy *phy)
 		return ret;
 	}
 
+	if (inst->phy_type == TYPE_PCIE || inst->phy_type == TYPE_USB) {
+		ret = regmap_read_poll_timeout(cdns_phy->regmap_phy_pcs_lane_cdb[inst->mlane],
+					       PHY_PCS_ISO_LINK_CTRL, read_val,
+					       (read_val & 0x2) != 0x2, 0,
+					       POLL_TIMEOUT_US);
+		if (ret == -ETIMEDOUT) {
+			dev_err(cdns_phy->dev, "Timeout waiting for PHY status ready\n");
+			return ret;
+		}
+	}
+
 	mdelay(10);
 
 	return 0;
@@ -1907,6 +1942,17 @@ static int cdns_torrent_regmap_init(struct cdns_torrent_phy *cdns_phy)
 			return PTR_ERR(regmap);
 		}
 		cdns_phy->regmap_rx_lane_cdb[i] = regmap;
+
+		block_offset = TORRENT_PHY_PCS_LANE_CDB_OFFSET(i, block_offset_shift,
+							       reg_offset_shift);
+		regmap = cdns_regmap_init(dev, sd_base, block_offset,
+					  reg_offset_shift,
+					  &cdns_torrent_phy_pcs_lane_cdb_config[i]);
+		if (IS_ERR(regmap)) {
+			dev_err(dev, "Failed to init PHY PCS lane CDB regmap\n");
+			return PTR_ERR(regmap);
+		}
+		cdns_phy->regmap_phy_pcs_lane_cdb[i] = regmap;
 	}
 
 	block_offset = TORRENT_COMMON_CDB_OFFSET;
