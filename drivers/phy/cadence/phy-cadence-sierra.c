@@ -221,7 +221,7 @@ struct cdns_sierra_pll_mux_reg_fields {
 
 static const struct cdns_sierra_pll_mux_reg_fields cmn_plllc_pfdclk1_sel_preg[] = {
 	[CMN_PLLLC] = {
-		.pfdclk_sel_preg = REG_FIELD(SIERRA_CMN_PLLLC_GEN_PREG, 1, 1),
+		.pfdclk_sel_preg = REG_FIELD(SIERRA_CMN_PLLLC1_GEN_PREG, 1, 1),
 		.plllc1en_field = REG_FIELD(SIERRA_CMN_REFRCV1_PREG, 8, 8),
 		.termen_field = REG_FIELD(SIERRA_CMN_REFRCV1_PREG, 0, 0),
 	},
