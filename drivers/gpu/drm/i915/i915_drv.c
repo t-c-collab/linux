@@ -272,7 +272,7 @@ static void intel_detect_preproduction_hw(struct drm_i915_private *dev_priv)
 	pre |= IS_HSW_EARLY_SDV(dev_priv);
 	pre |= IS_SKL_REVID(dev_priv, 0, SKL_REVID_F0);
 	pre |= IS_BXT_REVID(dev_priv, 0, BXT_REVID_B_LAST);
-	pre |= IS_KBL_GT_REVID(dev_priv, 0, KBL_REVID_A0);
+	pre |= IS_KBL_GT_STEP(dev_priv, 0, STEP_A0);
 	pre |= IS_GLK_REVID(dev_priv, 0, GLK_REVID_A2);
 
 	if (pre) {
@@ -306,6 +306,7 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 		return -ENODEV;
 
 	intel_device_info_subplatform_init(dev_priv);
+	intel_step_init(dev_priv);
 
 	intel_uncore_mmio_debug_init_early(&dev_priv->mmio_debug);
 	intel_uncore_init_early(&dev_priv->uncore, dev_priv);
@@ -566,6 +567,10 @@ static int i915_driver_hw_probe(struct drm_i915_private *dev_priv)
 
 	intel_gt_init_hw_early(&dev_priv->gt, &dev_priv->ggtt);
 
+	ret = intel_gt_probe_lmem(&dev_priv->gt);
+	if (ret)
+		goto err_mem_regions;
+
 	ret = i915_ggtt_enable_hw(dev_priv);
 	if (ret) {
 		drm_err(&dev_priv->drm, "failed to enable GGTT\n");
@@ -803,7 +808,7 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		if (INTEL_GEN(i915) >= 9 && i915_selftest.live < 0 &&
 		    i915->params.fake_lmem_start) {
 			mkwrite_device_info(i915)->memory_regions =
-				REGION_SMEM | REGION_LMEM | REGION_STOLEN;
+				REGION_SMEM | REGION_LMEM | REGION_STOLEN_SMEM;
 			GEM_BUG_ON(!HAS_LMEM(i915));
 		}
 	}

@@ -36,7 +36,7 @@
 #include "i915_selftest.h"
 
 #define PLATFORM(x) .platform = (x)
-#define GEN(x) .gen = (x), .gen_mask = BIT((x) - 1)
+#define GEN(x) .gen = (x), .gen_mask = BIT((x) - 1), .display.version = (x)
 
 #define I845_PIPE_OFFSETS \
 	.pipe_offsets = { \
@@ -154,7 +154,7 @@
 	.page_sizes = I915_GTT_PAGE_SIZE_4K
 
 #define GEN_DEFAULT_REGIONS \
-	.memory_regions = REGION_SMEM | REGION_STOLEN
+	.memory_regions = REGION_SMEM | REGION_STOLEN_SMEM
 
 #define I830_FEATURES \
 	GEN(2), \
@@ -723,6 +723,7 @@ static const struct intel_device_info bxt_info = {
 static const struct intel_device_info glk_info = {
 	GEN9_LP_FEATURES,
 	PLATFORM(INTEL_GEMINILAKE),
+	.display.version = 10,
 	.ddb_size = 1024,
 	GLK_COLORS,
 };
