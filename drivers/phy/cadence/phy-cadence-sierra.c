@@ -504,13 +504,13 @@ static int cdns_sierra_phy_on(struct phy *gphy)
 			dev_err(dev, "Failed to take the PHY out of reset\n");
 			return ret;
 		}
+	}
 
-		/* Take the PHY lane group out of reset */
-		ret = reset_control_deassert(ins->lnk_rst);
-		if (ret) {
-			dev_err(dev, "Failed to take the PHY lane out of reset\n");
-			return ret;
-		}
+	/* Take the PHY lane group out of reset */
+	ret = reset_control_deassert(ins->lnk_rst);
+	if (ret) {
+		dev_err(dev, "Failed to take the PHY lane out of reset\n");
+		return ret;
 	}
 
 	if (ins->phy_type == TYPE_PCIE || ins->phy_type == TYPE_USB) {
@@ -544,11 +544,7 @@ static int cdns_sierra_phy_on(struct phy *gphy)
 
 static int cdns_sierra_phy_off(struct phy *gphy)
 {
-	struct cdns_sierra_phy *sp = dev_get_drvdata(gphy->dev.parent);
 	struct cdns_sierra_inst *ins = phy_get_drvdata(gphy);
-
-	if (sp->nsubnodes != 1)
-		return 0;
 
 	return reset_control_assert(ins->lnk_rst);
 }
@@ -1085,7 +1081,6 @@ static int cdns_sierra_phy_configure_multilink(struct cdns_sierra_phy *sp)
 			}
 		}
 
-		reset_control_deassert(sp->phys[node].lnk_rst);
 	}
 
 	/* Take the PHY out of reset */
