@@ -263,7 +263,8 @@ static const int pll_mux_parent_index[][SIERRA_NUM_CMN_PLLC_PARENTS] = {
 	[CMN_PLLLC1] = { PLL1_REFCLK, PLL0_REFCLK },
 };
 
-static u32 cdns_sierra_pll_mux_table[] = { 0, 1 };
+static u32 cdns_sierra_pll_mux_table[] = { 0, 1 };	//index in parent_array
+static u32 cdns_sierra_pll_mux_table_plllc1[] = { 1, 0 };
 
 struct cdns_sierra_derived_refclk {
 	struct clk_hw           hw;
@@ -607,11 +608,30 @@ static const struct phy_ops ops = {
 static u8 cdns_sierra_pll_mux_get_parent(struct clk_hw *hw)
 {
 	struct cdns_sierra_pll_mux *mux = to_cdns_sierra_pll_mux(hw);
+	struct regmap_field *plllc1en_field = mux->plllc1en_field;
+	struct regmap_field *termen_field = mux->termen_field;
 	struct regmap_field *field = mux->pfdclk_sel_preg;
 	unsigned int val;
+	int index;
 
 	regmap_field_read(field, &val);
-	return clk_mux_val_to_index(hw, cdns_sierra_pll_mux_table, 0, val);
+
+	//printk("pcie: %s -- returning index %d name = %s\n", __func__, clk_mux_val_to_index(hw, cdns_sierra_pll_mux_table, 0, val), clk_hw_get_name(hw));
+
+	if (strstr(clk_hw_get_name(hw), clk_names[CDNS_SIERRA_PLL_CMNLC1])) {
+		index = clk_mux_val_to_index(hw, cdns_sierra_pll_mux_table_plllc1, 0, val);
+		printk("pcie: %s -- PLL_CMNLC1 parent index = %d, current parent = %s\n", __func__, index, index ? "refrcv" : "refrcv1");
+		if (index) {
+			regmap_field_write(plllc1en_field, 1);
+			regmap_field_write(termen_field, 1);
+		}
+	} else {
+		index = clk_mux_val_to_index(hw, cdns_sierra_pll_mux_table, 0, val);
+		printk("pcie: %s -- PLL_CMNLC parent index = %d, current parent = %s\n", __func__, index, index ? "refrcv1" : "refrcv");
+	}
+
+	return index;
+
 }
 
 static int cdns_sierra_pll_mux_set_parent(struct clk_hw *hw, u8 index)
@@ -622,6 +642,8 @@ static int cdns_sierra_pll_mux_set_parent(struct clk_hw *hw, u8 index)
 	struct regmap_field *field = mux->pfdclk_sel_preg;
 	int val, ret;
 
+	printk("pcie: %s -- index = %d name = %s\n", __func__, index, clk_hw_get_name(hw));
+
 	ret = regmap_field_write(plllc1en_field, 0);
 	ret |= regmap_field_write(termen_field, 0);
 	if (index == 1) {
@@ -629,7 +651,15 @@ static int cdns_sierra_pll_mux_set_parent(struct clk_hw *hw, u8 index)
 		ret |= regmap_field_write(termen_field, 1);
 	}
 
-	val = cdns_sierra_pll_mux_table[index];
+	if (strstr(clk_hw_get_name(hw), clk_names[CDNS_SIERRA_PLL_CMNLC1])) {
+		val = cdns_sierra_pll_mux_table_plllc1[index];
+		printk("pcie: %s -- PLL_CMNLC1 index = %d, setting parent = %s\n", __func__, index, index ? "refrcv" : "refrcv1");
+	} else {
+		val = cdns_sierra_pll_mux_table[index];
+		printk("pcie: %s -- PLL_CMNLC index = %d, setting parent = %s\n", __func__, index, index ? "refrcv1" : "refrcv");
+	}
+
+	//val = cdns_sierra_pll_mux_table[index];
 	ret |= regmap_field_write(field, val);
 
 	return ret;
@@ -1559,7 +1589,7 @@ static struct cdns_sierra_vals pcie_phy_pcs_cmn_vals = {
 
 /* refclk100MHz_32b_PCIe_cmn_pll_ext_ssc, multiprotocol with QSGMII */
 static const struct cdns_reg_pairs pcie_100_ext_ssc_plllc_cmn_regs[] = {
-	{0x0002, SIERRA_CMN_PLLLC1_GEN_PREG},
+	//{0x0002, SIERRA_CMN_PLLLC1_GEN_PREG},
 //
 	{0x2106, SIERRA_CMN_PLLLC_LF_COEFF_MODE1_PREG},
 	{0x2106, SIERRA_CMN_PLLLC_LF_COEFF_MODE0_PREG},
