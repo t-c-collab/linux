@@ -1347,8 +1347,9 @@
 		 * the PHY driver.
 		 */
 		reg = <0x0 0xa000000 0x0 0x30a00>, /* DSS_EDP0_V2A_CORE_VP_REGS_APB */
-		      <0x0 0x4f40000 0x0 0x20>;    /* DSS_EDP0_INTG_CFG_VP */
-		reg-names = "mhdptx", "j721e-intg";
+		      <0x0 0x4f40000 0x0 0x20>,    /* DSS_EDP0_INTG_CFG_VP */
+		      <0x0 0x4f48000 0x0 0x74>;    /* DSS_EDP0_V2A_CORE_VP_REGS_SAPB */
+		reg-names = "mhdptx", "j721e-intg", "mhdptx-sapb";
 
 		status = "disabled";
 
