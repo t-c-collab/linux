@@ -597,7 +597,7 @@
 		#address-cells = <1>;
 		#size-cells = <1>;
 		power-domains = <&k3_pds 297 TI_SCI_PD_EXCLUSIVE>;
-		clocks = <&k3_clks 297 1>, <&k3_clks 297 9>, <&dummy_cmn_refclk>;
+		clocks = <&k3_clks 297 1>, <&k3_clks 297 9>, <&cmn_refclk>;
 		clock-names = "fck", "core_ref_clk", "ext_ref_clk";
 		assigned-clocks = <&k3_clks 297 9>;
 		assigned-clock-parents = <&k3_clks 297 10>;
@@ -608,7 +608,7 @@
 			<0xa030a00 0x0 0xa030a00 0x40>;
 
 		wiz4_pll0_refclk: pll0-refclk {
-			clocks = <&k3_clks 297 9>, <&dummy_cmn_refclk>;
+			clocks = <&k3_clks 297 9>, <&cmn_refclk>;
 			clock-output-names = "wiz4_pll0_refclk";
 			#clock-cells = <0>;
 			assigned-clocks = <&wiz4_pll0_refclk>;
@@ -616,7 +616,7 @@
 		};
 
 		wiz4_pll1_refclk: pll1-refclk {
-			clocks = <&k3_clks 297 9>, <&dummy_cmn_refclk>;
+			clocks = <&k3_clks 297 9>, <&cmn_refclk>;
 			clock-output-names = "wiz4_pll1_refclk";
 			#clock-cells = <0>;
 			assigned-clocks = <&wiz4_pll1_refclk>;
@@ -624,7 +624,7 @@
 		};
 
 		wiz4_refclk_dig: refclk-dig {
-			clocks = <&k3_clks 297 9>, <&dummy_cmn_refclk>;
+			clocks = <&k3_clks 297 9>, <&cmn_refclk>;
 			clock-output-names = "wiz4_refclk_dig";
 			#clock-cells = <0>;
 			assigned-clocks = <&wiz4_refclk_dig>;
