@@ -5,6 +5,7 @@
 
 #include <linux/dma-buf-map.h>
 
+#include <drm/drm_fourcc.h>
 #include <drm/drm_plane.h>
 
 struct drm_simple_display_pipe;
@@ -40,7 +41,15 @@ struct drm_shadow_plane_state {
 	 * The memory mappings stored in map should be established in the plane's
 	 * prepare_fb callback and removed in the cleanup_fb callback.
 	 */
-	struct dma_buf_map map[4];
+	struct dma_buf_map map[DRM_FORMAT_MAX_PLANES];
+
+	/**
+	 * @data: Address of each framebuffer BO's data
+	 *
+	 * The address of the data stored in each mapping. This is different
+	 * for framebuffers with non-zero offset fields.
+	 */
+	struct dma_buf_map data[DRM_FORMAT_MAX_PLANES];
 };
 
 /**
