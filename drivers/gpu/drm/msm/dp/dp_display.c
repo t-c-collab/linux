@@ -216,6 +216,7 @@ static int dp_display_bind(struct device *dev, struct device *master,
 		goto end;
 	}
 
+	dp->aux->drm_dev = drm;
 	rc = dp_aux_register(dp->aux);
 	if (rc) {
 		DRM_ERROR("DRM DP AUX register failed\n");
@@ -1313,6 +1314,9 @@ static int dp_pm_resume(struct device *dev)
 		dp->dp_display.is_connected = true;
 	else
 		dp->dp_display.is_connected = false;
+
+	dp_display_handle_plugged_change(g_dp_display,
+				dp->dp_display.is_connected);
 
 	DRM_DEBUG_DP("After, sink_count=%d is_connected=%d core_inited=%d power_on=%d\n",
 			dp->link->sink_count, dp->dp_display.is_connected,
