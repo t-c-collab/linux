@@ -314,6 +314,8 @@
 
 &ufsphy {
 	status = "okay";
+	vdda-phy-supply = <&vreg_l1a_0p875>;
+	vdda-pll-supply = <&vreg_l2a_1p2>;
 };
 
 &usb3 {
