@@ -104,6 +104,7 @@ extern const int phy_10gbit_features_array[1];
  * @PHY_INTERFACE_MODE_XLGMII:40 gigabit media-independent interface
  * @PHY_INTERFACE_MODE_MOCA: Multimedia over Coax
  * @PHY_INTERFACE_MODE_QSGMII: Quad SGMII
+ * @PHY_INTERFACE_MODE_QSGMII_SUB: Quad SGMII Sub
  * @PHY_INTERFACE_MODE_TRGMII: Turbo RGMII
  * @PHY_INTERFACE_MODE_100BASEX: 100 BaseX
  * @PHY_INTERFACE_MODE_1000BASEX: 1000 BaseX
@@ -139,6 +140,7 @@ typedef enum {
 	PHY_INTERFACE_MODE_XLGMII,
 	PHY_INTERFACE_MODE_MOCA,
 	PHY_INTERFACE_MODE_QSGMII,
+	PHY_INTERFACE_MODE_QSGMII_SUB,
 	PHY_INTERFACE_MODE_TRGMII,
 	PHY_INTERFACE_MODE_100BASEX,
 	PHY_INTERFACE_MODE_1000BASEX,
@@ -245,6 +247,8 @@ static inline const char *phy_modes(phy_interface_t interface)
 		return "moca";
 	case PHY_INTERFACE_MODE_QSGMII:
 		return "qsgmii";
+	case PHY_INTERFACE_MODE_QSGMII_SUB:
+		return "qsgmii-sub";
 	case PHY_INTERFACE_MODE_TRGMII:
 		return "trgmii";
 	case PHY_INTERFACE_MODE_1000BASEX:
