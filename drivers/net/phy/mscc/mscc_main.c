@@ -1590,7 +1590,8 @@ static int vsc8584_config_init(struct phy_device *phydev)
 
 	val = phy_base_read(phydev, MSCC_PHY_MAC_CFG_FASTLINK);
 	val &= ~MAC_CFG_MASK;
-	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII) {
+	if (phydev->interface == PHY_INTERFACE_MODE_QSGMII ||
+	    phydev->interface == PHY_INTERFACE_MODE_QSGMII_SUB) {
 		val |= MAC_CFG_QSGMII;
 	} else if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
 		val |= MAC_CFG_SGMII;
