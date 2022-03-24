@@ -17,56 +17,6 @@
 		bootargs = "console=ttyS2,115200n8 earlycon=ns16550a,mmio32,0x02800000";
 	};
 
-	cpsw5g_virt_mac: main_r5fss_cpsw5g_virt_mac0 {
-		compatible = "ti,j721e-cpsw-virt-mac";
-		dma-coherent;
-		ti,psil-base = <0x4a00>;
-		ti,remote-name = "mpu_1_0_ethswitch-device-0";
-
-		dmas = <&main_udmap 0xca00>,
-		       <&main_udmap 0xca01>,
-		       <&main_udmap 0xca02>,
-		       <&main_udmap 0xca03>,
-		       <&main_udmap 0xca04>,
-		       <&main_udmap 0xca05>,
-		       <&main_udmap 0xca06>,
-		       <&main_udmap 0xca07>,
-		       <&main_udmap 0x4a00>;
-		dma-names = "tx0", "tx1", "tx2", "tx3",
-			    "tx4", "tx5", "tx6", "tx7",
-			    "rx";
-
-		virt_emac_port {
-			ti,label = "virt-port";
-			/* local-mac-address = [0 0 0 0 0 0]; */
-		};
-	};
-
-	cpsw9g_virt_maconly: main-r5fss-cpsw9g-virt-mac1 {
-		compatible = "ti,j721e-cpsw-virt-mac";
-		dma-coherent;
-		ti,psil-base = <0x4a00>;
-		ti,remote-name = "mpu_1_0_ethmac-device-1";
-
-		dmas = <&main_udmap 0xca00>,
-		       <&main_udmap 0xca01>,
-		       <&main_udmap 0xca02>,
-		       <&main_udmap 0xca03>,
-		       <&main_udmap 0xca04>,
-		       <&main_udmap 0xca05>,
-		       <&main_udmap 0xca06>,
-		       <&main_udmap 0xca07>,
-		       <&main_udmap 0x4a00>;
-		dma-names = "tx0", "tx1", "tx2", "tx3",
-			    "tx4", "tx5", "tx6", "tx7",
-			    "rx";
-
-		virt_emac_port {
-			ti,label = "virt-port";
-			/* local-mac-address = [0 0 0 0 0 0]; */
-		};
-	};
-
 	evm_12v0: fixedregulator-evm12v0 {
 		/* main supply */
 		compatible = "regulator-fixed";
@@ -192,6 +142,14 @@
 			J721E_IOPAD(0xd0, PIN_OUTPUT, 7) /* (T5) SPI0_D1.GPIO0_55 */
 		>;
 	};
+
+	mdio0_pins_default: mdio0_pins_default {
+		pinctrl-single,pins = <
+			J721E_IOPAD(0x00a8, PIN_OUTPUT, 5) /* (W19) UART8_TXD.MDIO0_MDC */
+			J721E_IOPAD(0x00a4, PIN_INPUT, 5) /* (W14) UART8_RXD.MDIO0_MDIO */
+			J721E_IOPAD(0x168, PIN_OUTPUT, 1)
+		>;
+	};
 };
 
 &wkup_uart0 {
@@ -297,6 +255,12 @@
 		reg = <0x22>;
 		gpio-controller;
 		#gpio-cells = <2>;
+		qsgmii_line {
+			gpio-hog;
+			gpios = <16 GPIO_ACTIVE_HIGH>;
+			output-low;
+			line-name = "qsgmii-pwrdn-line";
+		};
 	};
 };
 
@@ -386,6 +350,58 @@
 		#phy-cells = <0>;
 		cdns,phy-type = <PHY_TYPE_QSGMII>;
 		resets = <&serdes_wiz0 3>;
+	};
+};
+
+&cpsw0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mdio0_pins_default>;
+};
+
+&cpsw0_port1 {
+	phy-handle = <&cpsw5g_phy0>;
+	phy-mode = "qsgmii";
+	mac-address = [00 00 00 00 00 00];
+	phys = <&cpsw0_phy_gmii_sel 1>;
+};
+
+&cpsw0_port2 {
+	phy-handle = <&cpsw5g_phy1>;
+	phy-mode = "qsgmii-sub";
+	mac-address = [00 00 00 00 00 00];
+	phys = <&cpsw0_phy_gmii_sel 2>;
+};
+
+&cpsw0_port3 {
+	phy-handle = <&cpsw5g_phy2>;
+	phy-mode = "qsgmii-sub";
+	mac-address = [00 00 00 00 00 00];
+	phys = <&cpsw0_phy_gmii_sel 3>;
+};
+
+&cpsw0_port4 {
+	phy-handle = <&cpsw5g_phy3>;
+	phy-mode = "qsgmii-sub";
+	mac-address = [00 00 00 00 00 00];
+	phys = <&cpsw0_phy_gmii_sel 4>;
+};
+
+&cpsw5g_mdio {
+	bus_freq = <1000000>;
+	reset-gpios = <&exp2 17 GPIO_ACTIVE_LOW>;
+	reset-post-delay-us = <120000>;
+
+	cpsw5g_phy0: ethernet-phy@16 {
+		reg = <16>;
+	};
+	cpsw5g_phy1: ethernet-phy@17 {
+		reg = <17>;
+	};
+	cpsw5g_phy2: ethernet-phy@18 {
+		reg = <18>;
+	};
+	cpsw5g_phy3: ethernet-phy@19 {
+		reg = <19>;
 	};
 };
 

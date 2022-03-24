@@ -30,6 +30,11 @@
 		serial9 = &main_uart7;
 		serial10 = &main_uart8;
 		serial11 = &main_uart9;
+		ethernet0 = &cpsw_port1;
+		ethernet1 = &cpsw0_port1;
+		ethernet2 = &cpsw0_port2;
+		ethernet3 = &cpsw0_port3;
+		ethernet4 = &cpsw0_port4;
 	};
 
 	chosen { };
