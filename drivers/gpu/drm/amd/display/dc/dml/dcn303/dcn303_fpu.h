@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Advanced Micro Devices, Inc.
+ * Copyright 2019-2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,14 +19,14 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
 
-#include "amdgpu.h"
-#include "amdgpu_ras.h"
+#ifndef __DCN303_FPU_H__
+#define __DCN303_FPU_H__
 
-void amdgpu_mmhub_ras_fini(struct amdgpu_device *adev)
-{
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__MMHUB) &&
-			adev->mmhub.ras_if)
-		amdgpu_ras_block_late_fini(adev, adev->mmhub.ras_if);
-}
+void dcn303_fpu_update_bw_bounding_box(struct dc *dc, struct clk_bw_params *bw_params);
+void dcn303_fpu_init_soc_bounding_box(struct bp_soc_bb_info bb_info);
+
+#endif /* __DCN303_FPU_H__*/

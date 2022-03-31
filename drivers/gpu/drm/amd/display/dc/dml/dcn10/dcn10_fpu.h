@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /*
  * Copyright 2021 Advanced Micro Devices, Inc.
  *
@@ -19,14 +20,11 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
 
-#include "amdgpu.h"
-#include "amdgpu_ras.h"
+#ifndef __DCN10_FPU_H__
+#define __DCN10_FPU_H__
 
-void amdgpu_hdp_ras_fini(struct amdgpu_device *adev)
-{
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__HDP) &&
-	    adev->hdp.ras_if)
-		amdgpu_ras_block_late_fini(adev, adev->hdp.ras_if);
-}
+#endif /* __DCN20_FPU_H__ */
