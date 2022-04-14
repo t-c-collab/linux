@@ -331,18 +331,21 @@
 				reg = <2>;
 				ti,mac-only;
 				label = "port2";
+				status = "disabled";
 			};
 
 			cpsw0_port3: port@3 {
 				reg = <3>;
 				ti,mac-only;
 				label = "port3";
+				status = "disabled";
 			};
 
 			cpsw0_port4: port@4 {
 				reg = <4>;
 				ti,mac-only;
 				label = "port4";
+				status = "disabled";
 			};
 		};
 
