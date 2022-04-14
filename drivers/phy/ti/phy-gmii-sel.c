@@ -24,6 +24,7 @@
 
 /* AM64, AM65, J7200 and J721e Soc specific definitions */
 /* for the CONTROL port */
+#define J72XX_GMII_SEL_MODE_SGMII	3
 #define J72XX_GMII_SEL_MODE_QSGMII	4
 #define J72XX_GMII_SEL_MODE_QSGMII_SUB	6
 
@@ -91,6 +92,10 @@ static int phy_gmii_sel_mode(struct phy *phy, enum phy_mode mode, int submode)
 	case PHY_INTERFACE_MODE_MII:
 	case PHY_INTERFACE_MODE_GMII:
 		gmii_sel_mode = AM33XX_GMII_SEL_MODE_MII;
+		break;
+
+	case PHY_INTERFACE_MODE_SGMII:
+		gmii_sel_mode = J72XX_GMII_SEL_MODE_SGMII;
 		break;
 
 	case PHY_INTERFACE_MODE_QSGMII:
