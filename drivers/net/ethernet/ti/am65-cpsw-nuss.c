@@ -1507,6 +1507,57 @@ static const struct net_device_ops am65_cpsw_nuss_netdev_ops = {
 	.ndo_get_devlink_port   = am65_cpsw_ndo_get_devlink_port,
 };
 
+void am65_cpsw_disable_phy(struct phy *phy)
+{
+	phy_power_off(phy);
+	phy_exit(phy);
+}
+
+int am65_cpsw_enable_phy(struct phy *phy)
+{
+	int ret;
+
+	ret = phy_init(phy);
+	if (ret < 0)
+		goto err_phy;
+
+	ret = phy_power_on(phy);
+	if (ret < 0) {
+		phy_exit(phy);
+		goto err_phy;
+	}
+	return 0;
+
+err_phy:
+	am65_cpsw_disable_phy(phy);
+	return ret;
+}
+
+static int am65_cpsw_init_phy(struct device *dev, struct device_node *port_np)
+{
+	struct device_link *link;
+	const char *name = "serdes-phy";
+	struct phy *phy;
+	int ret;
+
+	phy = devm_of_phy_optional_get(dev, port_np, name);
+	if (!phy)
+		return 0;
+
+	link = device_link_add(dev, &phy->dev, DL_FLAG_STATELESS);
+	if (!link) {
+		devm_phy_put(dev, phy);
+		ret = -EINVAL;
+		return ret;
+	}
+
+	ret =  am65_cpsw_enable_phy(phy);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
 static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned int mode,
 				      const struct phylink_link_state *state)
 {
@@ -1531,6 +1582,8 @@ static void am65_cpsw_nuss_mac_link_down(struct phylink_config *config, unsigned
 	struct net_device *ndev = port->ndev;
 	int tmo;
 
+	/* disable phy */
+	am65_cpsw_disable_phy(slave->ifphy);
 	/* disable forwarding */
 	cpsw_ale_control_set(common->ale, port->port_id, ALE_PORT_STATE, ALE_PORT_STATE_DISABLE);
 
@@ -1575,6 +1628,9 @@ static void am65_cpsw_nuss_mac_link_up(struct phylink_config *config, struct phy
 		mac_control |= CPSW_SL_CTL_TX_FLOW_EN;
 
 	cpsw_sl_ctl_set(port->slave.mac_sl, mac_control);
+
+	/* enable phy */
+	am65_cpsw_enable_phy(slave->ifphy);
 
 	/* enable forwarding */
 	cpsw_ale_control_set(common->ale, port->port_id, ALE_PORT_STATE, ALE_PORT_STATE_FORWARD);
@@ -1982,6 +2038,11 @@ static int am65_cpsw_nuss_init_slave_ports(struct am65_cpsw_common *common)
 				port_np, ret);
 			return ret;
 		}
+
+		/* Initialize the phy for the port */
+		ret = am65_cpsw_init_phy(dev, port_np);
+		if (ret)
+			return ret;
 
 		port->slave.mac_only =
 				of_property_read_bool(port_np, "ti,mac-only");
