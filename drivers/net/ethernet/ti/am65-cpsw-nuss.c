@@ -9,6 +9,7 @@
 #include <linux/etherdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/interrupt.h>
+#include <linux/irqdomain.h>
 #include <linux/kernel.h>
 #include <linux/kmemleak.h>
 #include <linux/module.h>
@@ -74,7 +75,16 @@
 #define AM65_CPSW_PORTN_REG_TS_CTL_LTYPE2       0x31C
 
 #define AM65_CPSW_SGMII_CONTROL_REG		0x010
+#define AM65_CPSW_SGMII_MR_ADV_ABILITY_REG	0x018
 #define AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE	BIT(0)
+#define AM65_CPSW_SGMII_CONTROL_MASTER_MODE	BIT(5)
+#define AM65_CPSW_SGMII_CONTROL_MR_AN_RESTART	BIT(1)
+
+#define MAC2MAC_MR_ADV_ABILITY_BASE		(BIT(15) | BIT(0))
+#define MAC2MAC_MR_ADV_ABILITY_FULLDUPLEX	BIT(12)
+#define MAC2MAC_MR_ADV_ABILITY_1G		BIT(11)
+#define MAC2MAC_MR_ADV_ABILITY_100M		BIT(10)
+#define MAC2PHY_MR_ADV_ABILITY			BIT(0)
 
 #define AM65_CPSW_CTL_VLAN_AWARE		BIT(1)
 #define AM65_CPSW_CTL_P0_ENABLE			BIT(2)
@@ -1558,18 +1568,92 @@ static int am65_cpsw_init_phy(struct device *dev, struct device_node *port_np)
 	return 0;
 }
 
+static void am65_cpsw_nuss_mac_control(struct am65_cpsw_port *port, phy_interface_t interface,
+				       int speed, int duplex, bool tx_pause, bool rx_pause)
+{
+	u32 mac_control = CPSW_SL_CTL_GMII_EN;
+
+	if (speed == SPEED_1000)
+		mac_control |= CPSW_SL_CTL_GIG;
+	if (speed == SPEED_10 && interface == PHY_INTERFACE_MODE_RGMII)
+	/* Can be used with in band mode only */
+		mac_control |= CPSW_SL_CTL_EXT_EN;
+	if (speed == SPEED_100 && interface == PHY_INTERFACE_MODE_RMII)
+		mac_control |= CPSW_SL_CTL_IFCTL_A;
+	if (duplex)
+		mac_control |= CPSW_SL_CTL_FULLDUPLEX;
+
+	/* rx_pause/tx_pause */
+	if (rx_pause)
+		mac_control |= CPSW_SL_CTL_RX_FLOW_EN;
+
+	if (tx_pause)
+		mac_control |= CPSW_SL_CTL_TX_FLOW_EN;
+
+	cpsw_sl_ctl_set(port->slave.mac_sl, mac_control);
+}
+
 static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned int mode,
 				      const struct phylink_link_state *state)
 {
 	struct am65_cpsw_slave_data *slave = container_of(config, struct am65_cpsw_slave_data,
 							  phylink_config);
 	struct am65_cpsw_port *port = container_of(slave, struct am65_cpsw_port, slave);
+	struct am65_cpsw_common *common = port->common;
+	struct fwnode_handle *fwnode, *fixed_node;
+	struct net_device *ndev = port->ndev;
+	bool fixed_link = false;
+	u32 mr_adv_ability = MAC2MAC_MR_ADV_ABILITY_BASE;
 
-	if (state->interface == PHY_INTERFACE_MODE_QSGMII ||
-	    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB)
-		writel(AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE,
-		       port->sgmii_base + AM65_CPSW_SGMII_CONTROL_REG);
+	/* Detecting fixed-link */
+	fwnode = of_node_to_fwnode(port->slave.phy_node);
+	if (fwnode) {
+		fixed_node = fwnode_get_named_child_node(fwnode, "fixed-link");
+		if (fixed_node)
+			fixed_link = true;
+	}
 
+	if (fixed_link) {
+		am65_cpsw_nuss_mac_control(port, state->interface, state->speed,
+					   state->duplex, state->pause & MLO_PAUSE_TX,
+					   state->pause & MLO_PAUSE_RX);
+
+		if (state->speed == SPEED_1000)
+			mr_adv_ability |= MAC2MAC_MR_ADV_ABILITY_1G;
+		if (state->speed == SPEED_100)
+			mr_adv_ability |= MAC2MAC_MR_ADV_ABILITY_100M;
+		if (state->duplex)
+			mr_adv_ability |= MAC2MAC_MR_ADV_ABILITY_FULLDUPLEX;
+
+		if (state->interface == PHY_INTERFACE_MODE_SGMII ||
+		    state->interface == PHY_INTERFACE_MODE_QSGMII ||
+		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB) {
+			writel(mr_adv_ability,
+			       port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
+			writel((AM65_CPSW_SGMII_CONTROL_MASTER_MODE |
+			       AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE),
+			       port->sgmii_base + AM65_CPSW_SGMII_CONTROL_REG);
+		}
+
+		/* enable phy */
+		am65_cpsw_enable_phy(slave->ifphy);
+		/* enable forwarding */
+		cpsw_ale_control_set(common->ale, port->port_id, ALE_PORT_STATE,
+				     ALE_PORT_STATE_FORWARD);
+
+		am65_cpsw_qos_link_up(ndev, state->speed, state->duplex);
+		netif_tx_wake_all_queues(ndev);
+
+	} else {
+		if (state->interface == PHY_INTERFACE_MODE_SGMII ||
+		    state->interface == PHY_INTERFACE_MODE_QSGMII ||
+		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB) {
+			writel(MAC2PHY_MR_ADV_ABILITY,
+			       port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
+			writel(AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE,
+			       port->sgmii_base + AM65_CPSW_SGMII_CONTROL_REG);
+		}
+	}
 }
 
 static void am65_cpsw_nuss_mac_link_down(struct phylink_config *config, unsigned int mode,
@@ -1607,31 +1691,12 @@ static void am65_cpsw_nuss_mac_link_up(struct phylink_config *config, struct phy
 							  phylink_config);
 	struct am65_cpsw_port *port = container_of(slave, struct am65_cpsw_port, slave);
 	struct am65_cpsw_common *common = port->common;
-	u32 mac_control = CPSW_SL_CTL_GMII_EN;
 	struct net_device *ndev = port->ndev;
 
-	if (speed == SPEED_1000)
-		mac_control |= CPSW_SL_CTL_GIG;
-	if (speed == SPEED_10 && interface == PHY_INTERFACE_MODE_RGMII)
-		/* Can be used with in band mode only */
-		mac_control |= CPSW_SL_CTL_EXT_EN;
-	if (speed == SPEED_100 && interface == PHY_INTERFACE_MODE_RMII)
-		mac_control |= CPSW_SL_CTL_IFCTL_A;
-	if (duplex)
-		mac_control |= CPSW_SL_CTL_FULLDUPLEX;
-
-	/* rx_pause/tx_pause */
-	if (rx_pause)
-		mac_control |= CPSW_SL_CTL_RX_FLOW_EN;
-
-	if (tx_pause)
-		mac_control |= CPSW_SL_CTL_TX_FLOW_EN;
-
-	cpsw_sl_ctl_set(port->slave.mac_sl, mac_control);
+	am65_cpsw_nuss_mac_control(port, interface, speed, duplex, tx_pause, rx_pause);
 
 	/* enable phy */
 	am65_cpsw_enable_phy(slave->ifphy);
-
 	/* enable forwarding */
 	cpsw_ale_control_set(common->ale, port->port_id, ALE_PORT_STATE, ALE_PORT_STATE_FORWARD);
 
@@ -2155,11 +2220,13 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 	port->slave.phylink_config.mac_capabilities = MAC_SYM_PAUSE | MAC_10 | MAC_100 | MAC_1000FD;
 
 	phy_interface_set_rgmii(port->slave.phylink_config.supported_interfaces);
+	__set_bit(PHY_INTERFACE_MODE_SGMII, port->slave.phylink_config.supported_interfaces);
 	__set_bit(PHY_INTERFACE_MODE_QSGMII, port->slave.phylink_config.supported_interfaces);
 	__set_bit(PHY_INTERFACE_MODE_QSGMII_SUB, port->slave.phylink_config.supported_interfaces);
 
-	phylink = phylink_create(&port->slave.phylink_config, dev->fwnode, port->slave.phy_if,
-				 &am65_cpsw_phylink_mac_ops);
+	phylink = phylink_create(&port->slave.phylink_config,
+				 of_node_to_fwnode(port->slave.phy_node),
+				 port->slave.phy_if, &am65_cpsw_phylink_mac_ops);
 	if (IS_ERR(phylink))
 		return PTR_ERR(phylink);
 
