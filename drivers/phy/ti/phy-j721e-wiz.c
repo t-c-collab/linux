@@ -1019,14 +1019,20 @@ static int wiz_phy_reset_assert(struct reset_controller_dev *rcdev,
 
 static int wiz_phy_fullrt_div(struct wiz *wiz, int lane)
 {
-	if (wiz->type != AM64_WIZ_10G)
-		if (wiz->type != J721E_WIZ_10G)
-			return 0;
+	if (wiz->type == AM64_WIZ_10G) {
+		if (wiz->lane_phy_type[lane] == PHY_TYPE_PCIE)
+			return regmap_field_write(wiz->p0_fullrt_div[lane], 0x1);
+	}
 
-	if (wiz->lane_phy_type[lane] == PHY_TYPE_PCIE)
-		return regmap_field_write(wiz->p0_fullrt_div[lane], 0x1);
-	else if (wiz->lane_phy_type[lane] == PHY_TYPE_SGMII)
-		return regmap_field_write(wiz->p0_fullrt_div[lane], 0x2);
+	else if (wiz->type == J721E_WIZ_10G) {
+		if (wiz->lane_phy_type[lane] == PHY_TYPE_SGMII)
+			return regmap_field_write(wiz->p0_fullrt_div[lane], 0x2);
+	}
+
+	else if (wiz->type == J721E_WIZ_16G) {
+		if (wiz->lane_phy_type[lane] == PHY_TYPE_SGMII)
+			return regmap_field_write(wiz->p0_fullrt_div[lane], 0x2);
+	}
 
 	return 0;
 }
