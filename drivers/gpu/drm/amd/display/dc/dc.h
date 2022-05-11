@@ -47,7 +47,7 @@ struct aux_payload;
 struct set_config_cmd_payload;
 struct dmub_notification;
 
-#define DC_VER "3.2.177"
+#define DC_VER "3.2.183"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -340,6 +340,7 @@ struct dc_config {
 	bool is_asymmetric_memory;
 	bool is_single_rank_dimm;
 	bool use_pipe_ctx_sync_logic;
+	bool ignore_dpref_ss;
 };
 
 enum visual_confirm {
@@ -356,6 +357,12 @@ enum dc_psr_power_opts {
 	psr_power_opt_smu_opt_static_screen = 0x1,
 	psr_power_opt_z10_static_screen = 0x10,
 	psr_power_opt_ds_disable_allow = 0x100,
+};
+
+enum dml_hostvm_override_opts {
+	DML_HOSTVM_NO_OVERRIDE = 0x0,
+	DML_HOSTVM_OVERRIDE_FALSE = 0x1,
+	DML_HOSTVM_OVERRIDE_TRUE = 0x2,
 };
 
 enum dcc_option {
@@ -665,6 +672,7 @@ struct dc_debug_options {
 	uint32_t edid_read_retry_times;
 	bool remove_disconnect_edp;
 	unsigned int force_odm_combine; //bit vector based on otg inst
+	unsigned int seamless_boot_odm_combine;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	unsigned int force_odm_combine_4to1; //bit vector based on otg inst
 	bool disable_z9_mpc;
@@ -729,8 +737,8 @@ struct dc_debug_options {
 	bool apply_vendor_specific_lttpr_wa;
 	bool extended_blank_optimization;
 	union aux_wake_wa_options aux_wake_wa;
-	bool ignore_dpref_ss;
 	uint8_t psr_power_use_phy_fsm;
+	enum dml_hostvm_override_opts dml_hostvm_override;
 };
 
 struct gpu_info_soc_bounding_box_v1_0;

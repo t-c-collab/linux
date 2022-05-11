@@ -42,7 +42,6 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_print.h>
-#include <drm/drm_scdc_helper.h>
 
 #include "drm_crtc_internal.h"
 
@@ -1611,7 +1610,7 @@ static void edid_header_fix(void *edid)
 
 /**
  * drm_edid_header_is_valid - sanity check the header of the base EDID block
- * @raw_edid: pointer to raw base EDID block
+ * @_edid: pointer to raw base EDID block
  *
  * Sanity check the header of the base EDID block.
  *
@@ -1828,7 +1827,7 @@ static void edid_block_dump(const char *level, const void *block, int block_num)
 
 /**
  * drm_edid_block_valid - Sanity check the EDID block (base or extension)
- * @raw_edid: pointer to raw EDID block
+ * @_block: pointer to raw EDID block
  * @block_num: type of block to validate (0 for base, extension otherwise)
  * @print_bad_edid: if true, dump bad EDID blocks to the console
  * @edid_corrupt: if true, the header or checksum is invalid
@@ -2113,8 +2112,8 @@ static enum edid_block_status edid_block_read(void *block, unsigned int block_nu
 /**
  * drm_do_get_edid - get EDID data using a custom EDID block read function
  * @connector: connector we're probing
- * @get_edid_block: EDID block read function
- * @data: private data passed to the block read function
+ * @read_block: EDID block read function
+ * @context: private data passed to the block read function
  *
  * When the I2C adapter connected to the DDC bus is hidden behind a device that
  * exposes a different interface to read EDID blocks this function can be used
@@ -2385,13 +2384,9 @@ static u32 edid_get_quirks(const struct edid *edid)
 #define MODE_SIZE(m) ((m)->hdisplay * (m)->vdisplay)
 #define MODE_REFRESH_DIFF(c,t) (abs((c) - (t)))
 
-/**
- * edid_fixup_preferred - set preferred modes based on quirk list
- * @connector: has mode list to fix up
- * @quirks: quirks list
- *
- * Walk the mode list for @connector, clearing the preferred status
- * on existing modes and setting it anew for the right mode ala @quirks.
+/*
+ * Walk the mode list for connector, clearing the preferred status on existing
+ * modes and setting it anew for the right mode ala quirks.
  */
 static void edid_fixup_preferred(struct drm_connector *connector,
 				 u32 quirks)
@@ -2660,10 +2655,7 @@ drm_gtf2_2j(const struct edid *edid)
 	return descriptor ? descriptor->data.other_data.data.range.formula.gtf2.j : 0;
 }
 
-/**
- * standard_timing_level - get std. timing level(CVT/GTF/DMT)
- * @edid: EDID block to scan
- */
+/* Get standard timing level (CVT/GTF/DMT). */
 static int standard_timing_level(const struct edid *edid)
 {
 	if (edid->revision >= 2) {
@@ -2697,12 +2689,7 @@ static int drm_mode_hsync(const struct drm_display_mode *mode)
 	return DIV_ROUND_CLOSEST(mode->clock, mode->htotal);
 }
 
-/**
- * drm_mode_std - convert standard mode info (width, height, refresh) into mode
- * @connector: connector of for the EDID block
- * @edid: EDID block to scan
- * @t: standard timing params
- *
+/*
  * Take the standard timing params (in this case width, aspect, and refresh)
  * and convert them into a real mode using CVT/GTF/DMT.
  */
@@ -2858,15 +2845,10 @@ drm_mode_do_interlace_quirk(struct drm_display_mode *mode,
 	mode->flags |= DRM_MODE_FLAG_INTERLACE;
 }
 
-/**
- * drm_mode_detailed - create a new mode from an EDID detailed timing section
- * @dev: DRM device (needed to create new mode)
- * @edid: EDID block
- * @timing: EDID detailed timing info
- * @quirks: quirks to apply
- *
- * An EDID detailed timing block contains enough info for us to create and
- * return a new struct drm_display_mode.
+/*
+ * Create a new mode from an EDID detailed timing section. An EDID detailed
+ * timing block contains enough info for us to create and return a new struct
+ * drm_display_mode.
  */
 static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 						  const struct edid *edid,
@@ -3248,13 +3230,10 @@ do_established_modes(const struct detailed_timing *timing, void *c)
 	closure->modes += drm_est3_modes(closure->connector, timing);
 }
 
-/**
- * add_established_modes - get est. modes from EDID and add them
- * @connector: connector to add mode(s) to
- * @edid: EDID block to scan
- *
- * Each EDID block contains a bitmap of the supported "established modes" list
- * (defined above).  Tease them out and add them to the global modes list.
+/*
+ * Get established modes from EDID and add them. Each EDID block contains a
+ * bitmap of the supported "established modes" list (defined above). Tease them
+ * out and add them to the global modes list.
  */
 static int
 add_established_modes(struct drm_connector *connector, const struct edid *edid)
@@ -3312,13 +3291,10 @@ do_standard_modes(const struct detailed_timing *timing, void *c)
 	}
 }
 
-/**
- * add_standard_modes - get std. modes from EDID and add them
- * @connector: connector to add mode(s) to
- * @edid: EDID block to scan
- *
- * Standard modes can be calculated using the appropriate standard (DMT,
- * GTF or CVT. Grab them from @edid and add them to the list.
+/*
+ * Get standard modes from EDID and add them. Standard modes can be calculated
+ * using the appropriate standard (DMT, GTF, or CVT). Grab them from EDID and
+ * add them to the list.
  */
 static int
 add_standard_modes(struct drm_connector *connector, const struct edid *edid)
@@ -5883,78 +5859,6 @@ static bool is_hdmi2_sink(const struct drm_connector *connector)
 		connector->display_info.color_formats & DRM_COLOR_FORMAT_YCBCR420;
 }
 
-static inline bool is_eotf_supported(u8 output_eotf, u8 sink_eotf)
-{
-	return sink_eotf & BIT(output_eotf);
-}
-
-/**
- * drm_hdmi_infoframe_set_hdr_metadata() - fill an HDMI DRM infoframe with
- *                                         HDR metadata from userspace
- * @frame: HDMI DRM infoframe
- * @conn_state: Connector state containing HDR metadata
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int
-drm_hdmi_infoframe_set_hdr_metadata(struct hdmi_drm_infoframe *frame,
-				    const struct drm_connector_state *conn_state)
-{
-	struct drm_connector *connector;
-	struct hdr_output_metadata *hdr_metadata;
-	int err;
-
-	if (!frame || !conn_state)
-		return -EINVAL;
-
-	connector = conn_state->connector;
-
-	if (!conn_state->hdr_output_metadata)
-		return -EINVAL;
-
-	hdr_metadata = conn_state->hdr_output_metadata->data;
-
-	if (!hdr_metadata || !connector)
-		return -EINVAL;
-
-	/* Sink EOTF is Bit map while infoframe is absolute values */
-	if (!is_eotf_supported(hdr_metadata->hdmi_metadata_type1.eotf,
-	    connector->hdr_sink_metadata.hdmi_type1.eotf)) {
-		DRM_DEBUG_KMS("EOTF Not Supported\n");
-		return -EINVAL;
-	}
-
-	err = hdmi_drm_infoframe_init(frame);
-	if (err < 0)
-		return err;
-
-	frame->eotf = hdr_metadata->hdmi_metadata_type1.eotf;
-	frame->metadata_type = hdr_metadata->hdmi_metadata_type1.metadata_type;
-
-	BUILD_BUG_ON(sizeof(frame->display_primaries) !=
-		     sizeof(hdr_metadata->hdmi_metadata_type1.display_primaries));
-	BUILD_BUG_ON(sizeof(frame->white_point) !=
-		     sizeof(hdr_metadata->hdmi_metadata_type1.white_point));
-
-	memcpy(&frame->display_primaries,
-	       &hdr_metadata->hdmi_metadata_type1.display_primaries,
-	       sizeof(frame->display_primaries));
-
-	memcpy(&frame->white_point,
-	       &hdr_metadata->hdmi_metadata_type1.white_point,
-	       sizeof(frame->white_point));
-
-	frame->max_display_mastering_luminance =
-		hdr_metadata->hdmi_metadata_type1.max_display_mastering_luminance;
-	frame->min_display_mastering_luminance =
-		hdr_metadata->hdmi_metadata_type1.min_display_mastering_luminance;
-	frame->max_fall = hdr_metadata->hdmi_metadata_type1.max_fall;
-	frame->max_cll = hdr_metadata->hdmi_metadata_type1.max_cll;
-
-	return 0;
-}
-EXPORT_SYMBOL(drm_hdmi_infoframe_set_hdr_metadata);
-
 static u8 drm_mode_hdmi_vic(const struct drm_connector *connector,
 			    const struct drm_display_mode *mode)
 {
@@ -6076,76 +5980,6 @@ drm_hdmi_avi_infoframe_from_display_mode(struct hdmi_avi_infoframe *frame,
 }
 EXPORT_SYMBOL(drm_hdmi_avi_infoframe_from_display_mode);
 
-/* HDMI Colorspace Spec Definitions */
-#define FULL_COLORIMETRY_MASK		0x1FF
-#define NORMAL_COLORIMETRY_MASK		0x3
-#define EXTENDED_COLORIMETRY_MASK	0x7
-#define EXTENDED_ACE_COLORIMETRY_MASK	0xF
-
-#define C(x) ((x) << 0)
-#define EC(x) ((x) << 2)
-#define ACE(x) ((x) << 5)
-
-#define HDMI_COLORIMETRY_NO_DATA		0x0
-#define HDMI_COLORIMETRY_SMPTE_170M_YCC		(C(1) | EC(0) | ACE(0))
-#define HDMI_COLORIMETRY_BT709_YCC		(C(2) | EC(0) | ACE(0))
-#define HDMI_COLORIMETRY_XVYCC_601		(C(3) | EC(0) | ACE(0))
-#define HDMI_COLORIMETRY_XVYCC_709		(C(3) | EC(1) | ACE(0))
-#define HDMI_COLORIMETRY_SYCC_601		(C(3) | EC(2) | ACE(0))
-#define HDMI_COLORIMETRY_OPYCC_601		(C(3) | EC(3) | ACE(0))
-#define HDMI_COLORIMETRY_OPRGB			(C(3) | EC(4) | ACE(0))
-#define HDMI_COLORIMETRY_BT2020_CYCC		(C(3) | EC(5) | ACE(0))
-#define HDMI_COLORIMETRY_BT2020_RGB		(C(3) | EC(6) | ACE(0))
-#define HDMI_COLORIMETRY_BT2020_YCC		(C(3) | EC(6) | ACE(0))
-#define HDMI_COLORIMETRY_DCI_P3_RGB_D65		(C(3) | EC(7) | ACE(0))
-#define HDMI_COLORIMETRY_DCI_P3_RGB_THEATER	(C(3) | EC(7) | ACE(1))
-
-static const u32 hdmi_colorimetry_val[] = {
-	[DRM_MODE_COLORIMETRY_NO_DATA] = HDMI_COLORIMETRY_NO_DATA,
-	[DRM_MODE_COLORIMETRY_SMPTE_170M_YCC] = HDMI_COLORIMETRY_SMPTE_170M_YCC,
-	[DRM_MODE_COLORIMETRY_BT709_YCC] = HDMI_COLORIMETRY_BT709_YCC,
-	[DRM_MODE_COLORIMETRY_XVYCC_601] = HDMI_COLORIMETRY_XVYCC_601,
-	[DRM_MODE_COLORIMETRY_XVYCC_709] = HDMI_COLORIMETRY_XVYCC_709,
-	[DRM_MODE_COLORIMETRY_SYCC_601] = HDMI_COLORIMETRY_SYCC_601,
-	[DRM_MODE_COLORIMETRY_OPYCC_601] = HDMI_COLORIMETRY_OPYCC_601,
-	[DRM_MODE_COLORIMETRY_OPRGB] = HDMI_COLORIMETRY_OPRGB,
-	[DRM_MODE_COLORIMETRY_BT2020_CYCC] = HDMI_COLORIMETRY_BT2020_CYCC,
-	[DRM_MODE_COLORIMETRY_BT2020_RGB] = HDMI_COLORIMETRY_BT2020_RGB,
-	[DRM_MODE_COLORIMETRY_BT2020_YCC] = HDMI_COLORIMETRY_BT2020_YCC,
-};
-
-#undef C
-#undef EC
-#undef ACE
-
-/**
- * drm_hdmi_avi_infoframe_colorimetry() - fill the HDMI AVI infoframe
- *                                       colorimetry information
- * @frame: HDMI AVI infoframe
- * @conn_state: connector state
- */
-void
-drm_hdmi_avi_infoframe_colorimetry(struct hdmi_avi_infoframe *frame,
-				  const struct drm_connector_state *conn_state)
-{
-	u32 colorimetry_val;
-	u32 colorimetry_index = conn_state->colorspace & FULL_COLORIMETRY_MASK;
-
-	if (colorimetry_index >= ARRAY_SIZE(hdmi_colorimetry_val))
-		colorimetry_val = HDMI_COLORIMETRY_NO_DATA;
-	else
-		colorimetry_val = hdmi_colorimetry_val[colorimetry_index];
-
-	frame->colorimetry = colorimetry_val & NORMAL_COLORIMETRY_MASK;
-	/*
-	 * ToDo: Extend it for ACE formats as well. Modify the infoframe
-	 * structure and extend it in drivers/video/hdmi
-	 */
-	frame->extended_colorimetry = (colorimetry_val >> 2) &
-					EXTENDED_COLORIMETRY_MASK;
-}
-EXPORT_SYMBOL(drm_hdmi_avi_infoframe_colorimetry);
-
 /**
  * drm_hdmi_avi_infoframe_quant_range() - fill the HDMI AVI infoframe
  *                                        quantization range information
@@ -6200,23 +6034,6 @@ drm_hdmi_avi_infoframe_quant_range(struct hdmi_avi_infoframe *frame,
 			HDMI_YCC_QUANTIZATION_RANGE_FULL;
 }
 EXPORT_SYMBOL(drm_hdmi_avi_infoframe_quant_range);
-
-/**
- * drm_hdmi_avi_infoframe_bars() - fill the HDMI AVI infoframe
- *                                 bar information
- * @frame: HDMI AVI infoframe
- * @conn_state: connector state
- */
-void
-drm_hdmi_avi_infoframe_bars(struct hdmi_avi_infoframe *frame,
-			    const struct drm_connector_state *conn_state)
-{
-	frame->right_bar = conn_state->tv.margins.right;
-	frame->left_bar = conn_state->tv.margins.left;
-	frame->top_bar = conn_state->tv.margins.top;
-	frame->bottom_bar = conn_state->tv.margins.bottom;
-}
-EXPORT_SYMBOL(drm_hdmi_avi_infoframe_bars);
 
 static enum hdmi_3d_structure
 s3d_structure_from_display_mode(const struct drm_display_mode *mode)
