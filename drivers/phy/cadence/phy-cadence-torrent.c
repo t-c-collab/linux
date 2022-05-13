@@ -413,8 +413,7 @@ struct cdns_torrent_data {
 	u8 reg_offset_shift;
 	struct cdns_torrent_vals_table link_cmn_vals_tbl;
 	struct cdns_torrent_vals_table xcvr_diag_vals_tbl;
-	struct cdns_torrent_vals *pcs_cmn_vals[NUM_PHY_TYPE][NUM_PHY_TYPE]
-					      [NUM_SSC_MODE];
+	struct cdns_torrent_vals_table pcs_cmn_vals_tbl;
 	struct cdns_torrent_vals *phy_pma_cmn_vals[NUM_PHY_TYPE][NUM_PHY_TYPE]
 						  [NUM_SSC_MODE];
 	struct cdns_torrent_vals *cmn_vals[NUM_REF_CLK][NUM_PHY_TYPE]
@@ -2139,7 +2138,10 @@ static int cdns_torrent_phy_init(struct phy *phy)
 	}
 
 	/* PHY PCS common registers configurations */
-	pcs_cmn_vals = init_data->pcs_cmn_vals[phy_type][TYPE_NONE][ssc];
+	pcs_cmn_vals = cdns_torrent_get_tbl_vals(&init_data->pcs_cmn_vals_tbl,
+						 CLK_ANY, CLK_ANY,
+						 phy_type, TYPE_NONE,
+						 ANY_SSC);
 	if (pcs_cmn_vals) {
 		reg_pairs = pcs_cmn_vals->reg_pairs;
 		num_regs = pcs_cmn_vals->num_regs;
@@ -2311,7 +2313,9 @@ int cdns_torrent_phy_configure_multilink(struct cdns_torrent_phy *cdns_phy)
 		}
 
 		/* PHY PCS common registers configurations */
-		pcs_cmn_vals = init_data->pcs_cmn_vals[phy_t1][phy_t2][ssc];
+		pcs_cmn_vals = cdns_torrent_get_tbl_vals(&init_data->pcs_cmn_vals_tbl,
+							 CLK_ANY, CLK_ANY,
+							 phy_t1, phy_t2, ANY_SSC);
 		if (pcs_cmn_vals) {
 			reg_pairs = pcs_cmn_vals->reg_pairs;
 			num_regs = pcs_cmn_vals->num_regs;
@@ -3960,6 +3964,13 @@ static struct cdns_torrent_vals_entry xcvr_diag_vals_entries[] = {
 	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USXGMII, TYPE_NONE), &sl_usxgmii_xcvr_diag_ln_vals},
 };
 
+static struct cdns_torrent_vals_entry pcs_cmn_vals_entries[] = {
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USB, TYPE_NONE), &usb_phy_pcs_cmn_vals},
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USB, TYPE_PCIE), &usb_phy_pcs_cmn_vals},
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USB, TYPE_SGMII), &usb_phy_pcs_cmn_vals},
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USB, TYPE_QSGMII), &usb_phy_pcs_cmn_vals},
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USB, TYPE_DP), &usb_phy_pcs_cmn_vals},
+};
 static const struct cdns_torrent_data cdns_map_torrent = {
 	.block_offset_shift = 0x2,
 	.reg_offset_shift = 0x2,
@@ -3971,32 +3982,9 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 		.entries = xcvr_diag_vals_entries,
 		.num_entries = ARRAY_SIZE(xcvr_diag_vals_entries),
 	},
-	.pcs_cmn_vals = {
-		[TYPE_USB] = {
-			[TYPE_NONE] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_PCIE] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_SGMII] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_QSGMII] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_DP] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-		},
+	.pcs_cmn_vals_tbl = {
+		.entries = pcs_cmn_vals_entries,
+		.num_entries = ARRAY_SIZE(pcs_cmn_vals_entries),
 	},
 	.phy_pma_cmn_vals = {
 		[TYPE_USXGMII] = {
@@ -4366,32 +4354,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 		.entries = xcvr_diag_vals_entries,
 		.num_entries = ARRAY_SIZE(xcvr_diag_vals_entries),
 	},
-	.pcs_cmn_vals = {
-		[TYPE_USB] = {
-			[TYPE_NONE] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_PCIE] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_SGMII] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_QSGMII] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-				[EXTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-				[INTERNAL_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-			[TYPE_DP] = {
-				[NO_SSC] = &usb_phy_pcs_cmn_vals,
-			},
-		},
+	.pcs_cmn_vals_tbl = {
+		.entries = pcs_cmn_vals_entries,
+		.num_entries = ARRAY_SIZE(pcs_cmn_vals_entries),
 	},
 	.phy_pma_cmn_vals = {
 		[TYPE_USXGMII] = {
