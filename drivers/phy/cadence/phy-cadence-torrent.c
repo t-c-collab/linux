@@ -414,8 +414,7 @@ struct cdns_torrent_data {
 	struct cdns_torrent_vals_table link_cmn_vals_tbl;
 	struct cdns_torrent_vals_table xcvr_diag_vals_tbl;
 	struct cdns_torrent_vals_table pcs_cmn_vals_tbl;
-	struct cdns_torrent_vals *phy_pma_cmn_vals[NUM_PHY_TYPE][NUM_PHY_TYPE]
-						  [NUM_SSC_MODE];
+	struct cdns_torrent_vals_table phy_pma_cmn_vals_tbl;
 	struct cdns_torrent_vals *cmn_vals[NUM_REF_CLK][NUM_PHY_TYPE]
 					  [NUM_PHY_TYPE][NUM_SSC_MODE];
 	struct cdns_torrent_vals *tx_ln_vals[NUM_REF_CLK][NUM_PHY_TYPE]
@@ -2152,7 +2151,10 @@ static int cdns_torrent_phy_init(struct phy *phy)
 	}
 
 	/* PHY PMA common registers configurations */
-	phy_pma_cmn_vals = init_data->phy_pma_cmn_vals[phy_type][TYPE_NONE][ssc];
+	phy_pma_cmn_vals = cdns_torrent_get_tbl_vals(&init_data->phy_pma_cmn_vals_tbl,
+						     CLK_ANY, CLK_ANY,
+						     phy_type, TYPE_NONE,
+						     ANY_SSC);
 	if (phy_pma_cmn_vals) {
 		reg_pairs = phy_pma_cmn_vals->reg_pairs;
 		num_regs = phy_pma_cmn_vals->num_regs;
@@ -3986,13 +3988,6 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 		.entries = pcs_cmn_vals_entries,
 		.num_entries = ARRAY_SIZE(pcs_cmn_vals_entries),
 	},
-	.phy_pma_cmn_vals = {
-		[TYPE_USXGMII] = {
-			[TYPE_NONE] = {
-				[NO_SSC] = NULL,
-			},
-		},
-	},
 	.cmn_vals = {
 		[CLK_19_2_MHZ] = {
 			[TYPE_DP] = {
@@ -4343,6 +4338,10 @@ static const struct cdns_torrent_data cdns_map_torrent = {
 	},
 };
 
+static struct cdns_torrent_vals_entry j721e_phy_pma_cmn_vals_entries[] = {
+	{CDNS_TORRENT_KEY_ANYCLK(TYPE_USXGMII, TYPE_NONE), &ti_usxgmii_phy_pma_cmn_vals},
+};
+
 static const struct cdns_torrent_data ti_j721e_map_torrent = {
 	.block_offset_shift = 0x0,
 	.reg_offset_shift = 0x1,
@@ -4358,12 +4357,9 @@ static const struct cdns_torrent_data ti_j721e_map_torrent = {
 		.entries = pcs_cmn_vals_entries,
 		.num_entries = ARRAY_SIZE(pcs_cmn_vals_entries),
 	},
-	.phy_pma_cmn_vals = {
-		[TYPE_USXGMII] = {
-			[TYPE_NONE] = {
-				[NO_SSC] = &ti_usxgmii_phy_pma_cmn_vals,
-			},
-		},
+	.phy_pma_cmn_vals_tbl = {
+		.entries = j721e_phy_pma_cmn_vals_entries,
+		.num_entries = ARRAY_SIZE(j721e_phy_pma_cmn_vals_entries),
 	},
 	.cmn_vals = {
 		[CLK_19_2_MHZ] = {
