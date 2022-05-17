@@ -40,7 +40,7 @@
 		};
 
 		cpsw0_phy_gmii_sel: phy@4044 {
-			compatible = "ti,am654-phy-gmii-sel";
+			compatible = "ti,j7200-pg2-phy-gmii-sel";
 			reg = <0x4044 0x10>;
 			#phy-cells = <1>;
 		};
