@@ -344,11 +344,11 @@
 		resets = <&serdes_wiz0 1>, <&serdes_wiz0 2>;
 	};
 
-	serdes0_qsgmii_link: phy@1 {
+	serdes0_usxgmii_link: phy@1 {
 		reg = <2>;
 		cdns,num-lanes = <1>;
 		#phy-cells = <0>;
-		cdns,phy-type = <PHY_TYPE_SGMII>;
+		cdns,phy-type = <PHY_TYPE_USXGMII>;
 		resets = <&serdes_wiz0 3>;
 	};
 };
@@ -359,12 +359,12 @@
 };
 
 &cpsw0_port1 {
-	phy-mode = "sgmii";
+	phy-mode = "usxgmii";
 	mac-address = [00 00 00 00 00 00];
-	phys = <&cpsw0_phy_gmii_sel 1>, <&serdes0_qsgmii_link>;
+	phys = <&cpsw0_phy_gmii_sel 1>, <&serdes0_usxgmii_link>;
 	phy-names = "portmode", "serdes-phy";
 	fixed-link {
-		speed = <1000>;
+		speed = <5000>;
 		full-duplex;
 	};
 };
