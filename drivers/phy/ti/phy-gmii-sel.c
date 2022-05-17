@@ -26,6 +26,7 @@
 /* for the CONTROL port */
 #define J72XX_GMII_SEL_MODE_SGMII	3
 #define J72XX_GMII_SEL_MODE_QSGMII	4
+#define J72XX_GMII_SEL_MODE_XFI		5
 #define J72XX_GMII_SEL_MODE_QSGMII_SUB	6
 
 enum {
@@ -49,6 +50,7 @@ struct phy_gmii_sel_soc_data {
 	u32 features;
 	const struct reg_field (*regfields)[PHY_GMII_SEL_LAST];
 	bool use_of_data;
+	u64 extra_modes;	/* modes not supported on all SoCs */
 };
 
 struct phy_gmii_sel_priv {
@@ -106,10 +108,20 @@ static int phy_gmii_sel_mode(struct phy *phy, enum phy_mode mode, int submode)
 		gmii_sel_mode = J72XX_GMII_SEL_MODE_QSGMII_SUB;
 		break;
 
+	case PHY_INTERFACE_MODE_XAUI:
+		if (!(soc_data->extra_modes & BIT(PHY_INTERFACE_MODE_XAUI)))
+			goto unsupported;
+		gmii_sel_mode = J72XX_GMII_SEL_MODE_XFI;
+		break;
+
+	case PHY_INTERFACE_MODE_USXGMII:
+		if (!(soc_data->extra_modes & BIT(PHY_INTERFACE_MODE_USXGMII)))
+			goto unsupported;
+		gmii_sel_mode = J72XX_GMII_SEL_MODE_XFI;
+		break;
+
 	default:
-		dev_warn(dev, "port%u: unsupported mode: \"%s\"\n",
-			 if_phy->id, phy_modes(submode));
-		return -EINVAL;
+		goto unsupported;
 	}
 
 	if_phy->phy_if_mode = submode;
@@ -141,6 +153,11 @@ static int phy_gmii_sel_mode(struct phy *phy, enum phy_mode mode, int submode)
 	}
 
 	return 0;
+
+unsupported:
+	dev_warn(dev, "port%u: unsupported mode: \"%s\"\n",
+		 if_phy->id, phy_modes(submode));
+	return -EINVAL;
 }
 
 static const
@@ -206,6 +223,14 @@ struct phy_gmii_sel_soc_data phy_gmii_sel_soc_am654 = {
 	.regfields = phy_gmii_sel_fields_am654,
 };
 
+static const
+struct phy_gmii_sel_soc_data phy_gmii_sel_soc_j7200_pg2 = {
+	.use_of_data = true,
+	.regfields = phy_gmii_sel_fields_am654,
+	.extra_modes = BIT(PHY_INTERFACE_MODE_XAUI) |
+		       BIT(PHY_INTERFACE_MODE_USXGMII),
+};
+
 static const struct of_device_id phy_gmii_sel_id_table[] = {
 	{
 		.compatible	= "ti,am3352-phy-gmii-sel",
@@ -225,6 +250,10 @@ static const struct of_device_id phy_gmii_sel_id_table[] = {
 	},
 	{
 		.compatible	= "ti,am654-phy-gmii-sel",
+		.data		= &phy_gmii_sel_soc_am654,
+	},
+	{
+		.compatible	= "ti,j7200-pg2-phy-gmii-sel",
 		.data		= &phy_gmii_sel_soc_am654,
 	},
 	{}
