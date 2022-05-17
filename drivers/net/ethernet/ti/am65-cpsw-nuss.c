@@ -1573,6 +1573,12 @@ static void am65_cpsw_nuss_mac_control(struct am65_cpsw_port *port, phy_interfac
 {
 	u32 mac_control = CPSW_SL_CTL_GMII_EN;
 
+	if (interface == PHY_INTERFACE_MODE_USXGMII) {
+		mac_control = CPSW_SL_CTL_XGMII_EN | CPSW_SL_CTL_XGIG;
+		goto set_pause;
+		/* FIXME: we probably need to set FULLDUPLEX but CSL code is not doing so */
+	}
+
 	if (speed == SPEED_1000)
 		mac_control |= CPSW_SL_CTL_GIG;
 	if (speed == SPEED_10 && interface == PHY_INTERFACE_MODE_RGMII)
@@ -1583,6 +1589,7 @@ static void am65_cpsw_nuss_mac_control(struct am65_cpsw_port *port, phy_interfac
 	if (duplex)
 		mac_control |= CPSW_SL_CTL_FULLDUPLEX;
 
+set_pause:
 	/* rx_pause/tx_pause */
 	if (rx_pause)
 		mac_control |= CPSW_SL_CTL_RX_FLOW_EN;
@@ -1625,9 +1632,12 @@ static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned in
 		if (state->duplex)
 			mr_adv_ability |= MAC2MAC_MR_ADV_ABILITY_FULLDUPLEX;
 
+		/* FIXME: What to set here for SPEED_5000 */
+
 		if (state->interface == PHY_INTERFACE_MODE_SGMII ||
 		    state->interface == PHY_INTERFACE_MODE_QSGMII ||
-		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB) {
+		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB ||
+		    state->interface == PHY_INTERFACE_MODE_USXGMII) {
 			writel(mr_adv_ability,
 			       port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
 			writel((AM65_CPSW_SGMII_CONTROL_MASTER_MODE |
@@ -1647,7 +1657,8 @@ static void am65_cpsw_nuss_mac_config(struct phylink_config *config, unsigned in
 	} else {
 		if (state->interface == PHY_INTERFACE_MODE_SGMII ||
 		    state->interface == PHY_INTERFACE_MODE_QSGMII ||
-		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB) {
+		    state->interface == PHY_INTERFACE_MODE_QSGMII_SUB ||
+		    state->interface == PHY_INTERFACE_MODE_USXGMII) {
 			writel(MAC2PHY_MR_ADV_ABILITY,
 			       port->sgmii_base + AM65_CPSW_SGMII_MR_ADV_ABILITY_REG);
 			writel(AM65_CPSW_SGMII_CONTROL_MR_AN_ENABLE,
