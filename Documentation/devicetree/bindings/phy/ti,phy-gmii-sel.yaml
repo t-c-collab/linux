@@ -53,6 +53,7 @@ properties:
       - ti,am43xx-phy-gmii-sel
       - ti,dm814-phy-gmii-sel
       - ti,am654-phy-gmii-sel
+      - ti,j7200-pg2-phy-gmii-sel
 
   reg:
     description: Address and length of the register set for the device
@@ -68,6 +69,7 @@ allOf:
               - ti,dra7xx-phy-gmii-sel
               - ti,dm814-phy-gmii-sel
               - ti,am654-phy-gmii-sel
+              - ti,j7200-pg2-phy-gmii-sel
     then:
       properties:
         '#phy-cells':
