@@ -664,7 +664,7 @@
 		ranges;
 
 		assigned-clocks = <&k3_clks 292 85>;
-		assigned-clock-parents = <&k3_clks 292 89>;
+		assigned-clock-parents = <&k3_clks 292 88>;
 
 		wiz0_pll0_refclk: pll0-refclk {
 			clocks = <&k3_clks 292 85>, <&serdes_refclk>;
