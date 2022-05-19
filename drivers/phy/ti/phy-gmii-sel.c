@@ -254,7 +254,7 @@ static const struct of_device_id phy_gmii_sel_id_table[] = {
 	},
 	{
 		.compatible	= "ti,j7200-pg2-phy-gmii-sel",
-		.data		= &phy_gmii_sel_soc_am654,
+		.data		= &phy_gmii_sel_soc_j7200_pg2,
 	},
 	{}
 };
