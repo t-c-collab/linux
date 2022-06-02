@@ -671,7 +671,8 @@
 			clock-output-names = "wiz0_pll0_refclk";
 			#clock-cells = <0>;
 			assigned-clocks = <&wiz0_pll0_refclk>;
-			assigned-clock-parents = <&k3_clks 292 85>;
+			assigned-clock-parents = <&serdes_refclk>;
+			//assigned-clock-parents = <&k3_clks 292 85>;
 		};
 
 		wiz0_pll1_refclk: pll1-refclk {
@@ -701,8 +702,8 @@
 			reg-names = "torrent_phy";
 			resets = <&serdes_wiz0 0>;
 			reset-names = "torrent_reset";
-			clocks = <&wiz0_pll0_refclk>;
-			clock-names = "refclk";
+			clocks = <&wiz0_pll0_refclk>, <&wiz0_pll1_refclk>;
+			clock-names = "refclk", "refclk1";
 			#address-cells = <1>;
 			#size-cells = <0>;
 		};

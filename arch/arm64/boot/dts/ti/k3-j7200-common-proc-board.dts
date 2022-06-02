@@ -336,13 +336,13 @@
 };
 
 &serdes0 {
-	// serdes0_pcie_link: phy@0 {
-	// 	reg = <0>;
-	// 	cdns,num-lanes = <2>;
-	// 	#phy-cells = <0>;
-	// 	cdns,phy-type = <PHY_TYPE_PCIE>;
-	// 	resets = <&serdes_wiz0 1>, <&serdes_wiz0 2>;
-	// };
+	serdes0_pcie_link: phy@0 {
+		reg = <0>;
+		cdns,num-lanes = <2>;
+		#phy-cells = <0>;
+		cdns,phy-type = <PHY_TYPE_PCIE>;
+		resets = <&serdes_wiz0 1>, <&serdes_wiz0 2>;
+	};
 
 	serdes0_usxgmii_link: phy@1 {
 		reg = <2>;
@@ -377,15 +377,14 @@
 
 &pcie1_rc {
 	reset-gpios = <&exp1 2 GPIO_ACTIVE_HIGH>;
-	// phys = <&serdes0_pcie_link>;
-	// phy-names = "pcie-phy";
+	phys = <&serdes0_pcie_link>;
+	phy-names = "pcie-phy";
 	num-lanes = <2>;
-	status = "disabled";
 };
 
 &pcie1_ep {
-	// phys = <&serdes0_pcie_link>;
-	// phy-names = "pcie-phy";
+	phys = <&serdes0_pcie_link>;
+	phy-names = "pcie-phy";
 	num-lanes = <2>;
 	status = "disabled";
 };
