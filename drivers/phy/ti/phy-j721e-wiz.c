@@ -490,7 +490,7 @@ static int wiz_init(struct wiz *wiz)
 static int wiz_regfield_init(struct wiz *wiz)
 {
 	struct regmap *regmap = wiz->regmap;
-	struct regmap *scm_regmap = wiz->regmap;
+	struct regmap *scm_regmap = wiz->scm_regmap;
 	int num_lanes = wiz->num_lanes;
 	struct device *dev = wiz->dev;
 	const struct wiz_data *data = wiz->data;
