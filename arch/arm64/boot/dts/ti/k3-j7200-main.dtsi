@@ -668,7 +668,7 @@
 		ranges;
 
 		assigned-clocks = <&k3_clks 292 85>;
-		assigned-clock-parents = <&k3_clks 292 88>;
+		assigned-clock-parents = <&k3_clks 292 89>;
 
 		serdes0: serdes@5060000 {
 			compatible = "ti,j721e-serdes-10g";
@@ -676,13 +676,14 @@
 			reg-names = "torrent_phy";
 			resets = <&serdes_wiz0 0>;
 			reset-names = "torrent_reset";
-			clocks = <&serdes_wiz0 TI_WIZ_PLL0_REFCLK>;
-			clock-names = "refclk";
+			clocks = <&serdes_wiz0 TI_WIZ_PLL0_REFCLK>,
+				 <&serdes_wiz0 TI_WIZ_PLL1_REFCLK>;
+			clock-names = "refclk", "refclk1";
 			assigned-clocks = <&serdes_wiz0 TI_WIZ_PLL0_REFCLK>,
 					  <&serdes_wiz0 TI_WIZ_PLL1_REFCLK>,
 					  <&serdes_wiz0 TI_WIZ_REFCLK_DIG>;
 			assigned-clock-parents = <&k3_clks 292 85>,
-						 <&k3_clks 292 85>,
+						 <&k3_clks 292 88>,
 						 <&k3_clks 292 85>;
 			#address-cells = <1>;
 			#size-cells = <0>;
