@@ -23,6 +23,11 @@
 #include <linux/regmap.h>
 #include <linux/reset-controller.h>
 
+#define REF_CLK_19_2MHZ         19200000
+#define REF_CLK_25MHZ           25000000
+#define REF_CLK_100MHZ          100000000
+#define REF_CLK_156_25MHZ       156250000
+
 /* SCM offsets */
 #define SERDES_SUP_CTRL		0x4400
 
@@ -1055,6 +1060,24 @@ static int wiz_clock_init(struct wiz *wiz, struct device_node *node)
 	else
 		regmap_field_write(wiz->pma_cmn_refclk_int_mode, 0x3);
 
+	dev_info(dev,"=======got core ref clk rate %lu\n", rate);
+	if (wiz->type == J7200_PG2_WIZ_10G) {
+		switch (rate) {
+		case REF_CLK_100MHZ:
+			dev_info(dev, "======100\n");
+			regmap_field_write(wiz->div_sel_field[CMN_REFCLK_DIG_DIV], 0x2);
+			break;
+		case REF_CLK_156_25MHZ:
+			dev_info(dev, "======156\n");
+			regmap_field_write(wiz->div_sel_field[CMN_REFCLK_DIG_DIV], 0x3);
+			break;
+		default:
+			dev_info(dev, "======default\n");
+			regmap_field_write(wiz->div_sel_field[CMN_REFCLK_DIG_DIV], 0);
+			break;
+		}
+	}
+
 	if (wiz->data->pma_cmn_refclk1_int_mode) {
 		clk = devm_clk_get(dev, "core_ref1_clk");
 		if (IS_ERR(clk)) {
@@ -1062,9 +1085,11 @@ static int wiz_clock_init(struct wiz *wiz, struct device_node *node)
 			ret = PTR_ERR(clk);
 			return ret;
 		}
+
 		wiz->input_clks[WIZ_CORE_REFCLK1] = clk;
 
 		rate = clk_get_rate(clk);
+		dev_info(dev,"=======got core ref1 clk rate %lu\n", rate);
 		if (rate >= 100000000)
 			regmap_field_write(wiz->pma_cmn_refclk1_int_mode, 0x1);
 		else
