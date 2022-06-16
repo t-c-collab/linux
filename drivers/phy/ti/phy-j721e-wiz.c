@@ -426,7 +426,7 @@ static int wiz_mode_select(struct wiz *wiz)
 			mode = LANE_MODE_GEN2;
 
 		if (wiz->lane_phy_type[i] == PHY_TYPE_USXGMII) {
-		ret = regmap_field_write(wiz->p0_mac_src_sel[i], 0x2);
+		ret = regmap_field_write(wiz->p0_mac_src_sel[i], 0x3);	/* Arun's config sets this to 0x3 */
 		ret = regmap_field_write(wiz->p0_rxfclk_sel[i], 0x3);
 		ret = regmap_field_write(wiz->p0_refclk_sel[i], 0x3);
 			mode = LANE_MODE_GEN1;
