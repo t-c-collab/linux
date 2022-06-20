@@ -671,7 +671,7 @@
 		assigned-clock-parents = <&k3_clks 292 89>;
 
 		serdes0: serdes@5060000 {
-			compatible = "ti,j721e-serdes-10g";
+			compatible = "ti,j7200-serdes-10g";
 			reg = <0x00 0x05060000 0x0 0x00010000>;
 			reg-names = "torrent_phy";
 			resets = <&serdes_wiz0 0>;
