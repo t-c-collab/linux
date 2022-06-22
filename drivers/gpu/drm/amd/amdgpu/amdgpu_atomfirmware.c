@@ -188,12 +188,16 @@ static int convert_atom_mem_type_to_vram_type(struct amdgpu_device *adev,
 			vram_type = AMDGPU_VRAM_TYPE_DDR3;
 			break;
 		case Ddr4MemType:
-		case LpDdr4MemType:
 			vram_type = AMDGPU_VRAM_TYPE_DDR4;
 			break;
+		case LpDdr4MemType:
+			vram_type = AMDGPU_VRAM_TYPE_LPDDR4;
+			break;
 		case Ddr5MemType:
-		case LpDdr5MemType:
 			vram_type = AMDGPU_VRAM_TYPE_DDR5;
+			break;
+		case LpDdr5MemType:
+			vram_type = AMDGPU_VRAM_TYPE_LPDDR5;
 			break;
 		default:
 			vram_type = AMDGPU_VRAM_TYPE_UNKNOWN;
@@ -556,6 +560,7 @@ bool amdgpu_atomfirmware_ras_rom_addr(struct amdgpu_device *adev,
 
 union smu_info {
 	struct atom_smu_info_v3_1 v31;
+	struct atom_smu_info_v4_0 v40;
 };
 
 union gfx_info {
@@ -602,7 +607,10 @@ int amdgpu_atomfirmware_get_clock_info(struct amdgpu_device *adev)
 					   data_offset);
 
 		/* system clock */
-		spll->reference_freq = le32_to_cpu(smu_info->v31.core_refclk_10khz);
+		if (frev == 3)
+			spll->reference_freq = le32_to_cpu(smu_info->v31.core_refclk_10khz);
+		else if (frev == 4)
+			spll->reference_freq = le32_to_cpu(smu_info->v40.core_refclk_10khz);
 
 		spll->reference_div = 0;
 		spll->min_post_div = 1;
