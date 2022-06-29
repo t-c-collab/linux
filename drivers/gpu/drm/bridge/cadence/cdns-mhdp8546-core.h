@@ -15,7 +15,9 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 
+#include <drm/bridge/cdns-mhdp8546-cbs.h>
 #include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_dp_mst_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 
@@ -98,7 +100,6 @@ struct phy;
 #define CDNS_DP_NUM_LANES(x)			((x) - 1)
 #define CDNS_DP_MST_EN				BIT(2)
 #define CDNS_DP_FRAMER_EN			BIT(3)
-#define CDNS_DP_RATE_GOVERNOR_EN		BIT(4)
 #define CDNS_DP_NO_VIDEO_MODE			BIT(5)
 #define CDNS_DP_DISABLE_PHY_RST			BIT(6)
 #define CDNS_DP_WR_FAILING_EDGE_VSYNC		BIT(7)
@@ -141,7 +142,11 @@ struct phy;
 #define CDNS_DP_MSAV1_VDISP_WIDTH(x)		((x) << 16)
 
 #define CDNS_DP_MSA_MISC(s)			(CDNS_DPTX_STREAM(s) + 0x10)
+
 #define CDNS_DP_STREAM_CONFIG(s)		(CDNS_DPTX_STREAM(s) + 0x14)
+#define CDNS_DP_MST_STRM_CFG_STREAM_EN		BIT(0)
+#define CDNS_DP_MST_STRM_CFG_NO_VIDEO		BIT(1)
+
 #define CDNS_DP_STREAM_CONFIG_2(s)		(CDNS_DPTX_STREAM(s) + 0x2c)
 #define CDNS_DP_SC2_TU_VS_DIFF(x)		((x) << 8)
 
@@ -161,7 +166,7 @@ struct phy;
 #define CDNS_DP_S_ALLOC_START_SLOT(x)		(x)
 #define CDNS_DP_S_ALLOC_END_SLOT(x)		((x) << 8)
 
-#define CDNS_DP_RATE_GOVERNING(s)		(CDNS_DPTX_STREAM(s) + 0x48)
+#define CDNS_DP_RATE_GOVERNING_CTRL(s)		(CDNS_DPTX_STREAM(s) + 0x48)
 #define CDNS_DP_RG_TARG_AV_SLOTS_Y(x)		(x)
 #define CDNS_DP_RG_TARG_AV_SLOTS_X(x)		((x) << 4)
 #define CDNS_DP_RG_ENABLE			BIT(10)
@@ -356,13 +361,19 @@ struct cdns_mhdp_connector;
 struct cdns_mhdp_bridge {
 	struct drm_bridge base;
 	struct cdns_mhdp_device *mhdp;
-	u8 stream_id;
+	int stream_id;
 	struct cdns_mhdp_connector *connector;
+	int pbn;
+#if 0
+	int vcpi_slots;		//Swap: TODO
+#endif
 };
 
 struct cdns_mhdp_connector {
 	struct drm_connector base;
 	struct cdns_mhdp_bridge *bridge;
+	struct drm_dp_mst_port *port;
+	bool is_mst_connector;
 };
 
 struct cdns_mhdp_device {
@@ -425,11 +436,28 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_hdcp hdcp;
 	bool hdcp_supported;
+
+	/* MST */
+	struct drm_dp_mst_topology_mgr mst_mgr;
+	struct cdns_mhdp_mst_cbs cbs;
+	bool is_mst;
+	bool can_mst;
+
+	/* DSC */
+	bool is_dsc;
 };
 
 #define to_mhdp_connector(x) container_of(x, struct cdns_mhdp_connector, base)
 #define to_mhdp_bridge(x) container_of(x, struct cdns_mhdp_bridge, base)
 
+struct cdns_mhdp_device *connector_to_mhdp(struct drm_connector *conn);
+struct cdns_mhdp_device *bridge_to_mhdp(struct drm_bridge *bridge);
 u32 cdns_mhdp_wait_for_sw_event(struct cdns_mhdp_device *mhdp, uint32_t event);
-
+int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value);
+int cdns_mhdp_reg_write(struct cdns_mhdp_device *mhdp, u16 addr, u32 val);
+u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt);
+void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
+			     struct drm_bridge_state *bridge_state);
+void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
+			       const struct drm_display_mode *mode);
 #endif
