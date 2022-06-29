@@ -351,6 +351,20 @@ struct cdns_mhdp_hdcp {
 	u8 hdcp_content_type;
 };
 
+struct cdns_mhdp_connector;
+
+struct cdns_mhdp_bridge {
+	struct drm_bridge base;
+	struct cdns_mhdp_device *mhdp;
+	u8 stream_id;
+	struct cdns_mhdp_connector *connector;
+};
+
+struct cdns_mhdp_connector {
+	struct drm_connector base;
+	struct cdns_mhdp_bridge *bridge;
+};
+
 struct cdns_mhdp_device {
 	void __iomem *regs;
 	void __iomem *sapb_regs;
@@ -375,8 +389,8 @@ struct cdns_mhdp_device {
 	 */
 	struct mutex link_mutex;
 
-	struct drm_connector connector;
-	struct drm_bridge bridge;
+	struct cdns_mhdp_connector connector;
+	struct cdns_mhdp_bridge bridge;
 
 	struct cdns_mhdp_link link;
 	struct drm_dp_aux aux;
@@ -384,7 +398,6 @@ struct cdns_mhdp_device {
 	struct cdns_mhdp_host host;
 	struct cdns_mhdp_sink sink;
 	struct cdns_mhdp_display_fmt display_fmt;
-	u8 stream_id;
 
 	bool link_up;
 	bool plugged;
@@ -414,8 +427,8 @@ struct cdns_mhdp_device {
 	bool hdcp_supported;
 };
 
-#define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
-#define bridge_to_mhdp(x) container_of(x, struct cdns_mhdp_device, bridge)
+#define to_mhdp_connector(x) container_of(x, struct cdns_mhdp_connector, base)
+#define to_mhdp_bridge(x) container_of(x, struct cdns_mhdp_bridge, base)
 
 u32 cdns_mhdp_wait_for_sw_event(struct cdns_mhdp_device *mhdp, uint32_t event);
 
