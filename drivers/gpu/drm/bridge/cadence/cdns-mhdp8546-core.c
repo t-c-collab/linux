@@ -54,15 +54,16 @@
 #include "cdns-mhdp8546-core.h"
 #include "cdns-mhdp8546-hdcp.h"
 #include "cdns-mhdp8546-j721e.h"
+#include "cdns-mhdp8546-mst.h"
 
-static inline struct cdns_mhdp_device *connector_to_mhdp(struct drm_connector *conn)
+struct cdns_mhdp_device *connector_to_mhdp(struct drm_connector *conn)
 {
 	struct cdns_mhdp_connector *mhdp_connector = to_mhdp_connector(conn);
 
 	return mhdp_connector->bridge->mhdp;
 }
 
-static inline struct cdns_mhdp_device *bridge_to_mhdp(struct drm_bridge *bridge)
+struct cdns_mhdp_device *bridge_to_mhdp(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
 
@@ -178,7 +179,6 @@ static int cdns_mhdp_mailbox_send(struct cdns_mhdp_device *mhdp, u8 module_id,
 	return 0;
 }
 
-static
 int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value)
 {
 	u8 msg[4], resp[8];
@@ -222,7 +222,6 @@ out:
 	return ret;
 }
 
-static
 int cdns_mhdp_reg_write(struct cdns_mhdp_device *mhdp, u16 addr, u32 val)
 {
 	u8 msg[6];
@@ -1458,6 +1457,8 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	mhdp->link.rate = cdns_mhdp_max_link_rate(mhdp);
 	mhdp->link.num_lanes = cdns_mhdp_max_num_lanes(mhdp);
 
+	cdns_mhdp_mst_probe(mhdp, dpcd);
+
 	/* Disable framer for link training */
 	err = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
 	if (err < 0) {
@@ -1560,7 +1561,7 @@ static int cdns_mhdp_connector_detect(struct drm_connector *conn,
 	return cdns_mhdp_detect(mhdp);
 }
 
-static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
+u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
 {
 	u32 bpp;
 
@@ -1746,6 +1747,8 @@ static int cdns_mhdp_attach(struct drm_bridge *bridge,
 			goto aux_unregister;
 	}
 
+	cdns_mhdp_mst_init(mhdp);
+
 	spin_lock(&mhdp->start_lock);
 
 	mhdp->bridge_attached = true;
@@ -1764,9 +1767,8 @@ aux_unregister:
 	return ret;
 }
 
-static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
-				      struct drm_bridge *bridge,
-				      const struct drm_display_mode *mode)
+void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
+			       const struct drm_display_mode *mode)
 {
 	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
 	unsigned int dp_framer_sp = 0, msa_horizontal_1,
@@ -1984,8 +1986,8 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	cdns_mhdp_configure_video(mhdp, bridge, mode);
 }
 
-static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
-				    struct drm_bridge_state *bridge_state)
+void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
+			     struct drm_bridge_state *bridge_state)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	struct drm_atomic_state *state = bridge_state->base.state;
@@ -2055,7 +2057,10 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 		goto out;
 	}
 
-	cdns_mhdp_sst_enable(mhdp, bridge, mode);
+	if (mhdp->is_mst)
+		cdns_mhdp_mst_enable(mhdp, bridge, mode);
+	else
+		cdns_mhdp_sst_enable(mhdp, bridge, mode);
 
 	mhdp_state = to_cdns_mhdp_bridge_state(new_state);
 
@@ -2098,6 +2103,9 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
 
+	if (mhdp->is_mst)
+		cdns_mhdp_mst_atomic_disable(bridge, bridge_state);
+
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->disable)
 		mhdp->info->ops->disable(mhdp);
 
@@ -2107,6 +2115,7 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 static void cdns_mhdp_detach(struct drm_bridge *bridge)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+	struct cdns_mhdp_mst_cbs cbs_null = { 0 };
 
 	dev_dbg(mhdp->dev, "%s\n", __func__);
 
@@ -2119,6 +2128,9 @@ static void cdns_mhdp_detach(struct drm_bridge *bridge)
 	spin_unlock(&mhdp->start_lock);
 
 	writel(~0, mhdp->regs + CDNS_APB_INT_MASK);
+
+	cdns_mhdp_mst_deinit(mhdp);
+	mhdp->cbs = cbs_null;
 }
 
 static struct drm_bridge_state *
@@ -2170,6 +2182,12 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 				  struct drm_crtc_state *crtc_state,
 				  struct drm_connector_state *conn_state)
 {
+#if 0
+	u32 bpp;
+	struct drm_atomic_state *state = crtc_state->state;
+	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
+	struct cdns_mhdp_connector *mhdp_connector;
+#endif
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
@@ -2183,6 +2201,17 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 		mutex_unlock(&mhdp->link_mutex);
 		return -EINVAL;
 	}
+
+#if 0
+	if (mhdp->is_mst) {
+		mhdp_connector = to_mhdp_connector(conn_state->connector);
+		bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+		mhdp_bridge->pbn = drm_dp_calc_pbn_mode(mode->clock, bpp, mhdp->is_dsc);
+		mhdp_bridge->vcpi_slots = drm_dp_atomic_find_vcpi_slots(state, &mhdp->mst_mgr,
+									mhdp_connector->port,
+									mhdp_bridge->pbn, 0);
+	}
+#endif
 
 	mutex_unlock(&mhdp->link_mutex);
 	return 0;
@@ -2313,6 +2342,12 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	}
 
 	if (mhdp->bridge_enabled) {
+		if (mhdp->is_mst) {
+			ret = cdns_mhdp_check_mst_status(mhdp);
+			mutex_unlock(&mhdp->link_mutex);
+			return ret;
+		}
+
 		state = drm_priv_to_bridge_state(mhdp->bridge.base.base.state);
 		if (!state) {
 			ret = -EINVAL;
@@ -2577,6 +2612,8 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 
 	drm_bridge_add(&mhdp->bridge.base);
 
+	mhdp->is_dsc = false;
+
 	return 0;
 
 phy_exit:
@@ -2599,6 +2636,8 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 	unsigned long timeout = msecs_to_jiffies(100);
 	bool stop_fw = false;
 	int ret;
+
+	cdns_mhdp_mst_deinit(mhdp);
 
 	drm_bridge_remove(&mhdp->bridge.base);
 
@@ -2633,6 +2672,17 @@ static int cdns_mhdp_remove(struct platform_device *pdev)
 
 	return ret;
 }
+
+int cdns_mhdp_bridge_attach_mst_cbs(struct drm_bridge *bridge,
+				    struct cdns_mhdp_mst_cbs *cbs)
+{
+	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
+
+	mhdp->cbs = *cbs;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cdns_mhdp_bridge_attach_mst_cbs);
 
 static const struct of_device_id mhdp_ids[] = {
 	{ .compatible = "cdns,mhdp8546", },
