@@ -556,7 +556,7 @@ int cdns_mhdp_mst_init(struct cdns_mhdp_device *mhdp)
 	ret = drm_dp_mst_topology_mgr_init(&mhdp->mst_mgr, dev,
 					   &mhdp->aux, 16, CDNS_MHDP_MAX_STREAMS,
 					   mhdp->host.lanes_cnt,
-					   drm_dp_link_rate_to_bw_code(mhdp->host.link_rate),
+					   mhdp->host.link_rate,
 					   connector->base.base.id);
 	mhdp->can_mst = ret ? false : true;
 	mhdp->is_mst = false;
