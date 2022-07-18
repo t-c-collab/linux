@@ -55,7 +55,14 @@ static void cdns_mhdp_j721e_enable(struct cdns_mhdp_device *mhdp)
 	 * to eDP DPI2. This is the only supported SST configuration on
 	 * J721E.
 	 */
-	writel(DPTX_SRC_VIF_0_EN | DPTX_SRC_VIF_0_SEL_DPI2,
+	writel(DPTX_SRC_VIF_0_EN |
+	       DPTX_SRC_VIF_1_EN |
+	       DPTX_SRC_VIF_2_EN |
+	       DPTX_SRC_VIF_3_EN |
+	       DPTX_SRC_VIF_0_SEL_DPI2 |
+	       DPTX_SRC_VIF_1_SEL_DPI3 |
+	       DPTX_SRC_VIF_2_SEL_DPI4 |
+	       DPTX_SRC_VIF_3_SEL_DPI5,
 	       mhdp->j721e_regs + DPTX_SRC_CFG);
 }
 
