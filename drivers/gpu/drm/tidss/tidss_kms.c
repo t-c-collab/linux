@@ -16,6 +16,7 @@
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
 #include <drm/drm_vblank.h>
+#include <drm/bridge/cdns-mhdp8546-cbs.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
@@ -105,6 +106,76 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
 	.fb_create = drm_gem_fb_create,
 	.atomic_check = tidss_atomic_check,
 	.atomic_commit = drm_atomic_helper_commit,
+};
+
+
+/*
+ * Check how to handle the first stream, will we get a call back for that
+ * Assuming the callback is for subsequent streams
+ */
+static struct drm_encoder *tidss_mhdp_mst_create_encoder(void *priv_data,
+							 struct drm_bridge *bridge)
+{
+	struct tidss_device *tidss = priv_data;
+	const struct dispc_features *feat = tidss->feat;
+	struct tidss_plane *tplane;
+	struct tidss_crtc *tcrtc;
+	struct drm_encoder *enc;
+	unsigned int fourccs_len;
+	const u32 *fourccs = dispc_plane_formats(tidss->dispc, &fourccs_len);
+	u32 hw_plane_id = feat->vid_order[tidss->num_planes];
+	int ret;
+	u32 crtc_mask = 1 << tidss->num_crtcs;
+
+	tplane = tidss_plane_create(tidss, hw_plane_id,
+				    DRM_PLANE_TYPE_PRIMARY, crtc_mask,
+				    fourccs, fourccs_len);
+	if (IS_ERR(tplane)) {
+		dev_err(tidss->dev, "plane create failed\n");
+		return (struct drm_encoder *)(tplane);
+	}
+
+	tidss->planes[tidss->num_planes++] = &tplane->plane;
+
+	tcrtc = tidss_crtc_create(tidss, tidss->num_crtcs,
+				  &tplane->plane);
+	if (IS_ERR(tcrtc)) {
+		dev_err(tidss->dev, "crtc create failed\n");
+		return (struct drm_encoder *)(tcrtc);
+	}
+
+	tidss->crtcs[tidss->num_crtcs++] = &tcrtc->crtc;
+
+	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPMST,
+				   1 << tcrtc->crtc.index);
+	if (IS_ERR(enc)) {
+		dev_err(tidss->dev, "encoder create failed\n");
+		return (struct drm_encoder *)(enc);
+	}
+
+	/* IS THIS A DEAD LOCK ......
+	 * Will attach work before the call back completes
+	 */
+	ret = drm_bridge_attach(enc, bridge, NULL, 0);
+	if (ret)
+		return NULL;
+
+	return enc;
+}
+
+static void tidss_mhdp_mst_destroy_encoder(void *priv_data, struct drm_bridge *bridge)
+{
+	return;
+}
+
+const struct cdns_mhdp_mst_cbs_funcs tidss_mhdp_mst_funcs = {
+	.create_mst_encoder = tidss_mhdp_mst_create_encoder,
+	.destroy_mst_encoder = tidss_mhdp_mst_destroy_encoder,
+};
+
+struct cdns_mhdp_mst_cbs tidss_mhdp_mst_cbs = {
+	.funcs = tidss_mhdp_mst_funcs,
+	.priv_data = NULL,
 };
 
 static int tidss_dispc_modeset_init(struct tidss_device *tidss)
@@ -226,12 +297,27 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 			return PTR_ERR(enc);
 		}
 
+		if (1) {// Find if MHDP with MST
+			tidss_mhdp_mst_cbs.priv_data = (void *)tidss;
+			cdns_mhdp_bridge_attach_mst_cbs(pipes[i].bridge,
+							&tidss_mhdp_mst_cbs);
+		}
+
 		ret = drm_bridge_attach(enc, pipes[i].bridge, NULL, 0);
 		if (ret)
 			return ret;
 	}
 
 	/* create overlay planes of the leftover planes */
+
+	/*
+	 * Need to handle this properly since we will be creating more CRTCs
+	 * crtc_mask changes, as of now MST place are tightly coupled with
+	 * MST crtcs that are created in mhdp mst cbs
+	 */
+	if (1) {// Find if MHDP with MST
+		return 0;
+	}
 
 	while (tidss->num_planes < max_planes) {
 		struct tidss_plane *tplane;
