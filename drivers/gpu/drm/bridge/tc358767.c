@@ -24,6 +24,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/kernel.h>
+#include <linux/media-bus-format.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
@@ -288,7 +289,6 @@ struct tc_data {
 	struct drm_connector	connector;
 
 	struct mipi_dsi_device	*dsi;
-	u8			dsi_lanes;
 
 	/* link settings */
 	struct tc_edp_link	link;
@@ -1261,7 +1261,7 @@ static int tc_dsi_rx_enable(struct tc_data *tc)
 	regmap_write(tc->regmap, PPI_TX_RX_TA, TTA_GET | TTA_SURE);
 	regmap_write(tc->regmap, PPI_LPTXTIMECNT, LPX_PERIOD);
 
-	value = ((LANEENABLE_L0EN << tc->dsi_lanes) - LANEENABLE_L0EN) |
+	value = ((LANEENABLE_L0EN << tc->dsi->lanes) - LANEENABLE_L0EN) |
 		LANEENABLE_CLEN;
 	regmap_write(tc->regmap, PPI_LANEENABLE, value);
 	regmap_write(tc->regmap, DSI_LANEENABLE, value);
@@ -1909,8 +1909,7 @@ static int tc_mipi_dsi_host_attach(struct tc_data *tc)
 
 	tc->dsi = dsi;
 
-	tc->dsi_lanes = dsi_lanes;
-	dsi->lanes = tc->dsi_lanes;
+	dsi->lanes = dsi_lanes;
 	dsi->format = MIPI_DSI_FMT_RGB888;
 	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_SYNC_PULSE;
 
