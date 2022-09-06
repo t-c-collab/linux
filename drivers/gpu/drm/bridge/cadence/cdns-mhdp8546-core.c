@@ -2080,6 +2080,7 @@ out:
 static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 				     struct drm_bridge_state *bridge_state)
 {
+	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	u32 resp;
 
@@ -2108,6 +2109,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->disable)
 		mhdp->info->ops->disable(mhdp);
+
+	mhdp_bridge->stream_id = -1;
 
 	mutex_unlock(&mhdp->link_mutex);
 }
