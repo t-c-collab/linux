@@ -2323,6 +2323,11 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 	 * with full link setup.
 	 */
 	if (hpd_pulse && old_plugged == mhdp->plugged) {
+		if (mhdp->is_mst) {
+			ret = cdns_mhdp_check_mst_status(mhdp);
+			goto out;
+		}
+
 		ret = drm_dp_dpcd_read_link_status(&mhdp->aux, status);
 
 		/*
@@ -2344,12 +2349,7 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 			goto out;
 	}
 
-	if (mhdp->bridge_enabled) {
-		if (mhdp->is_mst) {
-			ret = cdns_mhdp_check_mst_status(mhdp);
-			mutex_unlock(&mhdp->link_mutex);
-			return ret;
-		}
+	if (mhdp->bridge_enabled && (!mhdp->is_mst)) {
 
 		state = drm_priv_to_bridge_state(mhdp->bridge.base.base.state);
 		if (!state) {
