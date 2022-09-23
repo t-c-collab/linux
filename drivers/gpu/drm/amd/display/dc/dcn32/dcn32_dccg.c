@@ -133,7 +133,7 @@ static void dccg32_set_dtbclk_p_src(
 }
 
 /* Controls the generation of pixel valid for OTG in (OTG -> HPO case) */
-void dccg32_set_dtbclk_dto(
+static void dccg32_set_dtbclk_dto(
 		struct dccg *dccg,
 		const struct dtbclk_dto_params *params)
 {
@@ -208,7 +208,7 @@ static void dccg32_get_dccg_ref_freq(struct dccg *dccg,
 	return;
 }
 
-void dccg32_set_dpstreamclk(
+static void dccg32_set_dpstreamclk(
 		struct dccg *dccg,
 		enum streamclk_source src,
 		int otg_inst,
@@ -225,19 +225,19 @@ void dccg32_set_dpstreamclk(
 	case 0:
 		REG_UPDATE_2(DPSTREAMCLK_CNTL,
 			     DPSTREAMCLK0_EN,
-			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK0_SRC_SEL, 0);
+			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK0_SRC_SEL, otg_inst);
 		break;
 	case 1:
 		REG_UPDATE_2(DPSTREAMCLK_CNTL, DPSTREAMCLK1_EN,
-			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK1_SRC_SEL, 1);
+			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK1_SRC_SEL, otg_inst);
 		break;
 	case 2:
 		REG_UPDATE_2(DPSTREAMCLK_CNTL, DPSTREAMCLK2_EN,
-			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK2_SRC_SEL, 2);
+			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK2_SRC_SEL, otg_inst);
 		break;
 	case 3:
 		REG_UPDATE_2(DPSTREAMCLK_CNTL, DPSTREAMCLK3_EN,
-			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK3_SRC_SEL, 3);
+			     (src == REFCLK) ? 0 : 1, DPSTREAMCLK3_SRC_SEL, otg_inst);
 		break;
 	default:
 		BREAK_TO_DEBUGGER();
@@ -245,7 +245,7 @@ void dccg32_set_dpstreamclk(
 	}
 }
 
-void dccg32_otg_add_pixel(struct dccg *dccg,
+static void dccg32_otg_add_pixel(struct dccg *dccg,
 		uint32_t otg_inst)
 {
 	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
@@ -254,7 +254,7 @@ void dccg32_otg_add_pixel(struct dccg *dccg,
 			OTG_ADD_PIXEL[otg_inst], 1);
 }
 
-void dccg32_otg_drop_pixel(struct dccg *dccg,
+static void dccg32_otg_drop_pixel(struct dccg *dccg,
 		uint32_t otg_inst)
 {
 	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);

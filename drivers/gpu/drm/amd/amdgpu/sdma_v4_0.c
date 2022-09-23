@@ -1504,6 +1504,11 @@ static int sdma_v4_0_start(struct amdgpu_device *adev)
 		WREG32_SDMA(i, mmSDMA0_CNTL, temp);
 
 		if (!amdgpu_sriov_vf(adev)) {
+			ring = &adev->sdma.instance[i].ring;
+			adev->nbio.funcs->sdma_doorbell_range(adev, i,
+				ring->use_doorbell, ring->doorbell_index,
+				adev->doorbell_index.sdma_doorbell_range);
+
 			/* unhalt engine */
 			temp = RREG32_SDMA(i, mmSDMA0_F32_CNTL);
 			temp = REG_SET_FIELD(temp, SDMA0_F32_CNTL, HALT, 0);
@@ -2002,7 +2007,6 @@ static int sdma_v4_0_sw_fini(void *handle)
 
 static int sdma_v4_0_hw_init(void *handle)
 {
-	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	if (adev->flags & AMD_IS_APU)
@@ -2011,9 +2015,7 @@ static int sdma_v4_0_hw_init(void *handle)
 	if (!amdgpu_sriov_vf(adev))
 		sdma_v4_0_init_golden_registers(adev);
 
-	r = sdma_v4_0_start(adev);
-
-	return r;
+	return sdma_v4_0_start(adev);
 }
 
 static int sdma_v4_0_hw_fini(void *handle)

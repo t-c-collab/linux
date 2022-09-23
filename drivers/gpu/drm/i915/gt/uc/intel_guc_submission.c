@@ -1438,7 +1438,12 @@ void intel_guc_busyness_park(struct intel_gt *gt)
 	if (!guc_submission_initialized(guc))
 		return;
 
-	cancel_delayed_work(&guc->timestamp.work);
+	/*
+	 * There is a race with suspend flow where the worker runs after suspend
+	 * and causes an unclaimed register access warning. Cancel the worker
+	 * synchronously here.
+	 */
+	cancel_delayed_work_sync(&guc->timestamp.work);
 
 	/*
 	 * Before parking, we should sample engine busyness stats if we need to.
@@ -1532,8 +1537,8 @@ void intel_guc_submission_reset_prepare(struct intel_guc *guc)
 	__reset_guc_busyness_stats(guc);
 
 	/* Flush IRQ handler */
-	spin_lock_irq(&guc_to_gt(guc)->irq_lock);
-	spin_unlock_irq(&guc_to_gt(guc)->irq_lock);
+	spin_lock_irq(guc_to_gt(guc)->irq_lock);
+	spin_unlock_irq(guc_to_gt(guc)->irq_lock);
 
 	guc_flush_submissions(guc);
 	guc_flush_destroyed_contexts(guc);
@@ -1868,7 +1873,7 @@ int intel_guc_submission_init(struct intel_guc *guc)
 	if (guc->submission_initialized)
 		return 0;
 
-	if (guc->fw.major_ver_found < 70) {
+	if (GET_UC_VER(guc) < MAKE_UC_VER(70, 0, 0)) {
 		ret = guc_lrc_desc_pool_create_v69(guc);
 		if (ret)
 			return ret;
@@ -2303,7 +2308,7 @@ static int register_context(struct intel_context *ce, bool loop)
 	GEM_BUG_ON(intel_context_is_child(ce));
 	trace_intel_context_register(ce);
 
-	if (guc->fw.major_ver_found >= 70)
+	if (GET_UC_VER(guc) >= MAKE_UC_VER(70, 0, 0))
 		ret = register_context_v70(guc, ce, loop);
 	else
 		ret = register_context_v69(guc, ce, loop);
@@ -2315,7 +2320,7 @@ static int register_context(struct intel_context *ce, bool loop)
 		set_context_registered(ce);
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 
-		if (guc->fw.major_ver_found >= 70)
+		if (GET_UC_VER(guc) >= MAKE_UC_VER(70, 0, 0))
 			guc_context_policy_init_v70(ce, loop);
 	}
 
@@ -2921,7 +2926,7 @@ static void __guc_context_set_preemption_timeout(struct intel_guc *guc,
 						 u16 guc_id,
 						 u32 preemption_timeout)
 {
-	if (guc->fw.major_ver_found >= 70) {
+	if (GET_UC_VER(guc) >= MAKE_UC_VER(70, 0, 0)) {
 		struct context_policy policy;
 
 		__guc_context_policy_start_klv(&policy, guc_id);
@@ -3186,7 +3191,7 @@ static int guc_context_alloc(struct intel_context *ce)
 static void __guc_context_set_prio(struct intel_guc *guc,
 				   struct intel_context *ce)
 {
-	if (guc->fw.major_ver_found >= 70) {
+	if (GET_UC_VER(guc) >= MAKE_UC_VER(70, 0, 0)) {
 		struct context_policy policy;
 
 		__guc_context_policy_start_klv(&policy, ce->guc_id.id);
@@ -4001,6 +4006,13 @@ static inline void guc_init_lrc_mapping(struct intel_guc *guc)
 
 	/* make sure all descriptors are clean... */
 	xa_destroy(&guc->context_lookup);
+
+	/*
+	 * A reset might have occurred while we had a pending stalled request,
+	 * so make sure we clean that up.
+	 */
+	guc->stalled_request = NULL;
+	guc->submission_stall_reason = STALL_NONE;
 
 	/*
 	 * Some contexts might have been pinned before we enabled GuC
