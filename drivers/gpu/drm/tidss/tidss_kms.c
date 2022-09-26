@@ -113,41 +113,18 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
  * Check how to handle the first stream, will we get a call back for that
  * Assuming the callback is for subsequent streams
  */
+
+static u8 tidss_mst_crtc_id;
+
 static struct drm_encoder *tidss_mhdp_mst_create_encoder(void *priv_data,
 							 struct drm_bridge *bridge)
 {
 	struct tidss_device *tidss = priv_data;
-	const struct dispc_features *feat = tidss->feat;
-	struct tidss_plane *tplane;
-	struct tidss_crtc *tcrtc;
 	struct drm_encoder *enc;
-	unsigned int fourccs_len;
-	const u32 *fourccs = dispc_plane_formats(tidss->dispc, &fourccs_len);
-	u32 hw_plane_id = feat->vid_order[tidss->num_planes];
 	int ret;
-	u32 crtc_mask = 1 << tidss->num_crtcs;
-
-	tplane = tidss_plane_create(tidss, hw_plane_id,
-				    DRM_PLANE_TYPE_PRIMARY, crtc_mask,
-				    fourccs, fourccs_len);
-	if (IS_ERR(tplane)) {
-		dev_err(tidss->dev, "plane create failed\n");
-		return (struct drm_encoder *)(tplane);
-	}
-
-	tidss->planes[tidss->num_planes++] = &tplane->plane;
-
-	tcrtc = tidss_crtc_create(tidss, tidss->num_crtcs,
-				  &tplane->plane);
-	if (IS_ERR(tcrtc)) {
-		dev_err(tidss->dev, "crtc create failed\n");
-		return (struct drm_encoder *)(tcrtc);
-	}
-
-	tidss->crtcs[tidss->num_crtcs++] = &tcrtc->crtc;
 
 	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPMST,
-				   1 << tcrtc->crtc.index);
+				1 << tidss->crtcs[tidss_mst_crtc_id++]->index);
 	if (IS_ERR(enc)) {
 		dev_err(tidss->dev, "encoder create failed\n");
 		return (struct drm_encoder *)(enc);
@@ -316,6 +293,35 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 	 * MST crtcs that are created in mhdp mst cbs
 	 */
 	if (1) {// Find if MHDP with MST
+		for (i = num_pipes; i < max_vps; i++) {
+			u32 hw_plane_id = feat->vid_order[tidss->num_planes];
+			struct tidss_plane *tplane;
+			struct tidss_crtc *tcrtc;
+			crtc_mask = 1 << tidss->num_crtcs;
+
+			tplane = tidss_plane_create(tidss, hw_plane_id,
+						    DRM_PLANE_TYPE_PRIMARY,
+						    crtc_mask,
+						    fourccs, fourccs_len);
+			if (IS_ERR(tplane)) {
+				dev_err(tidss->dev, "plane create failed\n");
+				return PTR_ERR(tplane);
+			}
+
+			tidss->planes[tidss->num_planes++] = &tplane->plane;
+
+			tcrtc = tidss_crtc_create(tidss, tidss->num_crtcs,
+						  &tplane->plane);
+			if (IS_ERR(tcrtc)) {
+				dev_err(tidss->dev, "crtc create failed\n");
+				return PTR_ERR(tcrtc);
+			}
+
+			tidss->crtcs[tidss->num_crtcs++] = &tcrtc->crtc;
+		}
+
+		tidss_mst_crtc_id = num_pipes;
+
 		return 0;
 	}
 
