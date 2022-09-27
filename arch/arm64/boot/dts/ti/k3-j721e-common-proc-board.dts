@@ -687,34 +687,9 @@
 };
 
 &dss_ports {
-	#address-cells = <1>;
-	#size-cells = <0>;
-
-	port@0 {
-		reg = <0>;
+	port {
 		dpi0_out: endpoint {
 			remote-endpoint = <&dp0_in>;
-		};
-	};
-
-	port@1 {
-		reg = <1>;
-		dpi1_out: endpoint {
-			remote-endpoint = <&dp1_in>;
-		};
-	};
-
-	port@2 {
-		reg = <2>;
-		dpi2_out: endpoint {
-			remote-endpoint = <&dp2_in>;
-		};
-	};
-
-	port@3 {
-		reg = <3>;
-		dpi3_out: endpoint {
-			remote-endpoint = <&dp3_in>;
 		};
 	};
 };
@@ -727,27 +702,6 @@
 		reg = <0>;
 		dp0_in: endpoint {
 			remote-endpoint = <&dpi0_out>;
-		};
-	};
-
-	port@1 {
-		reg = <1>;
-		dp1_in: endpoint {
-			remote-endpoint = <&dpi1_out>;
-		};
-	};
-
-	port@2 {
-		reg = <2>;
-		dp2_in: endpoint {
-			remote-endpoint = <&dpi2_out>;
-		};
-	};
-
-	port@3 {
-		reg = <3>;
-		dp3_in: endpoint {
-			remote-endpoint = <&dpi3_out>;
 		};
 	};
 
