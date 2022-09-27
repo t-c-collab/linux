@@ -126,13 +126,6 @@ static struct drm_encoder *tidss_mhdp_mst_create_encoder(void *priv_data,
 		return (struct drm_encoder *)(enc);
 	}
 
-	/* IS THIS A DEAD LOCK ......
-	 * Will attach work before the call back completes
-	 */
-	ret = drm_bridge_attach(enc, bridge, NULL, 0);
-	if (ret)
-		return NULL;
-
 	return enc;
 }
 
