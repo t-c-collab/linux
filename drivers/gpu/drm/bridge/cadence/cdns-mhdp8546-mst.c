@@ -415,6 +415,9 @@ void cdns_mhdp_mst_atomic_disable(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs cdns_mhdp_mst_bridge_funcs = {
 	.atomic_enable = cdns_mhdp_atomic_enable,
 	.atomic_disable = cdns_mhdp_mst_atomic_disable,
+	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
+	.atomic_reset = drm_atomic_helper_bridge_reset,
 };
 
 static struct cdns_mhdp_bridge *
@@ -473,6 +476,7 @@ static struct drm_connector *cdns_mhdp_add_mst_connector(struct drm_dp_mst_topol
 	struct cdns_mhdp_device *mhdp = container_of(mgr, struct cdns_mhdp_device, mst_mgr);
 	struct drm_device *dev = mhdp->bridge.base.dev;
 	struct cdns_mhdp_connector *mhdp_connector;
+	struct drm_connector_state *conn_state;
 	struct drm_connector *connector;
 	int ret;
 
@@ -483,6 +487,12 @@ static struct drm_connector *cdns_mhdp_add_mst_connector(struct drm_dp_mst_topol
 	mhdp_connector->is_mst_connector = true;
 	connector = &mhdp_connector->base;
 	mhdp_connector->port = port;
+
+	conn_state = kzalloc(sizeof(*conn_state), GFP_KERNEL);
+	if (!conn_state)
+		goto err;
+
+	__drm_atomic_helper_connector_reset(connector, conn_state);
 
 	ret = drm_connector_init(dev, connector, &cdns_mhdp_mst_connector_funcs,
 				 DRM_MODE_CONNECTOR_DisplayPort);
