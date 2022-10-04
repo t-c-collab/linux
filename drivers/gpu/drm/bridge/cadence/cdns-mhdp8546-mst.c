@@ -17,6 +17,7 @@
 #include <drm/drm_probe_helper.h>
 
 #include <linux/iopoll.h>
+#include <linux/media-bus-format.h>
 
 #include "cdns-mhdp8546-mst.h"
 
@@ -475,6 +476,7 @@ static struct drm_connector *cdns_mhdp_add_mst_connector(struct drm_dp_mst_topol
 {
 	struct cdns_mhdp_device *mhdp = container_of(mgr, struct cdns_mhdp_device, mst_mgr);
 	struct drm_device *dev = mhdp->bridge.base.dev;
+	u32 bus_format = MEDIA_BUS_FMT_RGB121212_1X36;
 	struct cdns_mhdp_connector *mhdp_connector;
 	struct drm_connector_state *conn_state;
 	struct drm_connector *connector;
@@ -500,6 +502,10 @@ static struct drm_connector *cdns_mhdp_add_mst_connector(struct drm_dp_mst_topol
 		goto err;
 
 	drm_connector_helper_add(connector, &cdns_mhdp_mst_connector_helper_funcs);
+
+	ret = drm_display_info_set_bus_formats(&connector->display_info, &bus_format, 1);
+	if (ret)
+		goto err;
 
 	mhdp_connector->bridge = cdns_mhdp_create_fake_mst_bridge(mhdp, mhdp_connector);
 	if (!mhdp_connector->bridge)
