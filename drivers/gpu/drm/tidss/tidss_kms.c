@@ -15,6 +15,7 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_vblank.h>
 #include <drm/bridge/cdns-mhdp8546-cbs.h>
+#include <drm/drm_drv.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
@@ -110,21 +111,21 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
  * Assuming the callback is for subsequent streams
  */
 
-static u8 tidss_mst_crtc_id;
-
 static struct drm_encoder *tidss_mhdp_mst_create_encoder(void *priv_data,
 							 struct drm_bridge *bridge)
 {
 	struct tidss_device *tidss = priv_data;
 	struct drm_encoder *enc;
-	int ret;
+	struct drm_device *ddev = &tidss->ddev;
 
-	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPMST,
-				1 << tidss->crtcs[tidss_mst_crtc_id++]->index);
+	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPI, 15);
+
 	if (IS_ERR(enc)) {
 		dev_err(tidss->dev, "encoder create failed\n");
 		return (struct drm_encoder *)(enc);
 	}
+
+	drm_mode_config_reset(ddev);
 
 	return enc;
 }
@@ -310,8 +311,6 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 
 			tidss->crtcs[tidss->num_crtcs++] = &tcrtc->crtc;
 		}
-
-		tidss_mst_crtc_id = num_pipes;
 
 		return 0;
 	}
