@@ -438,6 +438,8 @@ cdns_mhdp_create_fake_mst_bridge(struct cdns_mhdp_device *mhdp,
 	mhdp_bridge->connector = mhdp_connector;
 
 	mhdp_bridge->base.funcs = &cdns_mhdp_mst_bridge_funcs;
+	if (mhdp->info)
+		mhdp_bridge->base.timings = mhdp->info->timings;
 
 	drm_bridge_add(&mhdp_bridge->base);
 
