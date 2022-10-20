@@ -4292,6 +4292,43 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 }
 EXPORT_SYMBOL(drm_dp_mst_get_edid);
 
+/* Swap: Added for Cadence MHDP testing */
+/**
+ * drm_dp_mst_get_custom_edid() - get custom EDID for an MST port
+ * @connector: toplevel connector to get EDID for
+ * @mgr: manager for this port
+ * @port: unverified pointer to a port
+ * @read_block: EDID block read function
+ * @context: private data passed to the block read function
+ *
+ * This returns an EDID for the port connected to a connector,
+ * It validates the pointer still exists so the caller doesn't require a
+ * reference.
+ */
+struct edid *drm_dp_mst_get_custom_edid(struct drm_connector *connector,
+					struct drm_dp_mst_topology_mgr *mgr,
+					struct drm_dp_mst_port *port,
+					read_block_fn read_block,
+					void *context)
+{
+	struct edid *edid = NULL;
+
+	/* we need to search for the port in the mgr in case it's gone */
+	port = drm_dp_mst_topology_get_port_validated(mgr, port);
+	if (!port)
+		return NULL;
+
+	if (port->cached_edid)
+		edid = drm_edid_duplicate(port->cached_edid);
+	else
+		edid = drm_do_get_edid(connector, read_block, context);
+
+	port->has_audio = drm_detect_monitor_audio(edid);
+	drm_dp_mst_topology_put_port(port);
+	return edid;
+}
+EXPORT_SYMBOL(drm_dp_mst_get_custom_edid);
+
 /**
  * drm_dp_find_vcpi_slots() - Find VCPI slots for this PBN value
  * @mgr: manager to use

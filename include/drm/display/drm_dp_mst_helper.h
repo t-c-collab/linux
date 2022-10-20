@@ -795,6 +795,15 @@ drm_dp_mst_detect_port(struct drm_connector *connector,
 
 struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_mst_topology_mgr *mgr, struct drm_dp_mst_port *port);
 
+/*******************  Added for Cadence MHDP testing *******************/
+typedef int read_block_fn(void *context, u8 *buf, unsigned int block, size_t len);
+struct edid *drm_dp_mst_get_custom_edid(struct drm_connector *connector,
+					struct drm_dp_mst_topology_mgr *mgr,
+					struct drm_dp_mst_port *port,
+					read_block_fn read_block,
+					void *context);
+/***********************************************************************/
+
 int drm_dp_get_vc_payload_bw(const struct drm_dp_mst_topology_mgr *mgr,
 			     int link_rate, int link_lane_count);
 

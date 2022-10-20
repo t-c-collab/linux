@@ -457,6 +457,8 @@ int cdns_mhdp_reg_read(struct cdns_mhdp_device *mhdp, u32 addr, u32 *value);
 int cdns_mhdp_reg_write(struct cdns_mhdp_device *mhdp, u16 addr, u32 val);
 u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt);
 int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp);
+int cdns_mhdp_get_edid_block(void *data, u8 *edid,
+			     unsigned int block, size_t length);
 void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
 			       const struct drm_display_mode *mode);
 #endif
