@@ -1418,7 +1418,7 @@ static void cdns_mhdp_fill_sink_caps(struct cdns_mhdp_device *mhdp,
 				  DP_NO_AUX_HANDSHAKE_LINK_TRAINING);
 }
 
-static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
+int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 {
 	u8 dpcd[DP_RECEIVER_CAP_SIZE], amp[2];
 	u32 resp, interval, interval_us;
@@ -1520,6 +1520,9 @@ static int cdns_mhdp_get_modes(struct drm_connector *connector)
 	int num_modes;
 
 	if (!mhdp->plugged)
+		return 0;
+
+	if (mhdp->is_mst)
 		return 0;
 
 	edid = cdns_mhdp_get_edid(mhdp, connector);
@@ -1991,8 +1994,8 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 	cdns_mhdp_configure_video(mhdp, bridge, mode);
 }
 
-void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
-			     struct drm_bridge_state *bridge_state)
+static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
+				    struct drm_bridge_state *bridge_state)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	struct drm_atomic_state *state = bridge_state->base.state;
@@ -2028,6 +2031,9 @@ void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
 
+	if (mhdp->is_mst)
+		goto out;
+
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
 	if (WARN_ON(!connector))
@@ -2062,10 +2068,7 @@ void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 		goto out;
 	}
 
-	if (mhdp->is_mst)
-		cdns_mhdp_mst_enable(mhdp, bridge, mode);
-	else
-		cdns_mhdp_sst_enable(mhdp, bridge, mode);
+	cdns_mhdp_sst_enable(mhdp, bridge, mode);
 
 	mhdp_state = to_cdns_mhdp_bridge_state(new_state);
 
