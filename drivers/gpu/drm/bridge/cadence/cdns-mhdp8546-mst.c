@@ -257,7 +257,13 @@ static int cdns_mhdp_mst_get_modes(struct drm_connector *connector)
 	struct edid *edid;
 	int num_modes = 0;
 
-	edid = drm_dp_mst_get_edid(connector, &mhdp->mst_mgr, mhdp_connector->port);
+	/* A new function to read EDID using custom callback is added for testing MHDP in
+	 * MST core.
+	 * Calling that here. This is still under test.
+	 */
+	//edid = drm_dp_mst_get_edid(connector, &mhdp->mst_mgr, mhdp_connector->port);
+	edid = drm_dp_mst_get_custom_edid(connector, &mhdp->mst_mgr, mhdp_connector->port,
+					  cdns_mhdp_get_edid_block, mhdp);
 	if (edid) {
 		drm_connector_update_edid_property(connector, edid);
 		num_modes = drm_add_edid_modes(connector, edid);
