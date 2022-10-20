@@ -14,8 +14,6 @@
 #include "cdns-mhdp8546-core.h"
 
 int cdns_mhdp_check_mst_status(struct cdns_mhdp_device *mhdp);
-void cdns_mhdp_mst_enable(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
-			  const struct drm_display_mode *mode);
 void cdns_mhdp_mst_atomic_disable(struct drm_bridge *bridge,
 				  struct drm_bridge_state *old_bridge_state);
 void cdns_mhdp_mst_probe(struct cdns_mhdp_device *mhdp, const u8 dpcd[DP_RECEIVER_CAP_SIZE]);
