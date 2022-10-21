@@ -421,18 +421,18 @@ static void cdns_mhdp_mst_atomic_enable(struct drm_bridge *bridge,
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->enable)
 		mhdp->info->ops->enable(mhdp);
 
-	////// Swap: TODO For stream "n"
-	/* Enable VIF clock for stream 0 */
+	/* Enable VIF clock for stream "n" */
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
 	if (ret < 0) {
 		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
 		goto out;
 	}
 
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
-
-	///////
+	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR, resp
+			    | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN
+			    | CDNS_VIF_CLK_EN1 | CDNS_VIF_CLK_RSTN1
+			    | CDNS_VIF_CLK_EN2 | CDNS_VIF_CLK_RSTN2
+			    | CDNS_VIF_CLK_EN3 | CDNS_VIF_CLK_RSTN3);
 
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);

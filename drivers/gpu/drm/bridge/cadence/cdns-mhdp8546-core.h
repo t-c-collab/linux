@@ -67,6 +67,12 @@ struct phy;
 #define CDNS_DPTX_CAR				0x00904
 #define CDNS_VIF_CLK_EN				BIT(0)
 #define CDNS_VIF_CLK_RSTN			BIT(1)
+#define CDNS_VIF_CLK_EN1			BIT(12)
+#define CDNS_VIF_CLK_RSTN1			BIT(13)
+#define CDNS_VIF_CLK_EN2			BIT(14)
+#define CDNS_VIF_CLK_RSTN2			BIT(15)
+#define CDNS_VIF_CLK_EN3			BIT(16)
+#define CDNS_VIF_CLK_RSTN3			BIT(17)
 
 #define CDNS_SOURCE_VIDEO_IF(s)			(0x00b00 + ((s) * 0x20))
 #define CDNS_BND_HSYNC2VSYNC(s)			(CDNS_SOURCE_VIDEO_IF(s) + \
