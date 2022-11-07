@@ -2111,9 +2111,6 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
 			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
 
-	if (mhdp->is_mst)
-		cdns_mhdp_mst_atomic_disable(bridge, bridge_state);
-
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->disable)
 		mhdp->info->ops->disable(mhdp);
 
