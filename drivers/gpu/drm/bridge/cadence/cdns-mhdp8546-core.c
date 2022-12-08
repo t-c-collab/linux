@@ -405,6 +405,7 @@ err_get_hpd:
 	return ret;
 }
 
+static
 int cdns_mhdp_get_edid_block(void *data, u8 *edid,
 			     unsigned int block, size_t length)
 {
