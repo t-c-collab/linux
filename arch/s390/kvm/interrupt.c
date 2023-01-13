@@ -314,11 +314,6 @@ static inline u8 gisa_get_ipm(struct kvm_s390_gisa *gisa)
 	return READ_ONCE(gisa->ipm);
 }
 
-static inline void gisa_clear_ipm_gisc(struct kvm_s390_gisa *gisa, u32 gisc)
-{
-	clear_bit_inv(IPM_BIT_OFFSET + gisc, (unsigned long *) gisa);
-}
-
 static inline int gisa_tac_ipm_gisc(struct kvm_s390_gisa *gisa, u32 gisc)
 {
 	return test_and_clear_bit_inv(IPM_BIT_OFFSET + gisc, (unsigned long *) gisa);
@@ -3324,7 +3319,7 @@ static void aen_host_forward(unsigned long si)
 	if (gaite->count == 0)
 		return;
 	if (gaite->aisb != 0)
-		set_bit_inv(gaite->aisbo, (unsigned long *)gaite->aisb);
+		set_bit_inv(gaite->aisbo, phys_to_virt(gaite->aisb));
 
 	kvm = kvm_s390_pci_si_to_kvm(aift, si);
 	if (!kvm)

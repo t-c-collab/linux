@@ -847,7 +847,7 @@ int amdgpu_acpi_init(struct amdgpu_device *adev)
 	struct amdgpu_atif *atif = &amdgpu_acpi_priv.atif;
 
 	if (atif->notifications.brightness_change) {
-		if (amdgpu_device_has_dc_support(adev)) {
+		if (adev->dc_enabled) {
 #if defined(CONFIG_DRM_AMD_DC)
 			struct amdgpu_display_manager *dm = &adev->dm;
 
@@ -1053,6 +1053,10 @@ bool amdgpu_acpi_should_gpu_reset(struct amdgpu_device *adev)
 {
 	if (adev->flags & AMD_IS_APU)
 		return false;
+
+	if (amdgpu_sriov_vf(adev))
+		return false;
+
 	return pm_suspend_target_state != PM_SUSPEND_TO_IDLE;
 }
 

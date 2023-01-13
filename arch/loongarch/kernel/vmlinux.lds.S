@@ -4,6 +4,7 @@
 #include <asm/thread_info.h>
 
 #define PAGE_SIZE _PAGE_SIZE
+#define RO_EXCEPTION_TABLE_ALIGN	4
 
 /*
  * Put .bss..swapper_pg_dir as the first thing in .bss. This will
@@ -12,6 +13,7 @@
 #define BSS_FIRST_SECTIONS *(.bss..swapper_pg_dir)
 
 #include <asm-generic/vmlinux.lds.h>
+#include "image-vars.h"
 
 /*
  * Max avaliable Page Size is 64K, so we set SectionAlignment
@@ -52,7 +54,21 @@ SECTIONS
 	. = ALIGN(PECOFF_SEGMENT_ALIGN);
 	_etext = .;
 
-	EXCEPTION_TABLE(16)
+	/*
+	 * struct alt_inst entries. From the header (alternative.h):
+	 * "Alternative instructions for different CPU types or capabilities"
+	 * Think locking instructions on spinlocks.
+	 */
+	. = ALIGN(4);
+	.altinstructions : AT(ADDR(.altinstructions) - LOAD_OFFSET) {
+		__alt_instructions = .;
+		*(.altinstructions)
+		__alt_instructions_end = .;
+	}
+
+	.got : ALIGN(16) { *(.got) }
+	.plt : ALIGN(16) { *(.plt) }
+	.got.plt : ALIGN(16) { *(.got.plt) }
 
 	. = ALIGN(PECOFF_SEGMENT_ALIGN);
 	__init_begin = .;
@@ -76,6 +92,8 @@ SECTIONS
 #ifdef CONFIG_SMP
 	PERCPU_SECTION(1 << CONFIG_L1_CACHE_SHIFT)
 #endif
+
+	.rela.dyn : ALIGN(8) { *(.rela.dyn) *(.rela*) }
 
 	.init.bss : {
 		*(.init.bss)

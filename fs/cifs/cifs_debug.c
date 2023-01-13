@@ -87,7 +87,7 @@ static void cifs_debug_tcon(struct seq_file *m, struct cifs_tcon *tcon)
 {
 	__u32 dev_type = le32_to_cpu(tcon->fsDevInfo.DeviceType);
 
-	seq_printf(m, "%s Mounts: %d ", tcon->treeName, tcon->tc_count);
+	seq_printf(m, "%s Mounts: %d ", tcon->tree_name, tcon->tc_count);
 	if (tcon->nativeFileSystem)
 		seq_printf(m, "Type: %s ", tcon->nativeFileSystem);
 	seq_printf(m, "DevInfo: 0x%x Attributes: 0x%x\n\tPathComponentMax: %d Status: %d",
@@ -372,6 +372,14 @@ skip_rdma:
 		seq_printf(m, "\nIn Send: %d In MaxReq Wait: %d",
 				atomic_read(&server->in_send),
 				atomic_read(&server->num_waiters));
+		if (IS_ENABLED(CONFIG_CIFS_DFS_UPCALL)) {
+			if (server->origin_fullpath)
+				seq_printf(m, "\nDFS origin full path: %s",
+					   server->origin_fullpath);
+			if (server->leaf_fullpath)
+				seq_printf(m, "\nDFS leaf full path:   %s",
+					   server->leaf_fullpath);
+		}
 
 		seq_printf(m, "\n\n\tSessions: ");
 		i = 0;
@@ -601,7 +609,7 @@ static int cifs_stats_proc_show(struct seq_file *m, void *v)
 		list_for_each_entry(ses, &server->smb_ses_list, smb_ses_list) {
 			list_for_each_entry(tcon, &ses->tcon_list, tcon_list) {
 				i++;
-				seq_printf(m, "\n%d) %s", i, tcon->treeName);
+				seq_printf(m, "\n%d) %s", i, tcon->tree_name);
 				if (tcon->need_reconnect)
 					seq_puts(m, "\tDISCONNECTED ");
 				seq_printf(m, "\nSMBs: %d",

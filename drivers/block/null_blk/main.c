@@ -523,6 +523,24 @@ out:
 }
 CONFIGFS_ATTR(nullb_device_, badblocks);
 
+static ssize_t nullb_device_zone_readonly_store(struct config_item *item,
+						const char *page, size_t count)
+{
+	struct nullb_device *dev = to_nullb_device(item);
+
+	return zone_cond_store(dev, page, count, BLK_ZONE_COND_READONLY);
+}
+CONFIGFS_ATTR_WO(nullb_device_, zone_readonly);
+
+static ssize_t nullb_device_zone_offline_store(struct config_item *item,
+					       const char *page, size_t count)
+{
+	struct nullb_device *dev = to_nullb_device(item);
+
+	return zone_cond_store(dev, page, count, BLK_ZONE_COND_OFFLINE);
+}
+CONFIGFS_ATTR_WO(nullb_device_, zone_offline);
+
 static struct configfs_attribute *nullb_device_attrs[] = {
 	&nullb_device_attr_size,
 	&nullb_device_attr_completion_nsec,
@@ -549,6 +567,8 @@ static struct configfs_attribute *nullb_device_attrs[] = {
 	&nullb_device_attr_zone_nr_conv,
 	&nullb_device_attr_zone_max_open,
 	&nullb_device_attr_zone_max_active,
+	&nullb_device_attr_zone_readonly,
+	&nullb_device_attr_zone_offline,
 	&nullb_device_attr_virt_boundary,
 	&nullb_device_attr_no_sched,
 	&nullb_device_attr_shared_tag_bitmap,
@@ -614,7 +634,7 @@ static ssize_t memb_group_features_show(struct config_item *item, char *page)
 			"poll_queues,power,queue_mode,shared_tag_bitmap,size,"
 			"submit_queues,use_per_node_hctx,virt_boundary,zoned,"
 			"zone_capacity,zone_max_active,zone_max_open,"
-			"zone_nr_conv,zone_size\n");
+			"zone_nr_conv,zone_offline,zone_readonly,zone_size\n");
 }
 
 CONFIGFS_ATTR_RO(memb_group_, features);
@@ -1528,7 +1548,7 @@ static bool should_requeue_request(struct request *rq)
 	return false;
 }
 
-static int null_map_queues(struct blk_mq_tag_set *set)
+static void null_map_queues(struct blk_mq_tag_set *set)
 {
 	struct nullb *nullb = set->driver_data;
 	int i, qoff;
@@ -1555,7 +1575,9 @@ static int null_map_queues(struct blk_mq_tag_set *set)
 		} else {
 			pr_warn("tag set has unexpected nr_hw_queues: %d\n",
 				set->nr_hw_queues);
-			return -EINVAL;
+			WARN_ON_ONCE(true);
+			submit_queues = 1;
+			poll_queues = 0;
 		}
 	}
 
@@ -1577,8 +1599,6 @@ static int null_map_queues(struct blk_mq_tag_set *set)
 		qoff += map->nr_queues;
 		blk_mq_map_queues(map);
 	}
-
-	return 0;
 }
 
 static int null_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)

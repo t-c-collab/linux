@@ -1074,6 +1074,8 @@ static int readdir_search_pagecache(struct nfs_readdir_descriptor *desc)
 	return res;
 }
 
+#define NFS_READDIR_CACHE_MISS_THRESHOLD (16UL)
+
 /*
  * Once we've found the start of the dirent within a page: fill 'er up...
  */
@@ -1083,6 +1085,7 @@ static void nfs_do_filldir(struct nfs_readdir_descriptor *desc,
 	struct file	*file = desc->file;
 	struct nfs_cache_array *array;
 	unsigned int i;
+	bool first_emit = !desc->dir_cookie;
 
 	array = kmap_local_page(desc->page);
 	for (i = desc->cache_entry_index; i < array->size; i++) {
@@ -1106,6 +1109,10 @@ static void nfs_do_filldir(struct nfs_readdir_descriptor *desc,
 			desc->ctx->pos = desc->dir_cookie;
 		else
 			desc->ctx->pos++;
+		if (first_emit && i > NFS_READDIR_CACHE_MISS_THRESHOLD + 1) {
+			desc->eob = true;
+			break;
+		}
 	}
 	if (array->page_is_eof)
 		desc->eof = !desc->eob;
@@ -1186,8 +1193,6 @@ out:
 	dfprintk(DIRCACHE, "NFS: %s: returns %d\n", __func__, status);
 	return status;
 }
-
-#define NFS_READDIR_CACHE_MISS_THRESHOLD (16UL)
 
 static bool nfs_readdir_handle_cache_misses(struct inode *inode,
 					    struct nfs_readdir_descriptor *desc,
@@ -2022,7 +2027,7 @@ static int nfs_finish_open(struct nfs_open_context *ctx,
 	err = finish_open(file, dentry, do_open);
 	if (err)
 		goto out;
-	if (S_ISREG(file->f_path.dentry->d_inode->i_mode))
+	if (S_ISREG(file_inode(file)->i_mode))
 		nfs_file_set_open_context(file, ctx);
 	else
 		err = -EOPENSTALE;
@@ -2382,7 +2387,8 @@ static void nfs_dentry_remove_handle_error(struct inode *dir,
 {
 	switch (error) {
 	case -ENOENT:
-		d_delete(dentry);
+		if (d_really_is_positive(dentry))
+			d_delete(dentry);
 		nfs_set_verifier(dentry, nfs_save_change_attribute(dir));
 		break;
 	case 0:
@@ -2484,11 +2490,12 @@ int nfs_unlink(struct inode *dir, struct dentry *dentry)
 	 */
 	error = -ETXTBSY;
 	if (WARN_ON(dentry->d_flags & DCACHE_NFSFS_RENAMED) ||
-	    WARN_ON(dentry->d_fsdata == NFS_FSDATA_BLOCKED))
+	    WARN_ON(dentry->d_fsdata == NFS_FSDATA_BLOCKED)) {
+		spin_unlock(&dentry->d_lock);
 		goto out;
-	if (dentry->d_fsdata)
-		/* old devname */
-		kfree(dentry->d_fsdata);
+	}
+	/* old devname */
+	kfree(dentry->d_fsdata);
 	dentry->d_fsdata = NFS_FSDATA_BLOCKED;
 
 	spin_unlock(&dentry->d_lock);
@@ -2946,9 +2953,28 @@ static struct nfs_access_entry *nfs_access_search_rbtree(struct inode *inode, co
 	return NULL;
 }
 
+static u64 nfs_access_login_time(const struct task_struct *task,
+				 const struct cred *cred)
+{
+	const struct task_struct *parent;
+	u64 ret;
+
+	rcu_read_lock();
+	for (;;) {
+		parent = rcu_dereference(task->real_parent);
+		if (parent == task || cred_fscmp(parent->cred, cred) != 0)
+			break;
+		task = parent;
+	}
+	ret = task->start_time;
+	rcu_read_unlock();
+	return ret;
+}
+
 static int nfs_access_get_cached_locked(struct inode *inode, const struct cred *cred, u32 *mask, bool may_block)
 {
 	struct nfs_inode *nfsi = NFS_I(inode);
+	u64 login_time = nfs_access_login_time(current, cred);
 	struct nfs_access_entry *cache;
 	bool retry = true;
 	int err;
@@ -2976,6 +3002,9 @@ static int nfs_access_get_cached_locked(struct inode *inode, const struct cred *
 		spin_lock(&inode->i_lock);
 		retry = false;
 	}
+	err = -ENOENT;
+	if ((s64)(login_time - cache->timestamp) > 0)
+		goto out;
 	*mask = cache->mask;
 	list_move_tail(&cache->lru, &nfsi->access_cache_entry_lru);
 	err = 0;
@@ -3055,6 +3084,7 @@ static void nfs_access_add_rbtree(struct inode *inode,
 		else
 			goto found;
 	}
+	set->timestamp = ktime_get_ns();
 	rb_link_node(&set->rb_node, parent, p);
 	rb_insert_color(&set->rb_node, root_node);
 	list_add_tail(&set->lru, &nfsi->access_cache_entry_lru);

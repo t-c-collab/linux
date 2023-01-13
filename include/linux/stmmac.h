@@ -257,7 +257,6 @@ struct plat_stmmacenet_data {
 	u8 vlan_fail_q;
 	unsigned int eee_usecs_rate;
 	struct pci_dev *pdev;
-	bool has_crossts;
 	int int_snapshot_num;
 	int ext_snapshot_num;
 	bool int_snapshot_en;
@@ -272,5 +271,6 @@ struct plat_stmmacenet_data {
 	int msi_tx_base_vec;
 	bool use_phy_wol;
 	bool sph_disable;
+	bool serdes_up_after_phy_linkup;
 };
 #endif

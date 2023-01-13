@@ -48,7 +48,6 @@
 #include <linux/i2c.h>
 #include <linux/i2c-algo-bit.h>
 
-
 #ifdef __arm__
 #include <asm/mach-types.h>
 #endif
@@ -1135,7 +1134,7 @@ int cyber2000fb_attach(struct cyberpro_info *info, int idx)
 		info->fb_size	      = int_cfb_info->fb.fix.smem_len;
 		info->info	      = int_cfb_info;
 
-		strlcpy(info->dev_name, int_cfb_info->fb.fix.id,
+		strscpy(info->dev_name, int_cfb_info->fb.fix.id,
 			sizeof(info->dev_name));
 	}
 
@@ -1230,7 +1229,7 @@ static int cyber2000fb_ddc_getsda(void *data)
 
 static int cyber2000fb_setup_ddc_bus(struct cfb_info *cfb)
 {
-	strlcpy(cfb->ddc_adapter.name, cfb->fb.fix.id,
+	strscpy(cfb->ddc_adapter.name, cfb->fb.fix.id,
 		sizeof(cfb->ddc_adapter.name));
 	cfb->ddc_adapter.owner		= THIS_MODULE;
 	cfb->ddc_adapter.class		= I2C_CLASS_DDC;
@@ -1305,7 +1304,7 @@ static int cyber2000fb_i2c_getscl(void *data)
 
 static int cyber2000fb_i2c_register(struct cfb_info *cfb)
 {
-	strlcpy(cfb->i2c_adapter.name, cfb->fb.fix.id,
+	strscpy(cfb->i2c_adapter.name, cfb->fb.fix.id,
 		sizeof(cfb->i2c_adapter.name));
 	cfb->i2c_adapter.owner = THIS_MODULE;
 	cfb->i2c_adapter.algo_data = &cfb->i2c_algo;
@@ -1501,7 +1500,7 @@ static int cyber2000fb_setup(char *options)
 		if (strncmp(opt, "font:", 5) == 0) {
 			static char default_font_storage[40];
 
-			strlcpy(default_font_storage, opt + 5,
+			strscpy(default_font_storage, opt + 5,
 				sizeof(default_font_storage));
 			default_font = default_font_storage;
 			continue;
@@ -1796,6 +1795,7 @@ failed_ioremap:
 failed_regions:
 	cyberpro_free_fb_info(cfb);
 failed_release:
+	pci_disable_device(dev);
 	return err;
 }
 
@@ -1812,6 +1812,7 @@ static void cyberpro_pci_remove(struct pci_dev *dev)
 			int_cfb_info = NULL;
 
 		pci_release_regions(dev);
+		pci_disable_device(dev);
 	}
 }
 
@@ -1876,7 +1877,12 @@ static int __init cyber2000fb_init(void)
 
 #ifndef MODULE
 	char *option = NULL;
+#endif
 
+	if (fb_modesetting_disabled("CyberPro"))
+		return -ENODEV;
+
+#ifndef MODULE
 	if (fb_get_options("cyber2000fb", &option))
 		return -ENODEV;
 	cyber2000fb_setup(option);

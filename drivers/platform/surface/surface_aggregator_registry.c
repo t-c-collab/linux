@@ -86,38 +86,38 @@ static const struct software_node ssam_node_bas_dtx = {
 	.parent = &ssam_node_root,
 };
 
-/* HID keyboard (TID1). */
-static const struct software_node ssam_node_hid_tid1_keyboard = {
+/* HID keyboard (SAM, TID=1). */
+static const struct software_node ssam_node_hid_sam_keyboard = {
 	.name = "ssam:01:15:01:01:00",
 	.parent = &ssam_node_root,
 };
 
-/* HID pen stash (TID1; pen taken / stashed away evens). */
-static const struct software_node ssam_node_hid_tid1_penstash = {
+/* HID pen stash (SAM, TID=1; pen taken / stashed away evens). */
+static const struct software_node ssam_node_hid_sam_penstash = {
 	.name = "ssam:01:15:01:02:00",
 	.parent = &ssam_node_root,
 };
 
-/* HID touchpad (TID1). */
-static const struct software_node ssam_node_hid_tid1_touchpad = {
+/* HID touchpad (SAM, TID=1). */
+static const struct software_node ssam_node_hid_sam_touchpad = {
 	.name = "ssam:01:15:01:03:00",
 	.parent = &ssam_node_root,
 };
 
-/* HID device instance 6 (TID1, unknown HID device). */
-static const struct software_node ssam_node_hid_tid1_iid6 = {
+/* HID device instance 6 (SAM, TID=1, HID sensor collection). */
+static const struct software_node ssam_node_hid_sam_sensors = {
 	.name = "ssam:01:15:01:06:00",
 	.parent = &ssam_node_root,
 };
 
-/* HID device instance 7 (TID1, unknown HID device). */
-static const struct software_node ssam_node_hid_tid1_iid7 = {
+/* HID device instance 7 (SAM, TID=1, UCM UCSI HID client). */
+static const struct software_node ssam_node_hid_sam_ucm_ucsi = {
 	.name = "ssam:01:15:01:07:00",
 	.parent = &ssam_node_root,
 };
 
-/* HID system controls (TID1). */
-static const struct software_node ssam_node_hid_tid1_sysctrl = {
+/* HID system controls (SAM, TID=1). */
+static const struct software_node ssam_node_hid_sam_sysctrl = {
 	.name = "ssam:01:15:01:08:00",
 	.parent = &ssam_node_root,
 };
@@ -182,8 +182,8 @@ static const struct software_node ssam_node_hid_kip_touchpad = {
 	.parent = &ssam_node_hub_kip,
 };
 
-/* HID device instance 5 (KIP hub, unknown HID device). */
-static const struct software_node ssam_node_hid_kip_iid5 = {
+/* HID device instance 5 (KIP hub, type-cover firmware update). */
+static const struct software_node ssam_node_hid_kip_fwupd = {
 	.name = "ssam:01:15:02:05:00",
 	.parent = &ssam_node_hub_kip,
 };
@@ -234,6 +234,19 @@ static const struct software_node *ssam_node_group_sl3[] = {
 	NULL,
 };
 
+/* Devices for Surface Laptop 5. */
+static const struct software_node *ssam_node_group_sl5[] = {
+	&ssam_node_root,
+	&ssam_node_bat_ac,
+	&ssam_node_bat_main,
+	&ssam_node_tmp_pprof,
+	&ssam_node_hid_main_keyboard,
+	&ssam_node_hid_main_touchpad,
+	&ssam_node_hid_main_iid5,
+	&ssam_node_hid_sam_ucm_ucsi,
+	NULL,
+};
+
 /* Devices for Surface Laptop Studio. */
 static const struct software_node *ssam_node_group_sls[] = {
 	&ssam_node_root,
@@ -241,12 +254,12 @@ static const struct software_node *ssam_node_group_sls[] = {
 	&ssam_node_bat_main,
 	&ssam_node_tmp_pprof,
 	&ssam_node_pos_tablet_switch,
-	&ssam_node_hid_tid1_keyboard,
-	&ssam_node_hid_tid1_penstash,
-	&ssam_node_hid_tid1_touchpad,
-	&ssam_node_hid_tid1_iid6,
-	&ssam_node_hid_tid1_iid7,
-	&ssam_node_hid_tid1_sysctrl,
+	&ssam_node_hid_sam_keyboard,
+	&ssam_node_hid_sam_penstash,
+	&ssam_node_hid_sam_touchpad,
+	&ssam_node_hid_sam_sensors,
+	&ssam_node_hid_sam_ucm_ucsi,
+	&ssam_node_hid_sam_sysctrl,
 	NULL,
 };
 
@@ -268,6 +281,7 @@ static const struct software_node *ssam_node_group_sp7[] = {
 	NULL,
 };
 
+/* Devices for Surface Pro 8 */
 static const struct software_node *ssam_node_group_sp8[] = {
 	&ssam_node_root,
 	&ssam_node_hub_kip,
@@ -278,7 +292,26 @@ static const struct software_node *ssam_node_group_sp8[] = {
 	&ssam_node_hid_kip_keyboard,
 	&ssam_node_hid_kip_penstash,
 	&ssam_node_hid_kip_touchpad,
-	&ssam_node_hid_kip_iid5,
+	&ssam_node_hid_kip_fwupd,
+	&ssam_node_hid_sam_sensors,
+	&ssam_node_hid_sam_ucm_ucsi,
+	NULL,
+};
+
+/* Devices for Surface Pro 9 */
+static const struct software_node *ssam_node_group_sp9[] = {
+	&ssam_node_root,
+	&ssam_node_hub_kip,
+	&ssam_node_bat_ac,
+	&ssam_node_bat_main,
+	&ssam_node_tmp_pprof,
+	/* TODO: Tablet mode switch (via POS subsystem) */
+	&ssam_node_hid_kip_keyboard,
+	&ssam_node_hid_kip_penstash,
+	&ssam_node_hid_kip_touchpad,
+	&ssam_node_hid_kip_fwupd,
+	&ssam_node_hid_sam_sensors,
+	&ssam_node_hid_sam_ucm_ucsi,
 	NULL,
 };
 
@@ -301,6 +334,9 @@ static const struct acpi_device_id ssam_platform_hub_match[] = {
 	/* Surface Pro 8 */
 	{ "MSHW0263", (unsigned long)ssam_node_group_sp8 },
 
+	/* Surface Pro 9 */
+	{ "MSHW0343", (unsigned long)ssam_node_group_sp9 },
+
 	/* Surface Book 2 */
 	{ "MSHW0107", (unsigned long)ssam_node_group_gen5 },
 
@@ -322,8 +358,14 @@ static const struct acpi_device_id ssam_platform_hub_match[] = {
 	/* Surface Laptop 4 (13", Intel) */
 	{ "MSHW0250", (unsigned long)ssam_node_group_sl3 },
 
+	/* Surface Laptop 5 */
+	{ "MSHW0350", (unsigned long)ssam_node_group_sl5 },
+
 	/* Surface Laptop Go 1 */
 	{ "MSHW0118", (unsigned long)ssam_node_group_slg1 },
+
+	/* Surface Laptop Go 2 */
+	{ "MSHW0290", (unsigned long)ssam_node_group_slg1 },
 
 	/* Surface Laptop Studio */
 	{ "MSHW0123", (unsigned long)ssam_node_group_sls },

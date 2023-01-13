@@ -93,6 +93,9 @@ struct drm_device {
 	/** @render: Render node */
 	struct drm_minor *render;
 
+	/** @accel: Compute Acceleration node */
+	struct drm_minor *accel;
+
 	/**
 	 * @registered:
 	 *
@@ -294,6 +297,21 @@ struct drm_device {
 	 * Set by drm_fb_helper_init() and cleared by drm_fb_helper_fini().
 	 */
 	struct drm_fb_helper *fb_helper;
+
+	/**
+	 * @debugfs_mutex:
+	 *
+	 * Protects &debugfs_list access.
+	 */
+	struct mutex debugfs_mutex;
+
+	/**
+	 * @debugfs_list:
+	 *
+	 * List of debugfs files to be created by the DRM device. The files
+	 * must be added during drm_dev_register().
+	 */
+	struct list_head debugfs_list;
 
 	/* Everything below here is for legacy driver, never use! */
 	/* private: */

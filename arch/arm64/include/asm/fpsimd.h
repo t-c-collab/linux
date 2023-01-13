@@ -56,11 +56,20 @@ extern void fpsimd_signal_preserve_current_state(void);
 extern void fpsimd_preserve_current_state(void);
 extern void fpsimd_restore_current_state(void);
 extern void fpsimd_update_current_state(struct user_fpsimd_state const *state);
+extern void fpsimd_kvm_prepare(void);
 
-extern void fpsimd_bind_state_to_cpu(struct user_fpsimd_state *state,
-				     void *sve_state, unsigned int sve_vl,
-				     void *za_state, unsigned int sme_vl,
-				     u64 *svcr);
+struct cpu_fp_state {
+	struct user_fpsimd_state *st;
+	void *sve_state;
+	void *za_state;
+	u64 *svcr;
+	unsigned int sve_vl;
+	unsigned int sme_vl;
+	enum fp_type *fp_type;
+	enum fp_type to_save;
+};
+
+extern void fpsimd_bind_state_to_cpu(struct cpu_fp_state *fp_state);
 
 extern void fpsimd_flush_task_state(struct task_struct *target);
 extern void fpsimd_save_and_flush_cpu_state(void);
@@ -153,7 +162,7 @@ struct vl_info {
 
 #ifdef CONFIG_ARM64_SVE
 
-extern void sve_alloc(struct task_struct *task);
+extern void sve_alloc(struct task_struct *task, bool flush);
 extern void fpsimd_release_task(struct task_struct *task);
 extern void fpsimd_sync_to_sve(struct task_struct *task);
 extern void fpsimd_force_sync_to_sve(struct task_struct *task);
@@ -256,7 +265,7 @@ size_t sve_state_size(struct task_struct const *task);
 
 #else /* ! CONFIG_ARM64_SVE */
 
-static inline void sve_alloc(struct task_struct *task) { }
+static inline void sve_alloc(struct task_struct *task, bool flush) { }
 static inline void fpsimd_release_task(struct task_struct *task) { }
 static inline void sve_sync_to_fpsimd(struct task_struct *task) { }
 static inline void sve_sync_from_fpsimd_zeropad(struct task_struct *task) { }

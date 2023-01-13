@@ -247,9 +247,9 @@ static const struct irq_chip pcf857x_irq_chip = {
 
 /*-------------------------------------------------------------------------*/
 
-static int pcf857x_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int pcf857x_probe(struct i2c_client *client)
 {
+	const struct i2c_device_id *id = i2c_client_get_device_id(client);
 	struct pcf857x_platform_data	*pdata = dev_get_platdata(&client->dev);
 	struct device_node		*np = client->dev.of_node;
 	struct pcf857x			*gpio;
@@ -399,7 +399,7 @@ fail:
 	return status;
 }
 
-static int pcf857x_remove(struct i2c_client *client)
+static void pcf857x_remove(struct i2c_client *client)
 {
 	struct pcf857x_platform_data	*pdata = dev_get_platdata(&client->dev);
 	struct pcf857x			*gpio = i2c_get_clientdata(client);
@@ -407,8 +407,6 @@ static int pcf857x_remove(struct i2c_client *client)
 	if (pdata && pdata->teardown)
 		pdata->teardown(client, gpio->chip.base, gpio->chip.ngpio,
 				pdata->context);
-
-	return 0;
 }
 
 static void pcf857x_shutdown(struct i2c_client *client)
@@ -424,7 +422,7 @@ static struct i2c_driver pcf857x_driver = {
 		.name	= "pcf857x",
 		.of_match_table = of_match_ptr(pcf857x_of_table),
 	},
-	.probe	= pcf857x_probe,
+	.probe_new = pcf857x_probe,
 	.remove	= pcf857x_remove,
 	.shutdown = pcf857x_shutdown,
 	.id_table = pcf857x_id,

@@ -655,7 +655,7 @@ static int gxt4500_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	cardtype = ent->driver_data;
 	par->refclk_ps = cardinfo[cardtype].refclk_ps;
 	info->fix = gxt4500_fix;
-	strlcpy(info->fix.id, cardinfo[cardtype].cardname,
+	strscpy(info->fix.id, cardinfo[cardtype].cardname,
 		sizeof(info->fix.id));
 	info->pseudo_palette = par->pseudo_palette;
 
@@ -779,6 +779,9 @@ static struct pci_driver gxt4500_driver = {
 
 static int gxt4500_init(void)
 {
+	if (fb_modesetting_disabled("gxt4500"))
+		return -ENODEV;
+
 #ifndef MODULE
 	if (fb_get_options("gxt4500", &mode_option))
 		return -ENODEV;

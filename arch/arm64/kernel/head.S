@@ -99,7 +99,7 @@ SYM_CODE_START(primary_entry)
 	 */
 #if VA_BITS > 48
 	mrs_s	x0, SYS_ID_AA64MMFR2_EL1
-	tst	x0, #0xf << ID_AA64MMFR2_LVA_SHIFT
+	tst	x0, #0xf << ID_AA64MMFR2_EL1_VARange_SHIFT
 	mov	x0, #VA_BITS
 	mov	x25, #VA_BITS_MIN
 	csel	x25, x25, x0, eq
@@ -371,7 +371,9 @@ SYM_FUNC_END(create_idmap)
 SYM_FUNC_START_LOCAL(create_kernel_mapping)
 	adrp	x0, init_pg_dir
 	mov_q	x5, KIMAGE_VADDR		// compile time __va(_text)
+#ifdef CONFIG_RELOCATABLE
 	add	x5, x5, x23			// add KASLR displacement
+#endif
 	adrp	x6, _end			// runtime __pa(_end)
 	adrp	x3, _text			// runtime __pa(_text)
 	sub	x6, x6, x3			// _end - _text
@@ -460,6 +462,9 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 	bl	early_fdt_map			// Try mapping the FDT early
 	mov	x0, x20				// pass the full boot status
 	bl	init_feature_override		// Parse cpu feature overrides
+#ifdef CONFIG_UNWIND_PATCH_PAC_INTO_SCS
+	bl	scs_patch_vmlinux
+#endif
 	mov	x0, x20
 	bl	finalise_el2			// Prefer VHE if possible
 	ldp	x29, x30, [sp], #16
@@ -656,10 +661,10 @@ SYM_FUNC_END(__secondary_too_slow)
  */
 SYM_FUNC_START(__enable_mmu)
 	mrs	x3, ID_AA64MMFR0_EL1
-	ubfx	x3, x3, #ID_AA64MMFR0_TGRAN_SHIFT, 4
-	cmp     x3, #ID_AA64MMFR0_TGRAN_SUPPORTED_MIN
+	ubfx	x3, x3, #ID_AA64MMFR0_EL1_TGRAN_SHIFT, 4
+	cmp     x3, #ID_AA64MMFR0_EL1_TGRAN_SUPPORTED_MIN
 	b.lt    __no_granule_support
-	cmp     x3, #ID_AA64MMFR0_TGRAN_SUPPORTED_MAX
+	cmp     x3, #ID_AA64MMFR0_EL1_TGRAN_SUPPORTED_MAX
 	b.gt    __no_granule_support
 	phys_to_ttbr x2, x2
 	msr	ttbr0_el1, x2			// load TTBR0
@@ -677,7 +682,7 @@ SYM_FUNC_START(__cpu_secondary_check52bitva)
 	b.ne	2f
 
 	mrs_s	x0, SYS_ID_AA64MMFR2_EL1
-	and	x0, x0, #(0xf << ID_AA64MMFR2_LVA_SHIFT)
+	and	x0, x0, #(0xf << ID_AA64MMFR2_EL1_VARange_SHIFT)
 	cbnz	x0, 2f
 
 	update_early_cpu_boot_status \

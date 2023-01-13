@@ -9,10 +9,13 @@
 #include "notif.h"
 #include "rsrc.h"
 
-static void __io_notif_complete_tw(struct io_kiocb *notif, bool *locked)
+static void io_notif_complete_tw_ext(struct io_kiocb *notif, bool *locked)
 {
 	struct io_notif_data *nd = io_notif_to_data(notif);
 	struct io_ring_ctx *ctx = notif->ctx;
+
+	if (nd->zc_report && (nd->zc_copied || !nd->zc_used))
+		notif->cqe.res |= IORING_NOTIF_USAGE_ZC_COPIED;
 
 	if (nd->account_pages && ctx->user) {
 		__io_unaccount_mem(ctx->user, nd->account_pages);
@@ -21,29 +24,45 @@ static void __io_notif_complete_tw(struct io_kiocb *notif, bool *locked)
 	io_req_task_complete(notif, locked);
 }
 
-static inline void io_notif_complete(struct io_kiocb *notif)
-	__must_hold(&notif->ctx->uring_lock)
-{
-	bool locked = true;
-
-	__io_notif_complete_tw(notif, &locked);
-}
-
-static void io_uring_tx_zerocopy_callback(struct sk_buff *skb,
-					  struct ubuf_info *uarg,
-					  bool success)
+static void io_tx_ubuf_callback(struct sk_buff *skb, struct ubuf_info *uarg,
+				bool success)
 {
 	struct io_notif_data *nd = container_of(uarg, struct io_notif_data, uarg);
 	struct io_kiocb *notif = cmd_to_io_kiocb(nd);
 
-	if (refcount_dec_and_test(&uarg->refcnt)) {
-		notif->io_task_work.func = __io_notif_complete_tw;
+	if (refcount_dec_and_test(&uarg->refcnt))
 		io_req_task_work_add(notif);
+}
+
+static void io_tx_ubuf_callback_ext(struct sk_buff *skb, struct ubuf_info *uarg,
+			     bool success)
+{
+	struct io_notif_data *nd = container_of(uarg, struct io_notif_data, uarg);
+
+	if (nd->zc_report) {
+		if (success && !nd->zc_used && skb)
+			WRITE_ONCE(nd->zc_used, true);
+		else if (!success && !nd->zc_copied)
+			WRITE_ONCE(nd->zc_copied, true);
+	}
+	io_tx_ubuf_callback(skb, uarg, success);
+}
+
+void io_notif_set_extended(struct io_kiocb *notif)
+{
+	struct io_notif_data *nd = io_notif_to_data(notif);
+
+	if (nd->uarg.callback != io_tx_ubuf_callback_ext) {
+		nd->account_pages = 0;
+		nd->zc_report = false;
+		nd->zc_used = false;
+		nd->zc_copied = false;
+		nd->uarg.callback = io_tx_ubuf_callback_ext;
+		notif->io_task_work.func = io_notif_complete_tw_ext;
 	}
 }
 
-struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx,
-				struct io_notif_slot *slot)
+struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx)
 	__must_hold(&ctx->uring_lock)
 {
 	struct io_kiocb *notif;
@@ -58,100 +77,11 @@ struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx,
 	notif->task = current;
 	io_get_task_refs(1);
 	notif->rsrc_node = NULL;
-	io_req_set_rsrc_node(notif, ctx, 0);
-	notif->cqe.user_data = slot->tag;
-	notif->cqe.flags = slot->seq++;
-	notif->cqe.res = 0;
+	notif->io_task_work.func = io_req_task_complete;
 
 	nd = io_notif_to_data(notif);
-	nd->account_pages = 0;
 	nd->uarg.flags = SKBFL_ZEROCOPY_FRAG | SKBFL_DONT_ORPHAN;
-	nd->uarg.callback = io_uring_tx_zerocopy_callback;
-	/* master ref owned by io_notif_slot, will be dropped on flush */
+	nd->uarg.callback = io_tx_ubuf_callback;
 	refcount_set(&nd->uarg.refcnt, 1);
 	return notif;
-}
-
-void io_notif_slot_flush(struct io_notif_slot *slot)
-	__must_hold(&ctx->uring_lock)
-{
-	struct io_kiocb *notif = slot->notif;
-	struct io_notif_data *nd = io_notif_to_data(notif);
-
-	slot->notif = NULL;
-
-	/* drop slot's master ref */
-	if (refcount_dec_and_test(&nd->uarg.refcnt))
-		io_notif_complete(notif);
-}
-
-__cold int io_notif_unregister(struct io_ring_ctx *ctx)
-	__must_hold(&ctx->uring_lock)
-{
-	int i;
-
-	if (!ctx->notif_slots)
-		return -ENXIO;
-
-	for (i = 0; i < ctx->nr_notif_slots; i++) {
-		struct io_notif_slot *slot = &ctx->notif_slots[i];
-		struct io_kiocb *notif = slot->notif;
-		struct io_notif_data *nd;
-
-		if (!notif)
-			continue;
-		nd = io_notif_to_data(notif);
-		slot->notif = NULL;
-		if (!refcount_dec_and_test(&nd->uarg.refcnt))
-			continue;
-		notif->io_task_work.func = __io_notif_complete_tw;
-		io_req_task_work_add(notif);
-	}
-
-	kvfree(ctx->notif_slots);
-	ctx->notif_slots = NULL;
-	ctx->nr_notif_slots = 0;
-	return 0;
-}
-
-__cold int io_notif_register(struct io_ring_ctx *ctx,
-			     void __user *arg, unsigned int size)
-	__must_hold(&ctx->uring_lock)
-{
-	struct io_uring_notification_slot __user *slots;
-	struct io_uring_notification_slot slot;
-	struct io_uring_notification_register reg;
-	unsigned i;
-
-	if (ctx->nr_notif_slots)
-		return -EBUSY;
-	if (size != sizeof(reg))
-		return -EINVAL;
-	if (copy_from_user(&reg, arg, sizeof(reg)))
-		return -EFAULT;
-	if (!reg.nr_slots || reg.nr_slots > IORING_MAX_NOTIF_SLOTS)
-		return -EINVAL;
-	if (reg.resv || reg.resv2 || reg.resv3)
-		return -EINVAL;
-
-	slots = u64_to_user_ptr(reg.data);
-	ctx->notif_slots = kvcalloc(reg.nr_slots, sizeof(ctx->notif_slots[0]),
-				GFP_KERNEL_ACCOUNT);
-	if (!ctx->notif_slots)
-		return -ENOMEM;
-
-	for (i = 0; i < reg.nr_slots; i++, ctx->nr_notif_slots++) {
-		struct io_notif_slot *notif_slot = &ctx->notif_slots[i];
-
-		if (copy_from_user(&slot, &slots[i], sizeof(slot))) {
-			io_notif_unregister(ctx);
-			return -EFAULT;
-		}
-		if (slot.resv[0] | slot.resv[1] | slot.resv[2]) {
-			io_notif_unregister(ctx);
-			return -EINVAL;
-		}
-		notif_slot->tag = slot.tag;
-	}
-	return 0;
 }

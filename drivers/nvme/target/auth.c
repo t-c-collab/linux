@@ -45,9 +45,11 @@ int nvmet_auth_set_key(struct nvmet_host *host, const char *secret,
 	if (!dhchap_secret)
 		return -ENOMEM;
 	if (set_ctrl) {
+		kfree(host->dhchap_ctrl_secret);
 		host->dhchap_ctrl_secret = strim(dhchap_secret);
 		host->dhchap_ctrl_key_hash = key_hash;
 	} else {
+		kfree(host->dhchap_secret);
 		host->dhchap_secret = strim(dhchap_secret);
 		host->dhchap_key_hash = key_hash;
 	}
@@ -196,6 +198,7 @@ int nvmet_setup_auth(struct nvmet_ctrl *ctrl)
 	if (IS_ERR(ctrl->ctrl_key)) {
 		ret = PTR_ERR(ctrl->ctrl_key);
 		ctrl->ctrl_key = NULL;
+		goto out_free_hash;
 	}
 	pr_debug("%s: using ctrl hash %s key %*ph\n", __func__,
 		 ctrl->ctrl_key->hash > 0 ?

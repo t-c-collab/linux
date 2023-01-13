@@ -1649,13 +1649,8 @@ static void invoke_bpf_prog(struct jit_ctx *ctx, struct bpf_tramp_link *l,
 	struct bpf_prog *p = l->link.prog;
 	int cookie_off = offsetof(struct bpf_tramp_run_ctx, bpf_cookie);
 
-	if (p->aux->sleepable) {
-		enter_prog = (u64)__bpf_prog_enter_sleepable;
-		exit_prog = (u64)__bpf_prog_exit_sleepable;
-	} else {
-		enter_prog = (u64)__bpf_prog_enter;
-		exit_prog = (u64)__bpf_prog_exit;
-	}
+	enter_prog = (u64)bpf_trampoline_enter(p);
+	exit_prog = (u64)bpf_trampoline_exit(p);
 
 	if (l->cookie == 0) {
 		/* if cookie is zero, one instruction is enough to store it */
@@ -1970,7 +1965,7 @@ int arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *image,
 				u32 flags, struct bpf_tramp_links *tlinks,
 				void *orig_call)
 {
-	int ret;
+	int i, ret;
 	int nargs = m->nr_args;
 	int max_insns = ((long)image_end - (long)image) / AARCH64_INSN_SIZE;
 	struct jit_ctx ctx = {
@@ -1981,6 +1976,12 @@ int arch_prepare_bpf_trampoline(struct bpf_tramp_image *im, void *image,
 	/* the first 8 arguments are passed by registers */
 	if (nargs > 8)
 		return -ENOTSUPP;
+
+	/* don't support struct argument */
+	for (i = 0; i < MAX_BPF_FUNC_ARGS; i++) {
+		if (m->arg_flags[i] & BTF_FMODEL_STRUCT_ARG)
+			return -ENOTSUPP;
+	}
 
 	ret = prepare_trampoline(&ctx, im, tlinks, orig_call, nargs, flags);
 	if (ret < 0)

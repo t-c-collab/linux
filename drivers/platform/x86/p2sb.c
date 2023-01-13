@@ -19,33 +19,44 @@
 #define P2SBC			0xe0
 #define P2SBC_HIDE		BIT(8)
 
+#define P2SB_DEVFN_DEFAULT	PCI_DEVFN(31, 1)
+
 static const struct x86_cpu_id p2sb_cpu_ids[] = {
 	X86_MATCH_INTEL_FAM6_MODEL(ATOM_GOLDMONT,	PCI_DEVFN(13, 0)),
-	X86_MATCH_INTEL_FAM6_MODEL(ATOM_GOLDMONT_D,	PCI_DEVFN(31, 1)),
-	X86_MATCH_INTEL_FAM6_MODEL(ATOM_SILVERMONT_D,	PCI_DEVFN(31, 1)),
-	X86_MATCH_INTEL_FAM6_MODEL(KABYLAKE,		PCI_DEVFN(31, 1)),
-	X86_MATCH_INTEL_FAM6_MODEL(KABYLAKE_L,		PCI_DEVFN(31, 1)),
-	X86_MATCH_INTEL_FAM6_MODEL(SKYLAKE,		PCI_DEVFN(31, 1)),
-	X86_MATCH_INTEL_FAM6_MODEL(SKYLAKE_L,		PCI_DEVFN(31, 1)),
 	{}
 };
 
 static int p2sb_get_devfn(unsigned int *devfn)
 {
+	unsigned int fn = P2SB_DEVFN_DEFAULT;
 	const struct x86_cpu_id *id;
 
 	id = x86_match_cpu(p2sb_cpu_ids);
-	if (!id)
-		return -ENODEV;
+	if (id)
+		fn = (unsigned int)id->driver_data;
 
-	*devfn = (unsigned int)id->driver_data;
+	*devfn = fn;
 	return 0;
 }
 
+/* Copy resource from the first BAR of the device in question */
 static int p2sb_read_bar0(struct pci_dev *pdev, struct resource *mem)
 {
-	/* Copy resource from the first BAR of the device in question */
-	*mem = pdev->resource[0];
+	struct resource *bar0 = &pdev->resource[0];
+
+	/* Make sure we have no dangling pointers in the output */
+	memset(mem, 0, sizeof(*mem));
+
+	/*
+	 * We copy only selected fields from the original resource.
+	 * Because a PCI device will be removed soon, we may not use
+	 * any allocated data, hence we may not copy any pointers.
+	 */
+	mem->start = bar0->start;
+	mem->end = bar0->end;
+	mem->flags = bar0->flags;
+	mem->desc = bar0->desc;
+
 	return 0;
 }
 

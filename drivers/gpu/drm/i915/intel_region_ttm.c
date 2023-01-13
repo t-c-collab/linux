@@ -2,7 +2,6 @@
 /*
  * Copyright © 2021 Intel Corporation
  */
-#include <drm/ttm/ttm_bo_driver.h>
 #include <drm/ttm/ttm_device.h>
 #include <drm/ttm/ttm_range_manager.h>
 
@@ -132,7 +131,7 @@ int intel_region_ttm_fini(struct intel_memory_region *mem)
 			break;
 
 		msleep(20);
-		flush_delayed_work(&mem->i915->bdev.wq);
+		drain_workqueue(mem->i915->bdev.wq);
 	}
 
 	/* If we leaked objects, Don't free the region causing use after free */
@@ -244,7 +243,7 @@ void intel_region_ttm_resource_free(struct intel_memory_region *mem,
 	struct ttm_resource_manager *man = mem->region_private;
 	struct ttm_buffer_object mock_bo = {};
 
-	mock_bo.base.size = res->num_pages << PAGE_SHIFT;
+	mock_bo.base.size = res->size;
 	mock_bo.bdev = &mem->i915->bdev;
 	res->bo = &mock_bo;
 
