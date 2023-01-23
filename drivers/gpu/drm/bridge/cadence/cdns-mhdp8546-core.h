@@ -370,9 +370,7 @@ struct cdns_mhdp_bridge {
 	int stream_id;
 	struct cdns_mhdp_connector *connector;
 	int pbn;
-#if 0
-	int vcpi_slots;		//Swap: TODO
-#endif
+	int vcpi_slots;
 };
 
 struct cdns_mhdp_connector {

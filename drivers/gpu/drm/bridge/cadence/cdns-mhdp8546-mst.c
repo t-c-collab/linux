@@ -326,20 +326,52 @@ static const struct drm_connector_helper_funcs cdns_mhdp_mst_connector_helper_fu
 	.atomic_best_encoder = cdns_mhdp_mst_atomic_best_encoder,
 	.atomic_check = cdns_mhdp_mst_connector_atomic_check,
 /*
-	// Swap: TODO mode_valid can implement calling drm_dp_calc_pbn_mode() here??
+	// Swap: TODO BW check here
 	.mode_valid_ctx = cdns_mhdp_mst_mode_valid,
 */
 };
+
+static int cdns_mhdp_mst_atomic_check(struct drm_bridge *bridge,
+				      struct drm_bridge_state *bridge_state,
+				      struct drm_crtc_state *crtc_state,
+				      struct drm_connector_state *conn_state)
+{
+	u32 bpp;
+	int slots;
+	int pbn_div;
+	struct drm_atomic_state *state = crtc_state->state;
+	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
+	struct cdns_mhdp_device *mhdp = mhdp_bridge->mhdp;
+	struct cdns_mhdp_connector *mhdp_connector = to_mhdp_connector(conn_state->connector);
+	const struct drm_display_mode *adjusted_mode = &crtc_state->adjusted_mode;
+
+	if (mhdp_bridge->stream_id != -1 && !crtc_state->connectors_changed && !crtc_state->mode_changed)
+		return 0;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+
+	mhdp_bridge->pbn = drm_dp_calc_pbn_mode(adjusted_mode->clock, bpp, mhdp->is_dsc);
+
+	pbn_div = drm_dp_get_vc_payload_bw(&mhdp->mst_mgr, mhdp->link.rate, mhdp->link.num_lanes);
+
+	slots = drm_dp_atomic_find_vcpi_slots(state, &mhdp->mst_mgr, mhdp_connector->port,
+					      mhdp_bridge->pbn, pbn_div);
+	if (slots < 0) {
+		DRM_ERROR("failed finding vcpi slots: %d\n", slots);
+		return slots;
+	}
+
+	mhdp_bridge->vcpi_slots = slots;
+
+	return 0;
+}
 
 static void cdns_mhdp_mst_enable(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
 				 const struct drm_display_mode *mode)
 {
 	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
 	struct cdns_mhdp_connector *mhdp_connector;
-	int ret, slots, stream_id;
-	u32 bpp;
-
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	int ret, stream_id;
 
 	mhdp_connector = mhdp_bridge->connector;
 	if (mhdp_bridge->stream_id > -1) {
@@ -349,13 +381,8 @@ static void cdns_mhdp_mst_enable(struct cdns_mhdp_device *mhdp, struct drm_bridg
 
 	stream_id = bridge->encoder->crtc->index;
 
-	// Swap: TODO To be done in atomic_check??
-	mhdp_bridge->pbn = drm_dp_calc_pbn_mode(mode->clock, bpp, mhdp->is_dsc);
-
-	slots = drm_dp_find_vcpi_slots(&mhdp->mst_mgr, mhdp_bridge->pbn);
-
 	ret = drm_dp_mst_allocate_vcpi(&mhdp->mst_mgr, mhdp_connector->port,
-				       mhdp_bridge->pbn, slots);
+				       mhdp_bridge->pbn, mhdp_bridge->vcpi_slots);
 	if (ret == false) {
 		DRM_ERROR("failed to allocate vcpi\n");
 		return;
@@ -480,6 +507,7 @@ void cdns_mhdp_mst_atomic_disable(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs cdns_mhdp_mst_bridge_funcs = {
+	.atomic_check = cdns_mhdp_mst_atomic_check,
 	.atomic_enable = cdns_mhdp_mst_atomic_enable,
 	.atomic_disable = cdns_mhdp_mst_atomic_disable,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
