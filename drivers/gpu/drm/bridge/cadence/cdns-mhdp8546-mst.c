@@ -279,8 +279,8 @@ static struct drm_encoder *cdns_mhdp_mst_atomic_best_encoder(struct drm_connecto
 	return mhdp_connector->bridge->base.encoder;
 }
 
-static int cdns_mhdp_mst_atomic_check(struct drm_connector *connector,
-				      struct drm_atomic_state *state)
+static int cdns_mhdp_mst_connector_atomic_check(struct drm_connector *connector,
+						struct drm_atomic_state *state)
 {
 	struct drm_connector_state *new_conn_state =
 			drm_atomic_get_new_connector_state(state, connector);
@@ -324,7 +324,7 @@ static const struct drm_connector_helper_funcs cdns_mhdp_mst_connector_helper_fu
 	.get_modes = cdns_mhdp_mst_get_modes,
 	.detect_ctx = cdns_mhdp_mst_connector_detect,
 	.atomic_best_encoder = cdns_mhdp_mst_atomic_best_encoder,
-	.atomic_check = cdns_mhdp_mst_atomic_check,
+	.atomic_check = cdns_mhdp_mst_connector_atomic_check,
 /*
 	// Swap: TODO mode_valid can implement calling drm_dp_calc_pbn_mode() here??
 	.mode_valid_ctx = cdns_mhdp_mst_mode_valid,
