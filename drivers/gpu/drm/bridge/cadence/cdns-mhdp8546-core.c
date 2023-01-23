@@ -660,12 +660,19 @@ static bool cdns_mhdp_get_ssc_supported(struct cdns_mhdp_device *mhdp)
 
 static enum drm_connector_status cdns_mhdp_detect(struct cdns_mhdp_device *mhdp)
 {
+	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+
 	dev_dbg(mhdp->dev, "%s: %d\n", __func__, mhdp->plugged);
 
-	if (mhdp->plugged)
-		return connector_status_connected;
-	else
-		return connector_status_disconnected;
+	if (mhdp->plugged) {
+		drm_dp_dpcd_read(&mhdp->aux, DP_DPCD_REV, dpcd, DP_RECEIVER_CAP_SIZE);
+		cdns_mhdp_mst_probe(mhdp, dpcd);
+		/* For MST mode this connector will always be disconnected */
+		if (!mhdp->is_mst)
+			return connector_status_connected;
+	}
+
+	return connector_status_disconnected;
 }
 
 static int cdns_mhdp_check_fw_version(struct cdns_mhdp_device *mhdp)
