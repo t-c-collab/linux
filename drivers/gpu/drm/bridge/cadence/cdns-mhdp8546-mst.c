@@ -183,6 +183,7 @@ static int cdns_mhdp_apply_slot_allocation(struct cdns_mhdp_bridge *mhdp_bridge)
 
 static void cdns_mhdp_update_slot_allocation(struct cdns_mhdp_bridge *mhdp_bridge)
 {
+	struct cdns_mhdp_device *mhdp = mhdp_bridge->mhdp;
 	struct drm_device *dev = mhdp_bridge->base.dev;
 	struct drm_connector *connector;
 	struct drm_connector_list_iter conn_iter;
@@ -198,8 +199,13 @@ static void cdns_mhdp_update_slot_allocation(struct cdns_mhdp_bridge *mhdp_bridg
 		if (!mhdp_connector->is_mst_connector)
 			continue;
 
-		if (mhdp_connector->bridge->stream_id != -1)
-			cdns_mhdp_apply_slot_allocation(mhdp_connector->bridge);
+		if (mhdp_connector->bridge->stream_id != -1) {
+			if (mhdp_connector->bridge->stream_id == mhdp_bridge->stream_id)
+				/* Payload might have been removed. Reset number of slots. */
+				cdns_mhdp_reg_write(mhdp, CDNS_DP_MST_SLOT_ALLOCATE(mhdp_bridge->stream_id), 0);
+			else
+				cdns_mhdp_apply_slot_allocation(mhdp_connector->bridge);
+		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
 }
@@ -493,7 +499,7 @@ void cdns_mhdp_mst_atomic_disable(struct drm_bridge *bridge,
 
 	cdns_mhdp_update_slot_allocation(mhdp_bridge);
 
-	drm_dp_check_act_status(&mhdp->mst_mgr);
+	cdns_mhdp_set_act_enable(mhdp);
 
 	drm_dp_update_payload_part2(&mhdp->mst_mgr);
 
