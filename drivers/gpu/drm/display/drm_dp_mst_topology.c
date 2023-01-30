@@ -49,6 +49,8 @@
 #include "drm_dp_helper_internal.h"
 #include "drm_dp_mst_topology_internal.h"
 
+#define CADENCE_MHDP8546_MST
+
 /**
  * DOC: dp mst helper
  *
@@ -91,12 +93,18 @@ static int drm_dp_send_enum_path_resources(struct drm_dp_mst_topology_mgr *mgr,
 static bool drm_dp_validate_guid(struct drm_dp_mst_topology_mgr *mgr,
 				 u8 *guid);
 
+#ifndef CADENCE_MHDP8546_MST
 static int drm_dp_mst_register_i2c_bus(struct drm_dp_mst_port *port);
 static void drm_dp_mst_unregister_i2c_bus(struct drm_dp_mst_port *port);
+#endif
 static void drm_dp_mst_kick_tx(struct drm_dp_mst_topology_mgr *mgr);
 
 static bool drm_dp_mst_port_downstream_of_branch(struct drm_dp_mst_port *port,
 						 struct drm_dp_mst_branch *branch);
+
+#ifdef CADENCE_MHDP8546_MST
+static int mhdp_drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len);
+#endif
 
 #define DBG_PREFIX "[dp_mst]"
 
@@ -2115,7 +2123,9 @@ drm_dp_port_set_pdt(struct drm_dp_mst_port *port, u8 new_pdt,
 			}
 
 			/* remove i2c over sideband */
+#ifndef CADENCE_MHDP8546_MST
 			drm_dp_mst_unregister_i2c_bus(port);
+#endif
 		} else {
 			mutex_lock(&mgr->lock);
 			drm_dp_mst_topology_put_mstb(port->mstb);
@@ -2130,7 +2140,9 @@ drm_dp_port_set_pdt(struct drm_dp_mst_port *port, u8 new_pdt,
 	if (port->pdt != DP_PEER_DEVICE_NONE) {
 		if (drm_dp_mst_is_end_device(port->pdt, port->mcs)) {
 			/* add i2c over sideband */
+#ifndef CADENCE_MHDP8546_MST
 			ret = drm_dp_mst_register_i2c_bus(port);
+#endif
 		} else {
 			lct = drm_dp_calculate_rad(port, rad);
 			mstb = drm_dp_add_mst_branch_device(lct, rad);
@@ -2310,8 +2322,13 @@ drm_dp_mst_port_add_connector(struct drm_dp_mst_branch *mstb,
 	if (port->pdt != DP_PEER_DEVICE_NONE &&
 	    drm_dp_mst_is_end_device(port->pdt, port->mcs) &&
 	    port->port_num >= DP_MST_LOGICAL_PORT_0)
+#ifdef CADENCE_MHDP8546_MST
+		port->cached_edid = drm_do_get_edid(port->connector,
+						    mhdp_drm_do_probe_ddc_edid, port);
+#else
 		port->cached_edid = drm_get_edid(port->connector,
 						 &port->aux.ddc);
+#endif
 
 	drm_connector_register(port->connector);
 	return;
@@ -4249,7 +4266,12 @@ drm_dp_mst_detect_port(struct drm_connector *connector,
 		ret = connector_status_connected;
 		/* for logical ports - cache the EDID */
 		if (port->port_num >= DP_MST_LOGICAL_PORT_0 && !port->cached_edid)
+#ifdef CADENCE_MHDP8546_MST
+			port->cached_edid = drm_do_get_edid(connector,
+							    mhdp_drm_do_probe_ddc_edid, port);
+#else
 			port->cached_edid = drm_get_edid(connector, &port->aux.ddc);
+#endif
 		break;
 	case DP_PEER_DEVICE_DP_LEGACY_CONV:
 		if (port->ldps)
@@ -4284,7 +4306,11 @@ struct edid *drm_dp_mst_get_edid(struct drm_connector *connector, struct drm_dp_
 	if (port->cached_edid)
 		edid = drm_edid_duplicate(port->cached_edid);
 	else {
+#ifdef CADENCE_MHDP8546_MST
+		edid = drm_do_get_edid(connector, mhdp_drm_do_probe_ddc_edid, port);
+#else
 		edid = drm_get_edid(connector, &port->aux.ddc);
+#endif
 	}
 	port->has_audio = drm_detect_monitor_audio(edid);
 	drm_dp_mst_topology_put_port(port);
@@ -5718,6 +5744,75 @@ out:
 	return ret;
 }
 
+#ifdef CADENCE_MHDP8546_MST
+static int mhdp_drm_dp_mst_i2c_xfer(struct drm_dp_mst_port *port, struct i2c_msg *msgs, int num)
+{
+	struct drm_dp_mst_branch *mstb;
+	struct drm_dp_mst_topology_mgr *mgr = port->mgr;
+	int ret;
+
+	mstb = drm_dp_mst_topology_get_mstb_validated(mgr, port->parent);
+	if (!mstb)
+		return -EREMOTEIO;
+
+	if (remote_i2c_read_ok(msgs, num)) {
+		ret = drm_dp_mst_i2c_read(mstb, port, msgs, num);
+	} else if (remote_i2c_write_ok(msgs, num)) {
+		ret = drm_dp_mst_i2c_write(mstb, port, msgs, num);
+	} else {
+		drm_dbg_kms(mgr->dev, "Unsupported I2C transaction for MST device\n");
+		ret = -EIO;
+	}
+
+	drm_dp_mst_topology_put_mstb(mstb);
+	return ret;
+}
+
+#define DDC_SEGMENT_ADDR 0x30
+static int mhdp_drm_do_probe_ddc_edid(void *data, u8 *buf, unsigned int block, size_t len)
+{
+	struct drm_dp_mst_port *port = data;
+	unsigned char start = block * EDID_LENGTH;
+	unsigned char segment = block >> 1;
+	unsigned char xfers = segment ? 3 : 2;
+	int ret, retries = 5;
+
+	do {
+		struct i2c_msg msgs[] = {
+			{
+				.addr	= DDC_SEGMENT_ADDR,
+				.flags	= 0,
+				.len	= 1,
+				.buf	= &segment,
+			}, {
+				.addr	= DDC_ADDR,
+				.flags	= 0,
+				.len	= 1,
+				.buf	= &start,
+			}, {
+				.addr	= DDC_ADDR,
+				.flags	= I2C_M_RD,
+				.len	= len,
+				.buf	= buf,
+			}
+		};
+
+		/*
+		 * Avoid sending the segment addr to not upset non-compliant
+		 * DDC monitors.
+		 */
+		ret = mhdp_drm_dp_mst_i2c_xfer(port, &msgs[3 - xfers], xfers);
+
+		if (ret == -ENXIO) {
+			DRM_DEBUG_KMS("drm: mhdp: failed to get remote EDID\n");
+			break;
+		}
+	} while (ret != xfers && --retries);
+
+	return ret == xfers ? 0 : -1;
+}
+
+#else
 /* I2C device */
 static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter,
 			       struct i2c_msg *msgs, int num)
@@ -5794,6 +5889,7 @@ static void drm_dp_mst_unregister_i2c_bus(struct drm_dp_mst_port *port)
 {
 	i2c_del_adapter(&port->aux.ddc);
 }
+#endif
 
 /**
  * drm_dp_mst_is_virtual_dpcd() - Is the given port a virtual DP Peer Device
