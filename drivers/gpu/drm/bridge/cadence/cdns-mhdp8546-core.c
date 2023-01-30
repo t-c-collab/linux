@@ -2320,6 +2320,7 @@ static int cdns_mhdp_update_link_status(struct cdns_mhdp_device *mhdp)
 		cdns_mhdp_link_down(mhdp);
 		mhdp->link.rate = mhdp->host.link_rate;
 		mhdp->link.num_lanes = mhdp->host.lanes_cnt;
+		mhdp->is_mst = false;
 		goto out;
 	}
 
@@ -2479,7 +2480,7 @@ static void cdns_mhdp_hpd_work(struct work_struct *work)
 	if (mhdp->connector.base.dev) {
 		if (ret < 0)
 			schedule_work(&mhdp->modeset_retry_work);
-		else
+		else if (!mhdp->is_mst)
 			drm_kms_helper_hotplug_event(mhdp->bridge.base.dev);
 	} else {
 		drm_bridge_hpd_notify(&mhdp->bridge.base, cdns_mhdp_detect(mhdp));
