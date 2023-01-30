@@ -116,16 +116,13 @@ static struct drm_encoder *tidss_mhdp_mst_create_encoder(void *priv_data,
 {
 	struct tidss_device *tidss = priv_data;
 	struct drm_encoder *enc;
-	struct drm_device *ddev = &tidss->ddev;
 
-	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPI, 15);
+	enc = tidss_encoder_create(tidss, DRM_MODE_ENCODER_DPMST, 15);
 
 	if (IS_ERR(enc)) {
 		dev_err(tidss->dev, "encoder create failed\n");
 		return (struct drm_encoder *)(enc);
 	}
-
-	drm_mode_config_reset(ddev);
 
 	return enc;
 }
