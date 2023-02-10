@@ -344,7 +344,7 @@ static int cdns_mhdp_mst_atomic_check(struct drm_bridge *bridge,
 {
 	u32 bpp;
 	int slots;
-	int pbn_div;
+	int pbn_div, ret;
 	struct drm_atomic_state *state = crtc_state->state;
 	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
 	struct cdns_mhdp_device *mhdp = mhdp_bridge->mhdp;
@@ -369,7 +369,11 @@ static int cdns_mhdp_mst_atomic_check(struct drm_bridge *bridge,
 
 	mhdp_bridge->vcpi_slots = slots;
 
-	return 0;
+	ret = drm_dp_mst_atomic_check(state);
+	if (ret)
+		DRM_ERROR("drm_dp_mst_atomic_check failed, ret = %d\n", ret);
+
+	return ret;
 }
 
 static void cdns_mhdp_mst_enable(struct cdns_mhdp_device *mhdp, struct drm_bridge *bridge,
