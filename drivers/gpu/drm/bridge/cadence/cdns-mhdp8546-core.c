@@ -2192,12 +2192,6 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 				  struct drm_crtc_state *crtc_state,
 				  struct drm_connector_state *conn_state)
 {
-#if 0
-	u32 bpp;
-	struct drm_atomic_state *state = crtc_state->state;
-	struct cdns_mhdp_bridge *mhdp_bridge = to_mhdp_bridge(bridge);
-	struct cdns_mhdp_connector *mhdp_connector;
-#endif
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
 	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
@@ -2211,17 +2205,6 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 		mutex_unlock(&mhdp->link_mutex);
 		return -EINVAL;
 	}
-
-#if 0
-	if (mhdp->is_mst) {
-		mhdp_connector = to_mhdp_connector(conn_state->connector);
-		bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
-		mhdp_bridge->pbn = drm_dp_calc_pbn_mode(mode->clock, bpp, mhdp->is_dsc);
-		mhdp_bridge->vcpi_slots = drm_dp_atomic_find_vcpi_slots(state, &mhdp->mst_mgr,
-									mhdp_connector->port,
-									mhdp_bridge->pbn, 0);
-	}
-#endif
 
 	mutex_unlock(&mhdp->link_mutex);
 	return 0;
