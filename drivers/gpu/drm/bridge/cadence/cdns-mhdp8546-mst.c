@@ -300,6 +300,21 @@ static int cdns_mhdp_mst_get_modes(struct drm_connector *connector)
 	return num_modes;
 }
 
+static int cdns_mhdp_mst_connector_mode_valid(struct drm_connector *connector,
+					      struct drm_display_mode *mode)
+{
+	struct cdns_mhdp_connector *mhdp_connector = to_mhdp_connector(connector);
+	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
+	u32 bpp;
+
+	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+
+	if (drm_dp_calc_pbn_mode(mode->clock, bpp, mhdp->is_dsc) > mhdp_connector->port->full_pbn)
+		return MODE_CLOCK_HIGH;
+
+	return MODE_OK;
+}
+
 static struct drm_encoder *cdns_mhdp_mst_atomic_best_encoder(struct drm_connector *connector,
 							     struct drm_atomic_state *state)
 {
@@ -356,13 +371,10 @@ cdns_mhdp_mst_connector_detect(struct drm_connector *connector,
 
 static const struct drm_connector_helper_funcs cdns_mhdp_mst_connector_helper_funcs = {
 	.get_modes = cdns_mhdp_mst_get_modes,
+	.mode_valid = cdns_mhdp_mst_connector_mode_valid,
 	.detect_ctx = cdns_mhdp_mst_connector_detect,
 	.atomic_best_encoder = cdns_mhdp_mst_atomic_best_encoder,
 	.atomic_check = cdns_mhdp_mst_connector_atomic_check,
-/*
-	// Swap: TODO BW check here
-	.mode_valid_ctx = cdns_mhdp_mst_mode_valid,
-*/
 };
 
 static int cdns_mhdp_mst_atomic_check(struct drm_bridge *bridge,
