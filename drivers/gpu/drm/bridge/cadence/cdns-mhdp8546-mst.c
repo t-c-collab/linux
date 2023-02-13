@@ -12,6 +12,7 @@
 #include <drm/drm_connector.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_file.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
@@ -710,12 +711,28 @@ void cdns_mhdp_mst_probe(struct cdns_mhdp_device *mhdp, const u8 dpcd[DP_RECEIVE
 	}
 }
 
+#if defined(CONFIG_DEBUG_FS)
+static int cdns_mhdp_mst_topo_show(struct seq_file *m, void *unused)
+{
+	struct cdns_mhdp_device *mhdp = (struct cdns_mhdp_device *)m->private;
+
+	drm_dp_mst_dump_topology(m, &mhdp->mst_mgr);
+
+	return 0;
+}
+
+DEFINE_SHOW_ATTRIBUTE(cdns_mhdp_mst_topo);
+#endif
+
 int cdns_mhdp_mst_init(struct cdns_mhdp_device *mhdp)
 {
 	struct cdns_mhdp_bridge *mhdp_bridge = &mhdp->bridge;
 	struct drm_device *dev = mhdp_bridge->base.dev;
 	struct cdns_mhdp_connector *connector = mhdp_bridge->connector;
 	int ret;
+#if defined(CONFIG_DEBUG_FS)
+	struct dentry *root = dev->primary->debugfs_root;
+#endif
 
 	mhdp->mst_mgr.cbs = &mst_cbs;
 	ret = drm_dp_mst_topology_mgr_init(&mhdp->mst_mgr, dev,
@@ -726,6 +743,10 @@ int cdns_mhdp_mst_init(struct cdns_mhdp_device *mhdp)
 	mhdp->can_mst = ret ? false : true;
 	mhdp->is_mst = false;
 	mhdp_bridge->stream_id = -1;
+
+#if defined(CONFIG_DEBUG_FS)
+	debugfs_create_file("cdns_mhdp_mst_topology", 0444, root, mhdp, &cdns_mhdp_mst_topo_fops);
+#endif
 
 	return ret;
 }
