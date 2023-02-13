@@ -119,6 +119,31 @@ static void cdns_mhdp_set_rate_governing(struct cdns_mhdp_bridge *mhdp_bridge, c
 			    CDNS_DP_RG_ENABLE);
 }
 
+static void cdns_mhdp_mst_set_threshold(struct cdns_mhdp_bridge *mhdp_bridge)
+{
+	u32 threshold;
+	u8 stream_id = mhdp_bridge->stream_id;
+	struct cdns_mhdp_device *mhdp = mhdp_bridge->mhdp;
+	s64 fixed_targ_avg_slots, fixed_thresh, fixed_targ_entries;
+
+	fixed_targ_avg_slots = cdns_mhdp_calc_fixed_avg_slots(mhdp_bridge->pbn,
+							      mhdp->mst_mgr.pbn_div);
+
+	fixed_targ_entries = drm_fixp_div(fixed_targ_avg_slots, drm_int2fixp(2));
+	fixed_thresh = drm_fixp_mul(fixed_targ_entries, fixed_targ_entries);
+	fixed_thresh = drm_fixp_div(fixed_thresh, drm_int2fixp(32));
+	fixed_thresh = fixed_targ_entries - fixed_thresh;
+	fixed_thresh = drm_fixp_mul(fixed_thresh, drm_int2fixp(mhdp->link.num_lanes));
+	fixed_thresh = drm_fixp_div(fixed_thresh, drm_int2fixp(4));
+
+	threshold = drm_fixp2int_ceil(fixed_thresh);
+	if (threshold < 2)
+		threshold = 2;
+
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_LINE_THRESH(stream_id),
+			    CDNS_DP_ACTIVE_LINE_THRESH(threshold));
+}
+
 static struct drm_dp_payload *cdns_mhdp_get_payload(struct cdns_mhdp_bridge *mhdp_bridge)
 {
 	const int vcpi = mhdp_bridge->connector->port->vcpi.vcpi;
@@ -423,6 +448,8 @@ static void cdns_mhdp_mst_enable(struct cdns_mhdp_device *mhdp, struct drm_bridg
 		DRM_ERROR("failed ACT sequence\n");
 
 	cdns_mhdp_set_rate_governing(mhdp_bridge, true);
+
+	cdns_mhdp_mst_set_threshold(mhdp_bridge);
 
 	drm_dp_update_payload_part2(&mhdp->mst_mgr);
 }
