@@ -319,6 +319,9 @@ cdns_mhdp_mst_connector_detect(struct drm_connector *connector,
 	struct cdns_mhdp_connector *mhdp_connector = to_mhdp_connector(connector);
 	struct cdns_mhdp_device *mhdp = connector_to_mhdp(connector);
 
+	if (!mhdp->plugged)
+		return connector_status_disconnected;
+
 	if (drm_connector_is_unregistered(connector))
 		return connector_status_disconnected;
 
@@ -434,7 +437,7 @@ static void cdns_mhdp_mst_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	const struct drm_display_mode *mode;
 	u32 resp;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(mhdp->dev, "MST bridge enable\n");
 
@@ -447,7 +450,7 @@ static void cdns_mhdp_mst_atomic_enable(struct drm_bridge *bridge,
 	}
 
 	if (!mhdp->is_mst)
-		return;
+		goto out;
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->enable)
 		mhdp->info->ops->enable(mhdp);
@@ -503,7 +506,8 @@ void cdns_mhdp_mst_atomic_disable(struct drm_bridge *bridge,
 
 	cdns_mhdp_update_slot_allocation(mhdp_bridge);
 
-	cdns_mhdp_set_act_enable(mhdp);
+	if (mhdp->plugged)
+		cdns_mhdp_set_act_enable(mhdp);
 
 	drm_dp_update_payload_part2(&mhdp->mst_mgr);
 
