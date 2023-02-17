@@ -63,6 +63,7 @@ i915-y += i915_driver.o \
 # core peripheral code
 i915-y += \
 	soc/intel_dram.o \
+	soc/intel_gmch.o \
 	soc/intel_pch.o
 
 # core library code
@@ -191,9 +192,9 @@ i915-y += \
 	  i915_vma_resource.o
 
 # general-purpose microcontroller (GuC) support
-i915-y += gt/uc/intel_uc.o \
-	  gt/uc/intel_uc_debugfs.o \
-	  gt/uc/intel_uc_fw.o \
+i915-y += \
+	  gt/uc/intel_gsc_fw.o \
+	  gt/uc/intel_gsc_uc.o \
 	  gt/uc/intel_guc.o \
 	  gt/uc/intel_guc_ads.o \
 	  gt/uc/intel_guc_capture.o \
@@ -208,7 +209,10 @@ i915-y += gt/uc/intel_uc.o \
 	  gt/uc/intel_guc_submission.o \
 	  gt/uc/intel_huc.o \
 	  gt/uc/intel_huc_debugfs.o \
-	  gt/uc/intel_huc_fw.o
+	  gt/uc/intel_huc_fw.o \
+	  gt/uc/intel_uc.o \
+	  gt/uc/intel_uc_debugfs.o \
+	  gt/uc/intel_uc_fw.o
 
 # graphics system controller (GSC) support
 i915-y += gt/intel_gsc.o
@@ -263,6 +267,7 @@ i915-y += \
 	display/intel_quirks.o \
 	display/intel_sprite.o \
 	display/intel_tc.o \
+	display/intel_vblank.o \
 	display/intel_vga.o \
 	display/i9xx_plane.o \
 	display/skl_scaler.o \
