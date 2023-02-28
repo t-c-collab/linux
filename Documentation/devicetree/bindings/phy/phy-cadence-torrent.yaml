@@ -32,17 +32,34 @@ properties:
     const: 1
 
   clocks:
-    minItems: 1
-    maxItems: 2
-    description:
-      PHY reference clock for 1 item. Must contain an entry in clock-names.
-      Optional Parent to enable output reference clock.
+    anyOf:
+      - items:
+          - description: PHY input reference clock. Must contain an entry in clock-names.
+      - items:
+          - description: PHY input reference clock. Must contain an entry in clock-names.
+          - description: Optional Parent to enable output reference clock.
+      - items:
+          - description: PHY input reference clock. Must contain an entry in clock-names.
+          - description: Second optional input reference clock. Must contain an entry in clock-names.
+      - items:
+          - description: PHY input reference clock. Must contain an entry in clock-names.
+          - description: Second optional input reference clock. Must contain an entry in clock-names.
+          - description: Optional Parent to enable output reference clock.
 
   clock-names:
-    minItems: 1
-    items:
-      - const: refclk
-      - const: phy_en_refclk
+    oneOf:
+      - items:
+          - const: refclk
+      - items:
+          - const: refclk
+          - const: phy_en_refclk
+      - items:
+          - const: refclk
+          - const: refclk1
+      - items:
+          - const: refclk
+          - const: refclk1
+          - const: phy_en_refclk
 
   assigned-clocks:
     maxItems: 3
