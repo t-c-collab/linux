@@ -21,6 +21,7 @@ properties:
     enum:
       - cdns,torrent-phy
       - ti,j721e-serdes-10g
+      - ti,j7200-serdes-10g
 
   '#address-cells':
     const: 1
