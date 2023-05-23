@@ -105,7 +105,7 @@ int iavf_status_to_errno(enum iavf_status status)
 	case IAVF_ERR_SRQ_ENABLED:
 	case IAVF_ERR_ADMIN_QUEUE_ERROR:
 	case IAVF_ERR_ADMIN_QUEUE_FULL:
-	case IAVF_ERR_BAD_IWARP_CQE:
+	case IAVF_ERR_BAD_RDMA_CQE:
 	case IAVF_ERR_NVM_BLANK_MODE:
 	case IAVF_ERR_PE_DOORBELL_NOT_ENABLED:
 	case IAVF_ERR_DIAG_TEST_FAILED:
@@ -893,6 +893,10 @@ static int iavf_vlan_rx_add_vid(struct net_device *netdev,
 {
 	struct iavf_adapter *adapter = netdev_priv(netdev);
 
+	/* Do not track VLAN 0 filter, always added by the PF on VF init */
+	if (!vid)
+		return 0;
+
 	if (!VLAN_FILTERING_ALLOWED(adapter))
 		return -EIO;
 
@@ -918,6 +922,10 @@ static int iavf_vlan_rx_kill_vid(struct net_device *netdev,
 				 __always_unused __be16 proto, u16 vid)
 {
 	struct iavf_adapter *adapter = netdev_priv(netdev);
+
+	/* We do not track VLAN 0 filter */
+	if (!vid)
+		return 0;
 
 	iavf_del_vlan(adapter, IAVF_VLAN(vid, be16_to_cpu(proto)));
 	if (proto == cpu_to_be16(ETH_P_8021Q))
@@ -4868,8 +4876,6 @@ static int iavf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto err_pci_reg;
 	}
 
-	pci_enable_pcie_error_reporting(pdev);
-
 	pci_set_master(pdev);
 
 	netdev = alloc_etherdev_mq(sizeof(struct iavf_adapter),
@@ -4957,7 +4963,6 @@ err_ioremap:
 err_alloc_wq:
 	free_netdev(netdev);
 err_alloc_etherdev:
-	pci_disable_pcie_error_reporting(pdev);
 	pci_release_regions(pdev);
 err_pci_reg:
 err_dma:
@@ -5069,6 +5074,11 @@ static void iavf_remove(struct pci_dev *pdev)
 			mutex_unlock(&adapter->crit_lock);
 			break;
 		}
+		/* Simply return if we already went through iavf_shutdown */
+		if (adapter->state == __IAVF_REMOVE) {
+			mutex_unlock(&adapter->crit_lock);
+			return;
+		}
 
 		mutex_unlock(&adapter->crit_lock);
 		usleep_range(500, 1000);
@@ -5174,8 +5184,6 @@ static void iavf_remove(struct pci_dev *pdev)
 	destroy_workqueue(adapter->wq);
 
 	free_netdev(netdev);
-
-	pci_disable_pcie_error_reporting(pdev);
 
 	pci_disable_device(pdev);
 }
