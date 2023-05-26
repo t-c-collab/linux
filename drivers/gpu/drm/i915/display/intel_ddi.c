@@ -2720,9 +2720,6 @@ static void intel_ddi_post_disable(struct intel_atomic_state *state,
 				   const struct drm_connector_state *old_conn_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
-	enum phy phy = intel_port_to_phy(dev_priv, encoder->port);
-	bool is_tc_port = intel_phy_is_tc(dev_priv, phy);
 	struct intel_crtc *slave_crtc;
 
 	if (!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DP_MST)) {
@@ -2772,6 +2769,17 @@ static void intel_ddi_post_disable(struct intel_atomic_state *state,
 	else
 		intel_ddi_post_disable_dp(state, encoder, old_crtc_state,
 					  old_conn_state);
+}
+
+static void intel_ddi_post_pll_disable(struct intel_atomic_state *state,
+				       struct intel_encoder *encoder,
+				       const struct intel_crtc_state *old_crtc_state,
+				       const struct drm_connector_state *old_conn_state)
+{
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
+	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
+	enum phy phy = intel_port_to_phy(i915, encoder->port);
+	bool is_tc_port = intel_phy_is_tc(i915, phy);
 
 	main_link_aux_power_domain_put(dig_port, old_crtc_state);
 
@@ -3052,37 +3060,23 @@ void intel_ddi_update_pipe(struct intel_atomic_state *state,
 	intel_hdcp_update_pipe(state, encoder, crtc_state, conn_state);
 }
 
-static void
-intel_ddi_update_prepare(struct intel_atomic_state *state,
-			 struct intel_encoder *encoder,
-			 struct intel_crtc *crtc)
+void intel_ddi_update_active_dpll(struct intel_atomic_state *state,
+				  struct intel_encoder *encoder,
+				  struct intel_crtc *crtc)
 {
-	struct drm_i915_private *i915 = to_i915(state->base.dev);
+	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	struct intel_crtc_state *crtc_state =
-		crtc ? intel_atomic_get_new_crtc_state(state, crtc) : NULL;
-	int required_lanes = crtc_state ? crtc_state->lane_count : 1;
+		intel_atomic_get_new_crtc_state(state, crtc);
+	struct intel_crtc *slave_crtc;
+	enum phy phy = intel_port_to_phy(i915, encoder->port);
 
-	drm_WARN_ON(state->base.dev, crtc && crtc->active);
+	if (!intel_phy_is_tc(i915, phy))
+		return;
 
-	intel_tc_port_get_link(enc_to_dig_port(encoder),
-		               required_lanes);
-	if (crtc_state && crtc_state->hw.active) {
-		struct intel_crtc *slave_crtc;
-
-		intel_update_active_dpll(state, crtc, encoder);
-
-		for_each_intel_crtc_in_pipe_mask(&i915->drm, slave_crtc,
-						 intel_crtc_bigjoiner_slave_pipes(crtc_state))
-			intel_update_active_dpll(state, slave_crtc, encoder);
-	}
-}
-
-static void
-intel_ddi_update_complete(struct intel_atomic_state *state,
-			  struct intel_encoder *encoder,
-			  struct intel_crtc *crtc)
-{
-	intel_tc_port_put_link(enc_to_dig_port(encoder));
+	intel_update_active_dpll(state, crtc, encoder);
+	for_each_intel_crtc_in_pipe_mask(&i915->drm, slave_crtc,
+					 intel_crtc_bigjoiner_slave_pipes(crtc_state))
+		intel_update_active_dpll(state, slave_crtc, encoder);
 }
 
 static void
@@ -3096,8 +3090,13 @@ intel_ddi_pre_pll_enable(struct intel_atomic_state *state,
 	enum phy phy = intel_port_to_phy(dev_priv, encoder->port);
 	bool is_tc_port = intel_phy_is_tc(dev_priv, phy);
 
-	if (is_tc_port)
+	if (is_tc_port) {
+		struct intel_crtc *master_crtc =
+			to_intel_crtc(crtc_state->uapi.crtc);
+
 		intel_tc_port_get_link(dig_port, crtc_state->lane_count);
+		intel_ddi_update_active_dpll(state, encoder, master_crtc);
+	}
 
 	main_link_aux_power_domain_get(dig_port, crtc_state);
 
@@ -3843,7 +3842,7 @@ static void intel_ddi_encoder_destroy(struct drm_encoder *encoder)
 
 	intel_dp_encoder_flush_work(encoder);
 	if (intel_phy_is_tc(i915, phy))
-		intel_tc_port_flush_work(dig_port);
+		intel_tc_port_cleanup(dig_port);
 	intel_display_power_flush_work(i915);
 
 	drm_encoder_cleanup(encoder);
@@ -3988,8 +3987,8 @@ static int intel_hdmi_reset_link(struct intel_encoder *encoder,
 
 	ret = drm_scdc_readb(adapter, SCDC_TMDS_CONFIG, &config);
 	if (ret < 0) {
-		drm_err(&dev_priv->drm, "Failed to read TMDS config: %d\n",
-			ret);
+		drm_err(&dev_priv->drm, "[CONNECTOR:%d:%s] Failed to read TMDS config: %d\n",
+			connector->base.base.id, connector->base.name, ret);
 		return 0;
 	}
 
@@ -4284,7 +4283,7 @@ static void intel_ddi_encoder_shutdown(struct intel_encoder *encoder)
 	if (!intel_phy_is_tc(i915, phy))
 		return;
 
-	intel_tc_port_flush_work(dig_port);
+	intel_tc_port_cleanup(dig_port);
 }
 
 #define port_tc_name(port) ((port) - PORT_TC1 + '1')
@@ -4398,6 +4397,7 @@ void intel_ddi_init(struct drm_i915_private *dev_priv, enum port port)
 	encoder->pre_pll_enable = intel_ddi_pre_pll_enable;
 	encoder->pre_enable = intel_ddi_pre_enable;
 	encoder->disable = intel_disable_ddi;
+	encoder->post_pll_disable = intel_ddi_post_pll_disable;
 	encoder->post_disable = intel_ddi_post_disable;
 	encoder->update_pipe = intel_ddi_update_pipe;
 	encoder->get_hw_state = intel_ddi_get_hw_state;
@@ -4541,10 +4541,8 @@ void intel_ddi_init(struct drm_i915_private *dev_priv, enum port port)
 				    is_legacy ? "legacy" : "non-legacy");
 		}
 
-		intel_tc_port_init(dig_port, is_legacy);
-
-		encoder->update_prepare = intel_ddi_update_prepare;
-		encoder->update_complete = intel_ddi_update_complete;
+		if (intel_tc_port_init(dig_port, is_legacy) < 0)
+			goto err;
 	}
 
 	drm_WARN_ON(&dev_priv->drm, port > PORT_I);

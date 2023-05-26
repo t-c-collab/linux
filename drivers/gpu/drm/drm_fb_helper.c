@@ -641,19 +641,27 @@ static void drm_fb_helper_damage(struct drm_fb_helper *helper, u32 x, u32 y,
 static void drm_fb_helper_memory_range_to_clip(struct fb_info *info, off_t off, size_t len,
 					       struct drm_rect *clip)
 {
+	u32 line_length = info->fix.line_length;
+	u32 fb_height = info->var.yres;
 	off_t end = off + len;
 	u32 x1 = 0;
-	u32 y1 = off / info->fix.line_length;
+	u32 y1 = off / line_length;
 	u32 x2 = info->var.xres;
-	u32 y2 = DIV_ROUND_UP(end, info->fix.line_length);
+	u32 y2 = DIV_ROUND_UP(end, line_length);
+
+	/* Don't allow any of them beyond the bottom bound of display area */
+	if (y1 > fb_height)
+		y1 = fb_height;
+	if (y2 > fb_height)
+		y2 = fb_height;
 
 	if ((y2 - y1) == 1) {
 		/*
 		 * We've only written to a single scanline. Try to reduce
 		 * the number of horizontal pixels that need an update.
 		 */
-		off_t bit_off = (off % info->fix.line_length) * 8;
-		off_t bit_end = (end % info->fix.line_length) * 8;
+		off_t bit_off = (off % line_length) * 8;
+		off_t bit_end = (end % line_length) * 8;
 
 		x1 = bit_off / info->var.bits_per_pixel;
 		x2 = DIV_ROUND_UP(bit_end, info->var.bits_per_pixel);
@@ -706,95 +714,6 @@ void drm_fb_helper_deferred_io(struct fb_info *info, struct list_head *pagerefli
 }
 EXPORT_SYMBOL(drm_fb_helper_deferred_io);
 
-typedef ssize_t (*drm_fb_helper_read_screen)(struct fb_info *info, char __user *buf,
-					     size_t count, loff_t pos);
-
-static ssize_t __drm_fb_helper_read(struct fb_info *info, char __user *buf, size_t count,
-				    loff_t *ppos, drm_fb_helper_read_screen read_screen)
-{
-	loff_t pos = *ppos;
-	size_t total_size;
-	ssize_t ret;
-
-	if (info->screen_size)
-		total_size = info->screen_size;
-	else
-		total_size = info->fix.smem_len;
-
-	if (pos >= total_size)
-		return 0;
-	if (count >= total_size)
-		count = total_size;
-	if (total_size - count < pos)
-		count = total_size - pos;
-
-	if (info->fbops->fb_sync)
-		info->fbops->fb_sync(info);
-
-	ret = read_screen(info, buf, count, pos);
-	if (ret > 0)
-		*ppos += ret;
-
-	return ret;
-}
-
-typedef ssize_t (*drm_fb_helper_write_screen)(struct fb_info *info, const char __user *buf,
-					      size_t count, loff_t pos);
-
-static ssize_t __drm_fb_helper_write(struct fb_info *info, const char __user *buf, size_t count,
-				     loff_t *ppos, drm_fb_helper_write_screen write_screen)
-{
-	loff_t pos = *ppos;
-	size_t total_size;
-	ssize_t ret;
-	int err = 0;
-
-	if (info->screen_size)
-		total_size = info->screen_size;
-	else
-		total_size = info->fix.smem_len;
-
-	if (pos > total_size)
-		return -EFBIG;
-	if (count > total_size) {
-		err = -EFBIG;
-		count = total_size;
-	}
-	if (total_size - count < pos) {
-		if (!err)
-			err = -ENOSPC;
-		count = total_size - pos;
-	}
-
-	if (info->fbops->fb_sync)
-		info->fbops->fb_sync(info);
-
-	/*
-	 * Copy to framebuffer even if we already logged an error. Emulates
-	 * the behavior of the original fbdev implementation.
-	 */
-	ret = write_screen(info, buf, count, pos);
-	if (ret < 0)
-		return ret; /* return last error, if any */
-	else if (!ret)
-		return err; /* return previous error, if any */
-
-	*ppos += ret;
-
-	return ret;
-}
-
-static ssize_t drm_fb_helper_read_screen_buffer(struct fb_info *info, char __user *buf,
-						size_t count, loff_t pos)
-{
-	const char *src = info->screen_buffer + pos;
-
-	if (copy_to_user(buf, src, count))
-		return -EFAULT;
-
-	return count;
-}
-
 /**
  * drm_fb_helper_sys_read - Implements struct &fb_ops.fb_read for system memory
  * @info: fb_info struct pointer
@@ -808,20 +727,9 @@ static ssize_t drm_fb_helper_read_screen_buffer(struct fb_info *info, char __use
 ssize_t drm_fb_helper_sys_read(struct fb_info *info, char __user *buf,
 			       size_t count, loff_t *ppos)
 {
-	return __drm_fb_helper_read(info, buf, count, ppos, drm_fb_helper_read_screen_buffer);
+	return fb_sys_read(info, buf, count, ppos);
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_read);
-
-static ssize_t drm_fb_helper_write_screen_buffer(struct fb_info *info, const char __user *buf,
-						 size_t count, loff_t pos)
-{
-	char *dst = info->screen_buffer + pos;
-
-	if (copy_from_user(dst, buf, count))
-		return -EFAULT;
-
-	return count;
-}
 
 /**
  * drm_fb_helper_sys_write - Implements struct &fb_ops.fb_write for system memory
@@ -841,7 +749,7 @@ ssize_t drm_fb_helper_sys_write(struct fb_info *info, const char __user *buf,
 	ssize_t ret;
 	struct drm_rect damage_area;
 
-	ret = __drm_fb_helper_write(info, buf, count, ppos, drm_fb_helper_write_screen_buffer);
+	ret = fb_sys_write(info, buf, count, ppos);
 	if (ret <= 0)
 		return ret;
 
@@ -913,39 +821,6 @@ void drm_fb_helper_sys_imageblit(struct fb_info *info,
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_imageblit);
 
-static ssize_t fb_read_screen_base(struct fb_info *info, char __user *buf, size_t count,
-				   loff_t pos)
-{
-	const char __iomem *src = info->screen_base + pos;
-	size_t alloc_size = min_t(size_t, count, PAGE_SIZE);
-	ssize_t ret = 0;
-	int err = 0;
-	char *tmp;
-
-	tmp = kmalloc(alloc_size, GFP_KERNEL);
-	if (!tmp)
-		return -ENOMEM;
-
-	while (count) {
-		size_t c = min_t(size_t, count, alloc_size);
-
-		memcpy_fromio(tmp, src, c);
-		if (copy_to_user(buf, tmp, c)) {
-			err = -EFAULT;
-			break;
-		}
-
-		src += c;
-		buf += c;
-		ret += c;
-		count -= c;
-	}
-
-	kfree(tmp);
-
-	return ret ? ret : err;
-}
-
 /**
  * drm_fb_helper_cfb_read - Implements struct &fb_ops.fb_read for I/O memory
  * @info: fb_info struct pointer
@@ -959,42 +834,9 @@ static ssize_t fb_read_screen_base(struct fb_info *info, char __user *buf, size_
 ssize_t drm_fb_helper_cfb_read(struct fb_info *info, char __user *buf,
 			       size_t count, loff_t *ppos)
 {
-	return __drm_fb_helper_read(info, buf, count, ppos, fb_read_screen_base);
+	return fb_io_read(info, buf, count, ppos);
 }
 EXPORT_SYMBOL(drm_fb_helper_cfb_read);
-
-static ssize_t fb_write_screen_base(struct fb_info *info, const char __user *buf, size_t count,
-				    loff_t pos)
-{
-	char __iomem *dst = info->screen_base + pos;
-	size_t alloc_size = min_t(size_t, count, PAGE_SIZE);
-	ssize_t ret = 0;
-	int err = 0;
-	u8 *tmp;
-
-	tmp = kmalloc(alloc_size, GFP_KERNEL);
-	if (!tmp)
-		return -ENOMEM;
-
-	while (count) {
-		size_t c = min_t(size_t, count, alloc_size);
-
-		if (copy_from_user(tmp, buf, c)) {
-			err = -EFAULT;
-			break;
-		}
-		memcpy_toio(dst, tmp, c);
-
-		dst += c;
-		buf += c;
-		ret += c;
-		count -= c;
-	}
-
-	kfree(tmp);
-
-	return ret ? ret : err;
-}
 
 /**
  * drm_fb_helper_cfb_write - Implements struct &fb_ops.fb_write for I/O memory
@@ -1014,7 +856,7 @@ ssize_t drm_fb_helper_cfb_write(struct fb_info *info, const char __user *buf,
 	ssize_t ret;
 	struct drm_rect damage_area;
 
-	ret = __drm_fb_helper_write(info, buf, count, ppos, fb_write_screen_base);
+	ret = fb_io_write(info, buf, count, ppos);
 	if (ret <= 0)
 		return ret;
 
@@ -1537,6 +1379,27 @@ static void drm_fb_helper_fill_pixel_fmt(struct fb_var_screeninfo *var,
 	}
 }
 
+static void __fill_var(struct fb_var_screeninfo *var,
+		       struct drm_framebuffer *fb)
+{
+	int i;
+
+	var->xres_virtual = fb->width;
+	var->yres_virtual = fb->height;
+	var->accel_flags = FB_ACCELF_TEXT;
+	var->bits_per_pixel = drm_format_info_bpp(fb->format, 0);
+
+	var->height = var->width = 0;
+	var->left_margin = var->right_margin = 0;
+	var->upper_margin = var->lower_margin = 0;
+	var->hsync_len = var->vsync_len = 0;
+	var->sync = var->vmode = 0;
+	var->rotate = 0;
+	var->colorspace = 0;
+	for (i = 0; i < 4; i++)
+		var->reserved[i] = 0;
+}
+
 /**
  * drm_fb_helper_check_var - implementation for &fb_ops.fb_check_var
  * @var: screeninfo to check
@@ -1589,6 +1452,23 @@ int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 		return -EINVAL;
 	}
 
+	__fill_var(var, fb);
+
+	/*
+	 * fb_pan_display() validates this, but fb_set_par() doesn't and just
+	 * falls over. Note that __fill_var above adjusts y/res_virtual.
+	 */
+	if (var->yoffset > var->yres_virtual - var->yres ||
+	    var->xoffset > var->xres_virtual - var->xres)
+		return -EINVAL;
+
+	/* We neither support grayscale nor FOURCC (also stored in here). */
+	if (var->grayscale > 0)
+		return -EINVAL;
+
+	if (var->nonstd)
+		return -EINVAL;
+
 	/*
 	 * Workaround for SDL 1.2, which is known to be setting all pixel format
 	 * fields values to zero in some cases. We treat this situation as a
@@ -1602,11 +1482,6 @@ int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 	    !var->blue.msb_right && !var->transp.msb_right) {
 		drm_fb_helper_fill_pixel_fmt(var, format);
 	}
-
-	/*
-	 * Likewise, bits_per_pixel should be rounded up to a supported value.
-	 */
-	var->bits_per_pixel = bpp;
 
 	/*
 	 * drm fbdev emulation doesn't support changing the pixel format at all,
@@ -1637,11 +1512,6 @@ int drm_fb_helper_set_par(struct fb_info *info)
 
 	if (oops_in_progress)
 		return -EBUSY;
-
-	if (var->pixclock != 0) {
-		drm_err(fb_helper->dev, "PIXEL CLOCK SET\n");
-		return -EINVAL;
-	}
 
 	/*
 	 * Normally we want to make sure that a kms master takes precedence over
@@ -2036,12 +1906,9 @@ static void drm_fb_helper_fill_var(struct fb_info *info,
 	}
 
 	info->pseudo_palette = fb_helper->pseudo_palette;
-	info->var.xres_virtual = fb->width;
-	info->var.yres_virtual = fb->height;
-	info->var.bits_per_pixel = drm_format_info_bpp(format, 0);
-	info->var.accel_flags = FB_ACCELF_TEXT;
 	info->var.xoffset = 0;
 	info->var.yoffset = 0;
+	__fill_var(&info->var, fb);
 	info->var.activate = FB_ACTIVATE_NOW;
 
 	drm_fb_helper_fill_pixel_fmt(&info->var, format);
