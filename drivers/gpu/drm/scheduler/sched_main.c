@@ -848,27 +848,26 @@ void drm_sched_job_cleanup(struct drm_sched_job *job)
 EXPORT_SYMBOL(drm_sched_job_cleanup);
 
 /**
- * drm_sched_ready - is the scheduler ready
- *
+ * drm_sched_can_queue -- Can we queue more to the hardware?
  * @sched: scheduler instance
  *
  * Return true if we can push more jobs to the hw, otherwise false.
  */
-static bool drm_sched_ready(struct drm_gpu_scheduler *sched)
+static bool drm_sched_can_queue(struct drm_gpu_scheduler *sched)
 {
 	return atomic_read(&sched->hw_rq_count) <
 		sched->hw_submission_limit;
 }
 
 /**
- * drm_sched_wakeup - Wake up the scheduler when it is ready
- *
+ * drm_sched_wakeup_if_can_queue - Wake up the scheduler
  * @sched: scheduler instance
  *
+ * Wake up the scheduler if we can queue jobs.
  */
-void drm_sched_wakeup(struct drm_gpu_scheduler *sched)
+void drm_sched_wakeup_if_can_queue(struct drm_gpu_scheduler *sched)
 {
-	if (drm_sched_ready(sched))
+	if (drm_sched_can_queue(sched))
 		wake_up_interruptible(&sched->wake_up_worker);
 }
 
@@ -885,7 +884,7 @@ drm_sched_select_entity(struct drm_gpu_scheduler *sched)
 	struct drm_sched_entity *entity;
 	int i;
 
-	if (!drm_sched_ready(sched))
+	if (!drm_sched_can_queue(sched))
 		return NULL;
 
 	/* Kernel run queue has higher priority than normal run queue*/
@@ -1044,10 +1043,9 @@ static int drm_sched_main(void *param)
 		trace_drm_run_job(sched_job, entity);
 		fence = sched->ops->run_job(sched_job);
 		complete_all(&entity->entity_idle);
-		drm_sched_fence_scheduled(s_fence);
+		drm_sched_fence_scheduled(s_fence, fence);
 
 		if (!IS_ERR_OR_NULL(fence)) {
-			drm_sched_fence_set_parent(s_fence, fence);
 			/* Drop for original kref_init of the fence */
 			dma_fence_put(fence);
 
@@ -1142,9 +1140,6 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	for (i = DRM_SCHED_PRIORITY_COUNT - 1; i >= DRM_SCHED_PRIORITY_MIN; i--) {
 		struct drm_sched_rq *rq = &sched->sched_rq[i];
-
-		if (!rq)
-			continue;
 
 		spin_lock(&rq->lock);
 		list_for_each_entry(s_entity, &rq->entities, list)

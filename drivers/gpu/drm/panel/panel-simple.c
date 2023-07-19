@@ -759,8 +759,8 @@ static const struct panel_desc ampire_am_480272h3tmqw_t01h = {
 	.num_modes = 1,
 	.bpc = 8,
 	.size = {
-		.width = 105,
-		.height = 67,
+		.width = 99,
+		.height = 58,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
 };
@@ -776,6 +776,36 @@ static const struct drm_display_mode ampire_am800480r3tmqwa1h_mode = {
 	.vsync_end = 480 + 2 + 45,
 	.vtotal = 480 + 2 + 45 + 0,
 	.flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC,
+};
+
+static const struct display_timing ampire_am_800480l1tmqw_t00h_timing = {
+	.pixelclock = { 29930000, 33260000, 36590000 },
+	.hactive = { 800, 800, 800 },
+	.hfront_porch = { 1, 40, 168 },
+	.hback_porch = { 88, 88, 88 },
+	.hsync_len = { 1, 128, 128 },
+	.vactive = { 480, 480, 480 },
+	.vfront_porch = { 1, 35, 37 },
+	.vback_porch = { 8, 8, 8 },
+	.vsync_len = { 1, 2, 2 },
+	.flags = DISPLAY_FLAGS_HSYNC_LOW | DISPLAY_FLAGS_VSYNC_LOW |
+		 DISPLAY_FLAGS_DE_HIGH | DISPLAY_FLAGS_PIXDATA_POSEDGE |
+		 DISPLAY_FLAGS_SYNC_POSEDGE,
+};
+
+static const struct panel_desc ampire_am_800480l1tmqw_t00h = {
+	.timings = &ampire_am_800480l1tmqw_t00h_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 111,
+		.height = 67,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH |
+		     DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE |
+		     DRM_BUS_FLAG_SYNC_SAMPLE_NEGEDGE,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
 };
 
 static const struct panel_desc ampire_am800480r3tmqwa1h = {
@@ -1209,6 +1239,37 @@ static const struct panel_desc bananapi_s070wv20_ct16 = {
 		.width = 154,
 		.height = 86,
 	},
+};
+
+static const struct display_timing boe_ev121wxm_n10_1850_timing = {
+	.pixelclock = { 69922000, 71000000, 72293000 },
+	.hactive = { 1280, 1280, 1280 },
+	.hfront_porch = { 48, 48, 48 },
+	.hback_porch = { 80, 80, 80 },
+	.hsync_len = { 32, 32, 32 },
+	.vactive = { 800, 800, 800 },
+	.vfront_porch = { 3, 3, 3 },
+	.vback_porch = { 14, 14, 14 },
+	.vsync_len = { 6, 6, 6 },
+};
+
+static const struct panel_desc boe_ev121wxm_n10_1850 = {
+	.timings = &boe_ev121wxm_n10_1850_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 261,
+		.height = 163,
+	},
+	.delay = {
+		.prepare = 9,
+		.enable = 300,
+		.unprepare = 300,
+		.disable = 560,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X7X4_SPWG,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH,
+	.connector_type = DRM_MODE_CONNECTOR_LVDS,
 };
 
 static const struct drm_display_mode boe_hv070wsa_mode = {
@@ -2117,6 +2178,7 @@ static const struct panel_desc innolux_at043tn24 = {
 		.height = 54,
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
 	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
 };
 
@@ -3141,6 +3203,7 @@ static const struct drm_display_mode powertip_ph800480t013_idf02_mode = {
 	.vsync_start = 480 + 49,
 	.vsync_end = 480 + 49 + 2,
 	.vtotal = 480 + 49 + 2 + 22,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
 };
 
 static const struct panel_desc powertip_ph800480t013_idf02  = {
@@ -3217,6 +3280,32 @@ static const struct panel_desc qishenglong_gopher2b_lcd = {
 	},
 	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
 	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_SAMPLE_NEGEDGE,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
+};
+
+static const struct display_timing rocktech_rk043fn48h_timing = {
+	.pixelclock = { 6000000, 9000000, 12000000 },
+	.hactive = { 480, 480, 480 },
+	.hback_porch = { 8, 43, 43 },
+	.hfront_porch = { 2, 8, 8 },
+	.hsync_len = { 1, 1, 1 },
+	.vactive = { 272, 272, 272 },
+	.vback_porch = { 2, 12, 12 },
+	.vfront_porch = { 1, 4, 4 },
+	.vsync_len = { 1, 10, 10 },
+	.flags = DISPLAY_FLAGS_VSYNC_LOW | DISPLAY_FLAGS_HSYNC_LOW |
+		 DISPLAY_FLAGS_DE_HIGH | DISPLAY_FLAGS_PIXDATA_POSEDGE,
+};
+
+static const struct panel_desc rocktech_rk043fn48h = {
+	.timings = &rocktech_rk043fn48h_timing,
+	.num_timings = 1,
+	.bpc = 8,
+	.size = {
+		.width = 95,
+		.height = 54,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB888_1X24,
 	.connector_type = DRM_MODE_CONNECTOR_DPI,
 };
 
@@ -3963,6 +4052,9 @@ static const struct of_device_id platform_of_match[] = {
 		.compatible = "ampire,am-480272h3tmqw-t01h",
 		.data = &ampire_am_480272h3tmqw_t01h,
 	}, {
+		.compatible = "ampire,am-800480l1tmqw-t00h",
+		.data = &ampire_am_800480l1tmqw_t00h,
+	}, {
 		.compatible = "ampire,am800480r3tmqwa1h",
 		.data = &ampire_am800480r3tmqwa1h,
 	}, {
@@ -4016,6 +4108,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "bananapi,s070wv20-ct16",
 		.data = &bananapi_s070wv20_ct16,
+	}, {
+		.compatible = "boe,ev121wxm-n10-1850",
+		.data = &boe_ev121wxm_n10_1850,
 	}, {
 		.compatible = "boe,hv070wsa-100",
 		.data = &boe_hv070wsa
@@ -4254,6 +4349,9 @@ static const struct of_device_id platform_of_match[] = {
 		.compatible = "qishenglong,gopher2b-lcd",
 		.data = &qishenglong_gopher2b_lcd,
 	}, {
+		.compatible = "rocktech,rk043fn48h",
+		.data = &rocktech_rk043fn48h,
+	}, {
 		.compatible = "rocktech,rk070er9427",
 		.data = &rocktech_rk070er9427,
 	}, {
@@ -4370,11 +4468,9 @@ static int panel_simple_platform_probe(struct platform_device *pdev)
 	return panel_simple_probe(&pdev->dev, id->data);
 }
 
-static int panel_simple_platform_remove(struct platform_device *pdev)
+static void panel_simple_platform_remove(struct platform_device *pdev)
 {
 	panel_simple_remove(&pdev->dev);
-
-	return 0;
 }
 
 static void panel_simple_platform_shutdown(struct platform_device *pdev)
@@ -4395,7 +4491,7 @@ static struct platform_driver panel_simple_platform_driver = {
 		.pm = &panel_simple_pm_ops,
 	},
 	.probe = panel_simple_platform_probe,
-	.remove = panel_simple_platform_remove,
+	.remove_new = panel_simple_platform_remove,
 	.shutdown = panel_simple_platform_shutdown,
 };
 

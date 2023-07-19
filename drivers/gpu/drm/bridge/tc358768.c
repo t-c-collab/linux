@@ -952,7 +952,7 @@ tc358768_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 	case 24:
 		input_fmts[0] = MEDIA_BUS_FMT_RGB888_1X24;
 		break;
-	};
+	}
 
 	*num_input_fmts = MAX_INPUT_SEL_FORMATS;
 
@@ -1134,7 +1134,7 @@ static struct i2c_driver tc358768_driver = {
 		.of_match_table = tc358768_of_ids,
 	},
 	.id_table = tc358768_i2c_ids,
-	.probe_new = tc358768_i2c_probe,
+	.probe = tc358768_i2c_probe,
 	.remove	= tc358768_i2c_remove,
 };
 module_i2c_driver(tc358768_driver);

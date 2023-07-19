@@ -41,6 +41,7 @@
 #include <linux/vmalloc.h>
 #include <linux/delay.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
 #include <linux/fb.h>
 #include <linux/init.h>
 #include <linux/arcfb.h>
@@ -593,7 +594,7 @@ err_fb_alloc:
 	return retval;
 }
 
-static int arcfb_remove(struct platform_device *dev)
+static void arcfb_remove(struct platform_device *dev)
 {
 	struct fb_info *info = platform_get_drvdata(dev);
 
@@ -604,12 +605,11 @@ static int arcfb_remove(struct platform_device *dev)
 		vfree(info->screen_buffer);
 		framebuffer_release(info);
 	}
-	return 0;
 }
 
 static struct platform_driver arcfb_driver = {
 	.probe	= arcfb_probe,
-	.remove = arcfb_remove,
+	.remove_new = arcfb_remove,
 	.driver	= {
 		.name	= "arcfb",
 	},
