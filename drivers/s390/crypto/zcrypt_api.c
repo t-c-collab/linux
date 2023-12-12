@@ -366,7 +366,6 @@ static int zcdn_create(const char *name)
 {
 	dev_t devt;
 	int i, rc = 0;
-	char nodename[ZCDN_MAX_NAME];
 	struct zcdn_device *zcdndev;
 
 	if (mutex_lock_interruptible(&ap_perms_mutex))
@@ -407,13 +406,11 @@ static int zcdn_create(const char *name)
 	zcdndev->device.devt = devt;
 	zcdndev->device.groups = zcdn_dev_attr_groups;
 	if (name[0])
-		strncpy(nodename, name, sizeof(nodename));
+		rc = dev_set_name(&zcdndev->device, "%s", name);
 	else
-		snprintf(nodename, sizeof(nodename),
-			 ZCRYPT_NAME "_%d", (int)MINOR(devt));
-	nodename[sizeof(nodename) - 1] = '\0';
-	if (dev_set_name(&zcdndev->device, nodename)) {
-		rc = -EINVAL;
+		rc = dev_set_name(&zcdndev->device, ZCRYPT_NAME "_%d", (int)MINOR(devt));
+	if (rc) {
+		kfree(zcdndev);
 		goto unlockout;
 	}
 	rc = device_register(&zcdndev->device);
@@ -696,7 +693,7 @@ static long zcrypt_rsa_modexpo(struct ap_perms *perms,
 		for_each_zcrypt_queue(zq, zc) {
 			/* check if device is usable and eligible */
 			if (!zq->online || !zq->ops->rsa_modexpo ||
-			    !zq->queue->config || zq->queue->chkstop)
+			    !ap_queue_usable(zq->queue))
 				continue;
 			/* check if device node has admission for this queue */
 			if (!zcrypt_check_queue(perms,
@@ -801,7 +798,7 @@ static long zcrypt_rsa_crt(struct ap_perms *perms,
 		for_each_zcrypt_queue(zq, zc) {
 			/* check if device is usable and eligible */
 			if (!zq->online || !zq->ops->rsa_modexpo_crt ||
-			    !zq->queue->config || zq->queue->chkstop)
+			    !ap_queue_usable(zq->queue))
 				continue;
 			/* check if device node has admission for this queue */
 			if (!zcrypt_check_queue(perms,
@@ -919,7 +916,7 @@ static long _zcrypt_send_cprb(bool userspace, struct ap_perms *perms,
 		for_each_zcrypt_queue(zq, zc) {
 			/* check for device usable and eligible */
 			if (!zq->online || !zq->ops->send_cprb ||
-			    !zq->queue->config || zq->queue->chkstop ||
+			    !ap_queue_usable(zq->queue) ||
 			    (tdom != AUTOSEL_DOM &&
 			     tdom != AP_QID_QUEUE(zq->queue->qid)))
 				continue;
@@ -1090,7 +1087,7 @@ static long _zcrypt_send_ep11_cprb(bool userspace, struct ap_perms *perms,
 		for_each_zcrypt_queue(zq, zc) {
 			/* check if device is usable and eligible */
 			if (!zq->online || !zq->ops->send_ep11_cprb ||
-			    !zq->queue->config || zq->queue->chkstop ||
+			    !ap_queue_usable(zq->queue) ||
 			    (targets &&
 			     !is_desired_ep11_queue(zq->queue->qid,
 						    target_num, targets)))
@@ -1189,7 +1186,7 @@ static long zcrypt_rng(char *buffer)
 		for_each_zcrypt_queue(zq, zc) {
 			/* check if device is usable and eligible */
 			if (!zq->online || !zq->ops->rng ||
-			    !zq->queue->config || zq->queue->chkstop)
+			    !ap_queue_usable(zq->queue))
 				continue;
 			if (!zcrypt_queue_compare(zq, pref_zq, wgt, pref_wgt))
 				continue;
