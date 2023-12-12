@@ -28,6 +28,7 @@
 #include <linux/reboot.h>
 #include <linux/syscalls.h>
 #include <linux/pm_runtime.h>
+#include <linux/list_sort.h>
 
 #include "amdgpu.h"
 #include "amdgpu_ras.h"
@@ -1188,7 +1189,7 @@ static int amdgpu_ras_query_error_status_helper(struct amdgpu_device *adev,
 			}
 
 			if (block_obj->hw_ops->query_ras_error_count)
-				block_obj->hw_ops->query_ras_error_count(adev, &err_data);
+				block_obj->hw_ops->query_ras_error_count(adev, err_data);
 
 			if ((info->head.block == AMDGPU_RAS_BLOCK__SDMA) ||
 			    (info->head.block == AMDGPU_RAS_BLOCK__GFX) ||
@@ -3132,6 +3133,9 @@ int amdgpu_ras_late_init(struct amdgpu_device *adev)
 	if (amdgpu_sriov_vf(adev))
 		return 0;
 
+	/* enable MCA debug on APU device */
+	amdgpu_ras_set_mca_debug_mode(adev, !!(adev->flags & AMD_IS_APU));
+
 	list_for_each_entry_safe(node, tmp, &adev->ras_list, node) {
 		if (!node->ras_obj) {
 			dev_warn(adev->dev, "Warning: abnormal ras list node.\n");
@@ -3405,12 +3409,18 @@ int amdgpu_ras_reset_gpu(struct amdgpu_device *adev)
 	return 0;
 }
 
-void amdgpu_ras_set_mca_debug_mode(struct amdgpu_device *adev, bool enable)
+int amdgpu_ras_set_mca_debug_mode(struct amdgpu_device *adev, bool enable)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
+	int ret = 0;
 
-	if (con)
-		con->is_mca_debug_mode = enable;
+	if (con) {
+		ret = amdgpu_mca_smu_set_debug_mode(adev, enable);
+		if (!ret)
+			con->is_mca_debug_mode = enable;
+	}
+
+	return ret;
 }
 
 bool amdgpu_ras_get_mca_debug_mode(struct amdgpu_device *adev)
@@ -3665,6 +3675,21 @@ static struct ras_err_node *amdgpu_ras_error_node_new(void)
 	return err_node;
 }
 
+static int ras_err_info_cmp(void *priv, const struct list_head *a, const struct list_head *b)
+{
+	struct ras_err_node *nodea = container_of(a, struct ras_err_node, node);
+	struct ras_err_node *nodeb = container_of(b, struct ras_err_node, node);
+	struct amdgpu_smuio_mcm_config_info *infoa = &nodea->err_info.mcm_info;
+	struct amdgpu_smuio_mcm_config_info *infob = &nodeb->err_info.mcm_info;
+
+	if (unlikely(infoa->socket_id != infob->socket_id))
+		return infoa->socket_id - infob->socket_id;
+	else
+		return infoa->die_id - infob->die_id;
+
+	return 0;
+}
+
 static struct ras_err_info *amdgpu_ras_error_get_info(struct ras_err_data *err_data,
 						      struct amdgpu_smuio_mcm_config_info *mcm_info)
 {
@@ -3682,6 +3707,7 @@ static struct ras_err_info *amdgpu_ras_error_get_info(struct ras_err_data *err_d
 
 	err_data->err_list_count++;
 	list_add_tail(&err_node->node, &err_data->err_node_list);
+	list_sort(NULL, &err_data->err_node_list, ras_err_info_cmp);
 
 	return &err_node->err_info;
 }
